@@ -5,11 +5,11 @@ import { init, advance, counts, where, ROAD, MINUTES_PER_DAY, type City, type Wo
 import { cityFrom, MODES } from './city.ts'
 
 // 1-5 groups with 1-4 nodes each, sparse non-negative OD, any destination weights,
-// 0-20 agents per node and trip times from 0 to 300 minutes.
+// 0-20 agents per node and trip times from 0 to 900 minutes (longer than any real trip, to reach the clamps).
 const cityArb = fc.integer({ min: 1, max: 5 }).chain(g => fc.record({
   od: fc.array(fc.array(fc.array(fc.oneof(fc.constant(0), fc.nat(50)), { minLength: g, maxLength: g }), { minLength: g, maxLength: g }), { minLength: 24, maxLength: 24 }),
   sizes: fc.array(fc.integer({ min: 1, max: 4 }), { minLength: g, maxLength: g }),
-  times: fc.array(fc.integer({ min: 0, max: 300 }), { minLength: 1, maxLength: 20 }),
+  times: fc.array(fc.integer({ min: 0, max: 900 }), { minLength: 1, maxLength: 20 }),
 }).chain(({ od, sizes, times }) => {
   const group = sizes.flatMap((s, i) => new Array(s).fill(i))
   return fc.record({

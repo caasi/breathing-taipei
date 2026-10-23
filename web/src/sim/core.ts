@@ -39,6 +39,10 @@ export const MINUTES_PER_DAY = 24 * 60
 export const ROAD = -1
 
 // ponytail: one weekday commute per agent, hours 0-1 and non-commute trips ignored; add schedule templates (Real Time mod style) when events need them.
+// Each leg is capped so that two legs and the day always fit: the clamps in plan() then never
+// push a departure below minute 0 (the plan fields are Uint16 and would wrap).
+const MAX_LEG = 600
+
 const MORNING = [5, 6, 7, 8, 9, 10, 11]
 const EVENING = [12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23]
 
@@ -51,9 +55,9 @@ const plan = (w: World, i: number) => {
   const h = w.home[i], k = w.work[i]
   if (h === k) { w.dep[i] = w.ret[i] = w.dur1[i] = w.dur2[i] = 0; return }
   const dep = minuteOf(od, MORNING, group[h], group[k], w.rng(), w.rng())
-  const dur1 = Math.max(1, Math.round(minutes(h, k, w.mode[i], Math.floor(dep / 60))))
+  const dur1 = Math.min(MAX_LEG, Math.max(1, Math.round(minutes(h, k, w.mode[i], Math.floor(dep / 60)))))
   let ret = minuteOf(od, EVENING, group[k], group[h], w.rng(), w.rng())
-  const dur2 = Math.max(1, Math.round(minutes(k, h, w.mode[i], Math.floor(ret / 60))))
+  const dur2 = Math.min(MAX_LEG, Math.max(1, Math.round(minutes(k, h, w.mode[i], Math.floor(ret / 60)))))
   // Arrive before leaving again, and be home before midnight.
   ret = Math.min(Math.max(ret, dep + dur1), MINUTES_PER_DAY - 1 - dur2)
   w.dep[i] = Math.min(dep, ret - dur1)
