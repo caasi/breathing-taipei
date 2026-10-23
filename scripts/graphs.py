@@ -1,6 +1,19 @@
-"""Build routing graphs for the spike: roads from bus route shapes (both cities), MRT from OSM lines + stations.
+"""Build the routing graphs: roads from the bus route shapes of both cities, MRT from OSM lines and station exits.
+
+Usage:
+  python3 scripts/graphs.py TPE_SHAPES NTPC_SHAPES OSM_RAIL EXITS_CSV OUT_DIR
+
+  TPE_SHAPES   https://tcgbusfs.blob.core.windows.net/blobbus/GetBusShape.gz
+  NTPC_SHAPES  https://tcgbusfs.blob.core.windows.net/ntpcbus/GetBusShape.gz
+  OSM_RAIL     Overpass JSON: way["railway"~"^(subway|rail|light_rail|monorail)$"](24.90,121.25,25.20,121.70); out tags geom;
+  EXITS_CSV    data.gov.tw 128428 (Big5)
+  OUT_DIR      writes road-graph.json and mrt-graph.json
+
 Output per graph: kept nodes (degree != 2) and edges whose geometry holds the merged degree-2 points."""
 import gzip, json, math, re, csv, collections, sys
+
+if __name__ == "__main__" and len(sys.argv) != 6:
+    sys.exit(__doc__)
 
 def km(a, b):
     r = math.pi / 180
@@ -25,7 +38,23 @@ class Graph:
 def contract(g, keep_extra=()):
     """Keep nodes of degree != 2 (and keep_extra); every other node becomes geometry inside an edge."""
     keep = {v for v in range(len(g.xy)) if len(g.adj[v]) != 2} | set(keep_extra)
-    # A pure cycle has no kept node; keep one node of it.
+    # A component made only of degree-2 nodes (a loop) has no kept node; keep one node of it,
+    # or the walk below never starts there and the whole loop is lost.
+    reached = set()
+    for v in sorted(keep):
+        stack = [v]
+        while stack:
+            u = stack.pop()
+            if u in reached: continue
+            reached.add(u); stack.extend(g.adj[u])
+    for v in range(len(g.xy)):
+        if v in reached or not g.adj[v]: continue
+        keep.add(v)
+        stack = [v]
+        while stack:
+            u = stack.pop()
+            if u in reached: continue
+            reached.add(u); stack.extend(g.adj[u])
     seen, edges = set(), []
     remap = {}
     for v in sorted(keep): remap[v] = len(remap)
