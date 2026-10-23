@@ -1,0 +1,6 @@
+node_modules/
+dist/
+*.log
+# Raw downloads (the MRT OD file alone is about 300 MB). DATA.md lists the sources.
+data/
+__pycache__/

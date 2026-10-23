@@ -1,0 +1,3 @@
+allowBuilds:
+  # Vite and Vitest work without the esbuild install script.
+  esbuild: false

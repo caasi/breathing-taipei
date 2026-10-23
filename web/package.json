@@ -1,0 +1,31 @@
+{
+  "name": "breathing-taipei",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "bench": "node --experimental-strip-types src/sim/bench.ts"
+  },
+  "dependencies": {
+    "d3-geo": "3.1.1",
+    "react": "18.3.1",
+    "react-dom": "18.3.1",
+    "topojson-client": "3.1.0"
+  },
+  "devDependencies": {
+    "@types/d3-geo": "3.1.0",
+    "@types/geojson": "^7946.0.16",
+    "@types/node": "^24.19.2",
+    "@types/react": "18.3.23",
+    "@types/react-dom": "18.3.7",
+    "@types/topojson-client": "3.1.5",
+    "@vitejs/plugin-react": "6.1.2",
+    "fast-check": "4.10.2",
+    "typescript": "5.8.3",
+    "vite": "8.3.5",
+    "vitest": "5.0.5"
+  }
+}
