@@ -1,3 +1,4 @@
+import { getJson } from '../load.ts'
 import { init, advance, counts, type World } from './core.ts'
 import { cityFrom, MODES } from './city.ts'
 import { networks, tripPaths, type Batch } from './paths.ts'
@@ -8,6 +9,8 @@ export type ToWorker =
   | { type: 'speed'; hoursPerSec: number }
 /** Sampled commuters' plans for one day, for the renderer to interpolate. */
 export type Trips = { home: Uint16Array; work: Uint16Array; mode: Uint8Array; dep: Uint16Array; dur1: Uint16Array; ret: Uint16Array; dur2: Uint16Array }
+/** A failure while starting (load, city build, sampling) ends the worker's work; the page shows it instead of waiting. */
+export type WorkerError = { error: string }
 export type FromWorker = {
   nodes?: string[]; homes?: Uint32Array; coords?: [number, number][]; trips?: Trips; paths?: Batch[]; routed?: number
   minute: number; day: number; counts: Uint32Array; road: Uint32Array; ms: number
@@ -20,8 +23,11 @@ let hoursPerSec = 0
 let extra: Pick<FromWorker, 'nodes' | 'homes' | 'coords' | 'trips'> = {}
 let pending: Generator<Batch> | undefined
 let routed = 0
-const data = Promise.all(['/od2.json', '/villages2.json', '/signal.json', '/road-graph.json', '/mrt-graph.json'].map(u => fetch(u).then(r => r.json())))
+const data = Promise.all(['od2.json', 'villages2.json', 'signal.json', 'road-graph.json', 'mrt-graph.json'].map(getJson))
 const net = data.then(([, , , road, mrt]) => networks(road, mrt))
+// Both are awaited in the start handler, which reports a failure; mark them handled so a failure
+// that settles before the first start does not also log an unhandled rejection.
+data.catch(() => {}); net.catch(() => {})
 
 const sample = (w: World): Trips => {
   const idx: number[] = []
@@ -56,13 +62,20 @@ setInterval(frame, 1000 / FPS)
 onmessage = async (e: MessageEvent<ToWorker>) => {
   const m = e.data
   if (m.type === 'speed') { hoursPerSec = m.hoursPerSec; return }
-  const [od2, villages, signal] = await data
-  const c = cityFrom({ ...od2, villages, signal }, m.perAgent, m.level)
-  every = m.every
-  w = init(c.city, m.seed)
-  const trips = sample(w)
-  extra = { nodes: c.nodes, homes: Uint32Array.from(c.city.homes), coords: c.coords, trips }
-  // Same sampled agents every day with fixed home and work, so paths are built once per init.
-  pending = tripPaths(trips, c.coords, await net)
-  routed = 0
+  // Any failure while starting (loading, building the city, sampling) goes to the page.
+  // The async handler would otherwise reject without a message, and onerror does not see a rejection.
+  try {
+    const [[od2, villages, signal], graphs] = await Promise.all([data, net])
+    const c = cityFrom({ ...od2, villages, signal }, m.perAgent, m.level)
+    every = m.every
+    w = init(c.city, m.seed)
+    const trips = sample(w)
+    extra = { nodes: c.nodes, homes: Uint32Array.from(c.city.homes), coords: c.coords, trips }
+    // Same sampled agents every day with fixed home and work, so paths are built once per init.
+    pending = tripPaths(trips, c.coords, graphs)
+    routed = 0
+  } catch (err) {
+    w = undefined
+    postMessage({ error: String(err) } satisfies WorkerError)
+  }
 }
