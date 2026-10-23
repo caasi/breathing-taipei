@@ -27,6 +27,10 @@ const rateColour = (perHour: number) => {
   return `rgb(${BASE.map((v, i) => Math.round(v + (to[i] - v) * f)).join(',')})`
 }
 
+// Lines and stations are for orientation; kept faint so the eye follows the area colours.
+const LINE_OPACITY = { rail: 0.35, highway: 0.3 }
+const STATION_OPACITY = 0.6
+
 const EARTH_KM2 = 6371 * 6371
 const features = (topo: any, key: string) =>
   (feature(topo, topo.objects[key]) as unknown as FeatureCollection<Geometry, any>).features
@@ -69,9 +73,9 @@ export function HeatMap({ towns, villages, level, nodes, counts, perAgent, proj,
   const fixed = useMemo(() => <>
       {geo.borders.map((b, k) => <path key={'b' + k} d={b.d} fill="none" stroke="#0d0a09" strokeWidth={b.taipei ? 1.8 : 1} />)}
       {geo.lines.filter(l => show.has(l.kind)).map((l, k) =>
-        <path key={'l' + k} d={l.d} fill="none" stroke={l.colour} strokeWidth={l.kind === 'mrt' ? 2.5 : l.kind === 'highway' ? 1.2 : 2}
-          strokeDasharray={l.kind === 'tra' ? '6 3' : undefined} opacity={l.kind === 'highway' ? 0.6 : 0.9} />)}
-      {geo.points.filter(p => show.has(p.kind)).map(p => <g key={p.kind + p.name}>
+        <path key={'l' + k} d={l.d} fill="none" stroke={l.colour} strokeWidth={l.kind === 'mrt' ? 1.8 : l.kind === 'highway' ? 1 : 1.5}
+          strokeDasharray={l.kind === 'tra' ? '6 3' : undefined} opacity={l.kind === 'highway' ? LINE_OPACITY.highway : LINE_OPACITY.rail} />)}
+      {geo.points.filter(p => show.has(p.kind)).map(p => <g key={p.kind + p.name} opacity={STATION_OPACITY}>
         <circle cx={p.xy[0]} cy={p.xy[1]} r={p.kind === 'airport' ? 7 : 5} fill={p.kind === 'hsr' ? '#f47321' : p.kind === 'airport' ? '#fff' : '#ccc'} stroke="#000" />
         <text x={p.xy[0] + 8} y={p.xy[1] - 6} fontSize={11} fill="#fff" stroke="#000" strokeWidth={3} paintOrder="stroke">{p.kind === 'airport' ? '✈ ' : ''}{p.name}</text></g>)}
   </>, [geo, show])
