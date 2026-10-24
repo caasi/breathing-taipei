@@ -146,8 +146,11 @@ export function App() {
   const { kind, box, fit, view } = useMemo(() => layoutFor(size.w, size.h, taipei), [size, taipei]), phone = kind !== 'desktop', titleSize = phone ? 20 : 28
   const road = s ? Array.from(s.road) : []
   const date = cal && startDay !== undefined ? dateText(cal, startDay + (s?.day ?? 0)) : undefined
-  const dayLabel = (day: number) => (cal && startDay !== undefined ? dateText(cal, startDay + day).roc : '')
-  const events = cal && startDay !== undefined && s ? withPublic(personal.current, cal, startDay, s.day * 1440 + s.minute, MAX_EVENTS) : personal.current
+  const dayLabel = useMemo(() => (day: number) => (cal && startDay !== undefined ? dateText(cal, startDay + day).roc : ''), [cal, startDay])
+  // The worker posts about 30 times a second; the list changes only with the minute or a new event, so build it then.
+  const nowMinute = s ? s.day * 1440 + Math.floor(s.minute) : 0, newest = personal.current.at(-1)?.id
+  const events = useMemo(() => (cal && startDay !== undefined && s ? withPublic(personal.current, cal, startDay, nowMinute, MAX_EVENTS) : personal.current),
+    [cal, startDay, nowMinute, newest, !s])
   const placeOf = useMemo(() => {
     const byCode = new Map<string, { town: string; village: string }>()
     for (const g of villages?.objects.villages.geometries ?? []) byCode.set(g.properties.VILLCODE, { town: g.properties.TOWNNAME, village: g.properties.VILLNAME })
@@ -229,12 +232,12 @@ export function App() {
           <div style={{ position: 'absolute', left: box.x + 12, top: box.y + box.h - 52 }}>{icons}</div>
           <div style={{ position: 'absolute', left: kind === 'landscape' ? box.w : 0, top: kind === 'portrait' ? box.h : 0, right: 0, bottom: 0, overflowY: 'auto', padding: '0 12px' }}>{panel || (open === 'policies'
             ? <div id="policies" role="region" aria-label="政策"><Policies {...policies} /></div>
-            : <section aria-label="事件"><Events events={events} now={s ? s.day * 1440 + s.minute : 0} dayLabel={dayLabel} placeOf={placeOf} /></section>)}</div>
+            : <section aria-label="事件"><Events events={events} now={nowMinute} dayLabel={dayLabel} placeOf={placeOf} /></section>)}</div>
         </>
         : <div style={{ position: 'absolute', left: 16, bottom: 16, display: 'flex', flexDirection: 'column-reverse' }}>
           <div>{icons}</div>{panel}</div>}
       {!phone && <>
-        <aside aria-label="事件" style={{ ...SIDE_PANEL, right: 2 * PANEL.gap + PANEL.policies, width: PANEL.events }}><Events events={events} now={s ? s.day * 1440 + s.minute : 0} dayLabel={dayLabel} placeOf={placeOf} /></aside>
+        <aside aria-label="事件" style={{ ...SIDE_PANEL, right: 2 * PANEL.gap + PANEL.policies, width: PANEL.events }}><Events events={events} now={nowMinute} dayLabel={dayLabel} placeOf={placeOf} /></aside>
         <aside aria-label="政策" style={{ ...SIDE_PANEL, right: PANEL.gap, width: PANEL.policies }}><Policies {...policies} /></aside>
       </>}
     </div>
