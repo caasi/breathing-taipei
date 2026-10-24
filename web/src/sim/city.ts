@@ -1,10 +1,11 @@
-import type { City, Kind } from './core.ts'
+import type { City, DaysOff, Kind } from './core.ts'
 
 export type Village = { code: string; town: string; pop: number; arrivals: number; lon: number; lat: number }
 export type Signal = Record<string, { day: number; night: number }> // weekday 07-13 activity, weekday night stay
 /** Businesses per village (villages2.json order) for each name in kinds; built by scripts/night.py. */
 export type Night = { date: string; kinds: string[]; counts: number[][] }
-export type Data = { od: number[][][]; districts: string[]; villages: Village[]; signal: Signal; night?: Night }
+/** od2.json: MRT trips [hour][from][to] on a workday (od), a Saturday off and a Sunday or holiday (scripts/od.py). */
+export type Data = { od: number[][][]; saturday?: number[][][]; holiday?: number[][][]; districts: string[]; villages: Village[]; signal: Signal; night?: Night }
 
 export const MODES = ['捷運', '公車', '機車', '汽車', '步行', '自行車'] as const
 export const MRT = 0
@@ -23,6 +24,9 @@ const DECAY_KM: Record<number, number> = { [WALK]: 0.8, [BIKE]: 2 }
 const ARRIVAL_DAYS = 30
 const PEAK = new Set([7, 8, 9, 17, 18, 19])
 const MORNING = [5, 6, 7, 8, 9, 10, 11], EVENING = [12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23]
+// ponytail: guessed on 2026-10-24 (the user: many people go abroad or to another county on a day off); the share
+// of commuters away from Taipei and New Taipei for the day, on a Saturday off and on a Sunday or holiday.
+const AWAY_SHARE = [0.05, 0.08]
 
 // ponytail: guessed on 2026-10-24 (no public source gives people per business, shift shares or visitors);
 // replace with survey figures when found. Real people per business, the share of them on this shift,
@@ -88,7 +92,25 @@ const calibrate = (mrt: number[][][], residents: number[], signal: Signal, distr
   return { od, morningMrt: morning, other, target, commuters, hourly }
 }
 
-export const cityFrom = ({ od: mrt, districts, villages, signal, night }: Data, perAgent: number, level: 'district' | 'village') => {
+/**
+ * Days off from the MRT OD of a Saturday off and of a Sunday or holiday. Each pair of districts keeps the
+ * workday ratio of all trips to MRT trips (ponytail: the non-MRT trips have workday data only), and a district's
+ * share of commuters who go out is its trips on that day over its trips on a workday.
+ */
+const daysOff = (mrt: number[][][], days: number[][][][], od: number[][][], kindOf: (day: number) => number): DaysOff => {
+  const total = (m: number[][][], a: number, b: number) => m.reduce((s, hour) => s + hour[a][b], 0)
+  const ratio = od[0].map((row, a) => row.map((_, b) => { const t = total(mrt, a, b); return t ? total(od, a, b) / t : 1 }))
+  const from = (m: number[][][], a: number) => sum(m.map(hour => sum(hour[a])))
+  return {
+    kindOf,
+    od: days.map(m => m.map(hour => hour.map((row, a) => row.map((v, b) => v * ratio[a][b])))),
+    out: days.map(m => od[0].map((_, a) => { const w = from(mrt, a); return w ? Math.min(1, from(m, a) / w) : 0 })),
+    away: AWAY_SHARE,
+  }
+}
+
+export const cityFrom = ({ od: mrt, saturday, holiday, districts, villages, signal, night }: Data, perAgent: number, level: 'district' | 'village',
+  kindOf?: (day: number) => number) => {
   const g = villages.map(v => districts.indexOf(v.town))
   const popD = new Array(districts.length).fill(0), lon = [...popD], lat = [...popD]
   villages.forEach((v, i) => { popD[g[i]] += v.pop; lon[g[i]] += v.lon * v.pop; lat[g[i]] += v.lat * v.pop })
@@ -123,9 +145,10 @@ export const cityFrom = ({ od: mrt, districts, villages, signal, night }: Data, 
   const local = village ? localTrips(districts, residents, commuters, coords, homes, villages.map(v => v.arrivals), g, hourly, perAgent) : undefined
   const nightKinds = night ? nightTrips(night, g, groupOf, village, centreD, coords, homes, perAgent) : []
   const kinds = [...(local ? [local] : []), ...nightKinds]
+  const off = kindOf && saturday && holiday ? daysOff(mrt, [saturday, holiday], od, kindOf) : undefined
   const city: City = village
-    ? { od, group: g, homes, to, perAgent, modeOf, minutes, kinds }
-    : { od, group: groupOf, homes, to: districts.map(() => 1), perAgent, modeOf, minutes, kinds }
+    ? { od, group: g, homes, to, perAgent, modeOf, minutes, kinds, off }
+    : { od, group: groupOf, homes, to: districts.map(() => 1), perAgent, modeOf, minutes, kinds, off }
   return { city, nodes: village ? villages.map(v => v.code) : districts, coords, target }
 }
 

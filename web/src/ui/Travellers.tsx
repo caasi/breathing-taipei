@@ -1,6 +1,7 @@
 import { useRef } from 'react'
 import type { GeoProjection } from 'd3-geo'
 import type { Trips } from '../sim/worker.ts'
+import { GONE, PLAY } from '../sim/core.ts'
 import type { Batch } from '../sim/paths.ts'
 import { fit, program, useWebGL2 } from './gl.ts'
 import { clip, type View } from './view.ts'
@@ -90,14 +91,15 @@ export function Travellers({ tracks, trips, clock, onFps, byMode, view }: Props)
       drawn = key
       let count = 0
       for (let k = 0; k < n; k++) {
-        const t = tracks.current[k]
+        // A trip out of the city has no path on the map, so it draws no dot.
+        const play = trips.dest[k] === PLAY, t = trips.dest[k] === GONE ? undefined : tracks.current[play ? n + k : k]
         if (!t) continue
         let p: number
         if (m >= trips.dep[k] && m < trips.dep[k] + trips.dur1[k]) p = (m - trips.dep[k]) / trips.dur1[k]
         else if (m >= trips.ret[k] && m < trips.ret[k] + trips.dur2[k]) p = 1 - (m - trips.ret[k]) / trips.dur2[k]
         else continue
         const [x, y] = at(t, p)
-        xy[2 * count] = x; xy[2 * count + 1] = y; mode[count] = trips.mode[k]; count++
+        xy[2 * count] = x; xy[2 * count + 1] = y; mode[count] = play ? trips.playMode[k] : trips.mode[k]; count++
       }
       // A whole number of device pixels: a fractional size covers 1 or 2 pixels by position, and moving dots flicker.
       // Rounded up and the alpha scaled down by the area gained, so the glow stays that of a 1.5-unit dot.

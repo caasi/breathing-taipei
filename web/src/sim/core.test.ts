@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'vitest'
 import fc from 'fast-check'
 import { readFileSync } from 'node:fs'
-import { init, advance, counts, where, ROAD, MINUTES_PER_DAY, type City, type World } from './core.ts'
+import { init, advance, counts, where, ROAD, AWAY, PLAY, MINUTES_PER_DAY, type City, type World } from './core.ts'
 import { cityFrom, km, MODES, MAX_KM, WALK, BIKE } from './city.ts'
 
 // 1-5 groups with 1-4 nodes each, sparse non-negative OD, any destination weights,
@@ -21,8 +21,14 @@ const cityArb = fc.integer({ min: 1, max: 5 }).chain(g => fc.record({
       dep: fc.array(fc.oneof(fc.constant(0), fc.nat(5)), { minLength: 24, maxLength: 24 }),
       ret: fc.array(fc.oneof(fc.constant(0), fc.nat(5)), { minLength: 24, maxLength: 24 }),
     }), { maxLength: 3 }),
-  }).map(({ homes, to, kinds }): City => ({
+    // Optional days off: any weekly pattern of the three kinds of day, any shares; the day-off OD is the workday one.
+    off: fc.option(fc.record({
+      week: fc.array(fc.integer({ min: 0, max: 2 }), { minLength: 7, maxLength: 7 }),
+      out: fc.double({ min: 0, max: 1, noNaN: true }), away: fc.double({ min: 0, max: 0.5, noNaN: true }),
+    }), { nil: undefined }),
+  }).map(({ homes, to, kinds, off }): City => ({
     od, group, homes, to, perAgent: 10,
+    off: off && { kindOf: d => off.week[((d % 7) + 7) % 7], od: [od, od], out: [group.map(() => off.out), group.map(() => off.out)], away: [off.away, off.away] },
     kinds: kinds.map((k, c) => ({
       name: `k${c}`, rate: group.map(() => k.rate), dep: k.dep, ret: k.ret,
       pick: (_home, rng) => { const r1 = rng(), r2 = rng(); return r1 < k.none ? undefined : { work: Math.floor(r2 * group.length), mode: Math.floor(r1 * MODES.length) } },
@@ -34,14 +40,14 @@ const cityArb = fc.integer({ min: 1, max: 5 }).chain(g => fc.record({
 
 const total = (city: City) => Array.from(city.homes).reduce((a, b) => a + b, 0)
 const run = (city: City, seed: number, minutes: number) => { const w = init(city, seed); advance(w, minutes); return w }
-const sumOf = (c: { nodes: Uint32Array; road: Uint32Array }) => c.nodes.reduce((a, b) => a + b, 0) + c.road.reduce((a, b) => a + b, 0)
+const sumOf = (c: { nodes: Uint32Array; road: Uint32Array; away: number }) => c.nodes.reduce((a, b) => a + b, 0) + c.road.reduce((a, b) => a + b, 0) + c.away
 
 describe('core properties', () => {
   test('everyone is at a valid node or on the road, never lost', () => {
     fc.assert(fc.property(cityArb, fc.integer(), fc.integer({ min: 0, max: 3 * MINUTES_PER_DAY }), (city, seed, m) => {
       const w = run(city, seed, m)
       expect(sumOf(counts(w, MODES.length))).toBe(total(city))
-      w.home.forEach((_, i) => { const at = where(w, i); expect(at === ROAD || (at >= 0 && at < city.homes.length)).toBe(true) })
+      w.home.forEach((_, i) => { const at = where(w, i); expect(at === ROAD || at === AWAY || (at >= 0 && at < city.homes.length)).toBe(true) })
     }))
   })
 
@@ -60,6 +66,68 @@ describe('core properties', () => {
       }
       expect(bad).toEqual([])
     }))
+  })
+
+  test('on a day off a commuter on the OD leaves home at most once, and is home again the same day', () => {
+    fc.assert(fc.property(cityArb, fc.integer(), (city, seed) => {
+      fc.pre(!!city.off)
+      const w = init(city, seed), left = new Map<string, number>(), bad: string[] = []
+      for (let t = 0; t <= 4 * MINUTES_PER_DAY; t += 1, advance(w, 1)) for (const i of w.movers) {
+        if (w.kind[i] || !w.dur1[i] || w.dep[i] !== t) continue
+        const day = Math.floor(t / MINUTES_PER_DAY)
+        if (!city.off!.kindOf(day)) continue
+        const key = `${i} ${day}`
+        left.set(key, (left.get(key) ?? 0) + 1)
+        if (left.get(key)! > 1) bad.push(`twice ${key}`)
+        // The time to go home is on the day it left, unless the way there alone takes it past midnight.
+        if (Math.floor(w.ret[i] / MINUTES_PER_DAY) > day && w.ret[i] > w.dep[i] + w.dur1[i]) bad.push(`overnight ${key}`)
+      }
+      expect(bad).toEqual([])
+    }), { numRuns: 30 })
+  })
+
+  test('the share of commuters out on a day off does not grow over a run of days off', () => {
+    const od = Array.from({ length: 24 }, () => [[0, 3000], [3000, 0]]) // morning trips above the 20,000 residents: everyone commutes
+    const city: City = { od, group: [0, 1], homes: [2000, 0], to: [1, 1], perAgent: 10, modeOf: () => 0, minutes: () => 10,
+      off: { kindOf: d => (d >= 1 ? 2 : 0), od: [od, od], out: [[0.5, 0.5], [0.5, 0.5]], away: [0, 0] } }
+    const w = init(city, 3), out = new Set<string>()
+    for (let t = 0; t < 7 * MINUTES_PER_DAY; t++, advance(w, 1))
+      for (const i of w.movers) if (w.dest[i] === PLAY) out.add(`${i} ${Math.floor(w.dep[i] / MINUTES_PER_DAY)}`)
+    for (let day = 1; day <= 6; day++) {
+      const share = Array.from(w.movers).filter(i => out.has(`${i} ${day}`)).length / w.movers.length
+      expect(share).toBeGreaterThan(0.45); expect(share).toBeLessThan(0.55)
+    }
+  })
+
+  test('a commuter who works in its home node still goes out on a day off', () => {
+    const od = Array.from({ length: 24 }, (_, h) => [[h < 12 ? 3000 : 0, 3000], [3000, 0]])
+    const city: City = { od, group: [0, 1], homes: [2000, 0], to: [1, 1], perAgent: 10, modeOf: () => 0, minutes: () => 10,
+      off: { kindOf: d => (d % 2 === 0 ? 0 : 2), od: [od, od], out: [[1, 1], [1, 1]], away: [0, 0] } }
+    const w = init(city, 5), local = Array.from(w.movers).filter(i => w.work[i] === w.home[i] && w.play[i] !== w.home[i])
+    expect(local.length).toBeGreaterThan(0)
+    const went = new Set<number>() // day 1 is a day off, and every commuter goes out on it
+    for (let t = 0; t < 2 * MINUTES_PER_DAY; t++, advance(w, 1)) for (const i of local) if (w.dest[i] === PLAY) went.add(i)
+    expect(went.size).toBe(local.length)
+  })
+
+  test('a commuter home after 00:00 still makes its choice for that day off', () => {
+    // Work ends only at 23:00 and the way home takes two hours, so every commuter is home after midnight.
+    const od = Array.from({ length: 24 }, (_, h) => [[0, h === 8 || h === 23 ? 3000 : 0], [h === 23 ? 3000 : 0, 0]])
+    const city: City = { od, group: [0, 1], homes: [1000, 0], to: [1, 1], perAgent: 10, modeOf: () => 0, minutes: () => 120,
+      off: { kindOf: d => (d === 1 ? 2 : 0), od: [od, od], out: [[1, 1], [1, 1]], away: [0, 0] } }
+    const w = init(city, 9), went = new Set<number>()
+    for (let t = 0; t < 2 * MINUTES_PER_DAY; t++, advance(w, 1))
+      for (const i of w.movers) if (w.dest[i] === PLAY && Math.floor(w.dep[i] / MINUTES_PER_DAY) === 1) went.add(i)
+    expect(went.size).toBe(w.movers.length)
+  })
+
+  test('a commuter whose work and day-off place are its home node can still be away', () => {
+    const od = Array.from({ length: 24 }, () => [[3000]])
+    const city: City = { od, group: [0], homes: [100], to: [1], perAgent: 10, modeOf: () => 0, minutes: () => 10,
+      off: { kindOf: () => 2, od: [od, od], out: [[0], [0]], away: [1, 1] } }
+    const w = init(city, 1), gone = new Set<number>()
+    for (let t = 0; t < MINUTES_PER_DAY; t++, advance(w, 1)) for (const i of w.movers) if (where(w, i) === AWAY) gone.add(i)
+    expect(gone.size).toBe(100)
   })
 
   test('same seed gives the same run', () => {
@@ -184,4 +252,25 @@ test('night-time groups with an hour outside the MRT and bus hours use neither (
   const dinner = c.city.kinds!.findIndex(k => k.name === 'dinner') + 1
   const all = w.movers.filter(i => w.kind[i] === dinner)
   expect(all.filter(i => w.mode[i] === 0).length / all.length).toBeLessThan(0.5)
+})
+
+test('a day off has no morning peak, fewer people out, and some away (real data)', () => {
+  const leaving = (kindOf: (day: number) => number) => {
+    const c = cityFrom(data(), 100, 'district', kindOf), w = init(c.city, 7)
+    const perHour = new Array(24).fill(0)
+    let away = 0
+    for (let m = 0; m < MINUTES_PER_DAY; m += 10) {
+      advance(w, 10)
+      for (const i of w.movers) if (w.dep[i] >= m && w.dep[i] < m + 10 && w.dur1[i]) perHour[Math.floor(w.dep[i] / 60) % 24]++
+      if (m === 12 * 60) away = counts(w, MODES.length).away
+    }
+    return { perHour, away, out: perHour.reduce((a, b) => a + b, 0) }
+  }
+  const workday = leaving(() => 0), holiday = leaving(() => 2)
+  const peak = (p: number[]) => Math.max(...p.slice(7, 9)) / (p.slice(10, 17).reduce((a, b) => a + b, 0) / 7)
+  expect(peak(workday.perHour)).toBeGreaterThan(2)
+  expect(peak(holiday.perHour)).toBeLessThan(1.5)
+  expect(holiday.out).toBeLessThan(workday.out)
+  expect(workday.away).toBe(0)
+  expect(holiday.away).toBeGreaterThan(0)
 })

@@ -11,7 +11,7 @@ import { mulberry32, pick } from './rng.ts'
  * When an agent is home again, it gets its next plan; a plan can cross midnight (night shifts).
  */
 export type City = {
-  od: ArrayLike<number>[][] // [hour][from group][to group] = trips on an average weekday
+  od: ArrayLike<number>[][] // [hour][from group][to group] = trips on an average workday
   group: ArrayLike<number> // node -> group
   homes: ArrayLike<number> // agents living in each node
   to: ArrayLike<number> // destination weight of each node within its group; all 0 means uniform
@@ -19,6 +19,19 @@ export type City = {
   modeOf: (fromNode: number, toNode: number, r: number) => number
   kinds?: Kind[] // people who do not commute on the OD, tried in this order
   minutes: (from: number, to: number, mode: number, hour: number) => number // door-to-door trip time
+  off?: DaysOff // absent: every day is a workday
+}
+
+/**
+ * Days off change the plans of the commuters on the OD (the other kinds keep theirs). On such a day a commuter
+ * leaves Taipei and New Taipei for the day (away), goes out to its day-off place (out), or stays home.
+ * Index k - 1 holds the values of kind of day k (SATURDAY, HOLIDAY).
+ */
+export type DaysOff = {
+  kindOf: (day: number) => number // the kind of day of a day since day 0 (WORKDAY: a workday)
+  od: ArrayLike<number>[][][] // [k - 1][hour][from group][to group] = trips on that kind of day
+  out: ArrayLike<number>[] // [k - 1][home group] = share of the commuters who go out to their day-off place
+  away: ArrayLike<number> // [k - 1] = share of the commuters who are away for the day
 }
 
 /**
@@ -42,11 +55,14 @@ export type World = {
   work: Uint16Array
   kind: Uint8Array // 0: commuter on the OD, k: city.kinds[k - 1]
   mode: Uint8Array
+  play: Uint16Array // day-off place of a commuter, drawn once from the day-off OD (its home if none)
+  playMode: Uint8Array
+  dest: Uint8Array // where the current plan goes: WORK, PLAY, AWAY, or STAY (no trip: dep = ret, no legs)
   dep: Int32Array // minute (since 00:00 of day 0) the agent leaves home; before 0 for a night shift that started on day -1
   dur1: Uint16Array // minutes on the way to work
   ret: Int32Array // minute the agent leaves work
   dur2: Uint16Array
-  movers: Uint32Array // agents whose work node differs from home; the others never leave
+  movers: Uint32Array // agents whose work node or day-off place differs from home; the others never leave
   stayers: Uint32Array // per node, agents who never leave
   due: number[][] // due[m % RING]: agents home again at minute m, to get their next plan then
   done: number // the last minute whose agents got their next plan
@@ -56,14 +72,15 @@ export type World = {
 }
 
 export const MINUTES_PER_DAY = 24 * 60
-export const ROAD = -1
+export const ROAD = -1, AWAY = -2
+export const WORK = 0, PLAY = 1, GONE = 2, STAY = 3
 
-// ponytail: every day is a weekday; add weekend schedules when the data has them.
 const MAX_LEG = 600
 const RING = 3 * MINUTES_PER_DAY
 
 const MORNING = [5, 6, 7, 8, 9, 10, 11]
 const EVENING = [12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23]
+const DAYTIME = [5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17] // leaving home on a day off: no morning peak
 const HOURS = Array.from({ length: 24 }, (_, h) => h)
 
 // The hour comes from OD; the minute inside it is uniform (OD has no finer grain).
@@ -77,18 +94,48 @@ const firstAtOrAfter = (t: number, minuteOfDay: number) => t + (((minuteOfDay - 
 const hourOf = (t: number) => Math.floor((((t % MINUTES_PER_DAY) + MINUTES_PER_DAY) % MINUTES_PER_DAY) / 60)
 const leg = (m: number) => Math.min(MAX_LEG, Math.max(1, Math.round(m)))
 
+const dayOf = (t: number) => Math.floor(t / MINUTES_PER_DAY)
+
+const trip = (w: World, i: number, dest: number, dep: number, to: number, mode: number, leave: number) => {
+  const h = w.home[i], dur1 = leg(w.city.minutes(h, to, mode, hourOf(dep)))
+  const ret = Math.max(firstAtOrAfter(dep, leave), dep + dur1)
+  const dur2 = leg(w.city.minutes(to, h, mode, hourOf(ret)))
+  w.dest[i] = dest; w.dep[i] = dep; w.dur1[i] = dur1; w.ret[i] = ret; w.dur2[i] = dur2
+  return ret + dur2
+}
+
+const stay = (w: World, i: number, day: number) => {
+  const end = (day + 1) * MINUTES_PER_DAY
+  w.dest[i] = STAY; w.dep[i] = end; w.dur1[i] = 0; w.ret[i] = end; w.dur2[i] = 0
+  return end
+}
+
 /** Gives agent i its next plan, leaving home at or after minute `after`; returns the minute it is home again. */
-const plan = (w: World, i: number, after: number) => {
-  const { od, group, minutes } = w.city
+const plan = (w: World, i: number, after: number): number => {
+  const { od, group, off } = w.city
   const h = w.home[i], k = w.work[i]
   const kind = w.kind[i] ? w.city.kinds![w.kind[i] - 1] : undefined
-  const dep = firstAtOrAfter(after, kind ? minuteFrom(kind.dep, HOURS, w.rng(), w.rng()) : minuteOf(od, MORNING, group[h], group[k], w.rng(), w.rng()))
-  const dur1 = leg(minutes(h, k, w.mode[i], hourOf(dep)))
-  const leave = kind ? minuteFrom(kind.ret, HOURS, w.rng(), w.rng()) : minuteOf(od, EVENING, group[k], group[h], w.rng(), w.rng())
-  const ret = Math.max(firstAtOrAfter(dep, leave), dep + dur1)
-  const dur2 = leg(minutes(k, h, w.mode[i], hourOf(ret)))
-  w.dep[i] = dep; w.dur1[i] = dur1; w.ret[i] = ret; w.dur2[i] = dur2
-  return ret + dur2
+  if (kind) return trip(w, i, WORK, firstAtOrAfter(after, minuteFrom(kind.dep, HOURS, w.rng(), w.rng())), k, w.mode[i], minuteFrom(kind.ret, HOURS, w.rng(), w.rng()))
+  // A plan belongs to the day it leaves on. A time of day already past moves the departure to the next day;
+  // when that day is of another kind, the plan is drawn again for it, from its 00:00.
+  for (let day = dayOf(after); ; day++, after = day * MINUTES_PER_DAY) {
+    const today = off?.kindOf(day) ?? 0
+    if (!today && k === h) return stay(w, i, day) // works in its home node: it only moves on a day off
+    if (!today) {
+      const dep = firstAtOrAfter(after, minuteOf(od, MORNING, group[h], group[k], w.rng(), w.rng()))
+      if (today !== (off?.kindOf(dayOf(dep)) ?? 0)) continue
+      return trip(w, i, WORK, dep, k, w.mode[i], minuteOf(od, EVENING, group[k], group[h], w.rng(), w.rng()))
+    }
+    // One choice per day off: a commuter that already went out on this day stays home until the next one.
+    if (w.dest[i] !== STAY && dayOf(w.dep[i]) === day) continue
+    const r = w.rng(), away = off!.away[today - 1], p = w.play[i], dayOd = off!.od[today - 1]
+    if (r >= away + (1 - away) * off!.out[today - 1][group[h]]) return stay(w, i, day)
+    // ponytail: the hours of a day away follow the trips inside the home district; there is no data on trips out of the city.
+    const gone = r < away, to = gone ? h : p
+    const dep = firstAtOrAfter(after, minuteOf(dayOd, DAYTIME, group[h], group[to], w.rng(), w.rng()))
+    const leave = minuteOf(dayOd, EVENING.filter(x => x > hourOf(dep)), group[to], group[h], w.rng(), w.rng())
+    return trip(w, i, gone ? GONE : PLAY, dep, to, gone ? w.mode[i] : w.playMode[i], leave)
+  }
 }
 
 export const init = (city: City, seed: number): World => {
@@ -104,11 +151,17 @@ export const init = (city: City, seed: number): World => {
   const share = morning.map((row, g) =>
     residents[g] ? Math.min(1, row.reduce((a, b) => a + b, 0) / (residents[g] * perAgent)) : 0)
 
+  // ponytail: one day-off place per commuter, drawn from all trips of all days off; a real person goes to more places.
+  const playOf = city.off && Array.from({ length: groups }, (_, a) => Array.from({ length: groups }, (_, b) =>
+    city.off!.od.reduce((s, kind) => s + kind.reduce((t, hour) => t + hour[a][b], 0), 0)))
+
   let n = 0
   for (let v = 0; v < homes.length; v++) n += homes[v]
+  const commuter = new Uint8Array(n)
   const w: World = {
     city, minute: 0, day: 0, rng: mulberry32(seed), movers: new Uint32Array(0), stayers: new Uint32Array(homes.length),
     home: new Uint16Array(n), work: new Uint16Array(n), kind: new Uint8Array(n), mode: new Uint8Array(n),
+    play: new Uint16Array(n), playMode: new Uint8Array(n), dest: new Uint8Array(n),
     dep: new Int32Array(n), dur1: new Uint16Array(n), ret: new Int32Array(n), dur2: new Uint16Array(n),
     due: Array.from({ length: RING }, () => []), done: -1,
   }
@@ -116,10 +169,17 @@ export const init = (city: City, seed: number): World => {
     const g = group[v]
     w.home[i] = v
     w.work[i] = v
+    w.play[i] = v
     if (w.rng() < share[g]) {
+      commuter[i] = 1
       const dg = pick(morning[g], w.rng())
       w.work[i] = members[dg][pick(weights[dg], w.rng())]
       w.mode[i] = city.modeOf(v, w.work[i], w.rng())
+      if (playOf) {
+        const pg = pick(playOf[g], w.rng())
+        w.play[i] = members[pg][pick(weights[pg], w.rng())]
+        w.playMode[i] = city.modeOf(v, w.play[i], w.rng())
+      }
     } else {
       // Each rate is a share of all residents; the agents left here are those not taken yet, hence the division.
       let left = 1 - share[g]
@@ -135,7 +195,8 @@ export const init = (city: City, seed: number): World => {
     }
   }
   const movers: number[] = []
-  w.home.forEach((h, i) => (h === w.work[i] ? w.stayers[h]++ : movers.push(i)))
+  // With days off, every commuter on the OD moves: one whose work and day-off place are its home node can still be away.
+  w.home.forEach((h, i) => (h === w.work[i] && h === w.play[i] && !(city.off && commuter[i]) ? w.stayers[h]++ : movers.push(i)))
   w.movers = Uint32Array.from(movers)
   // Plan from 00:00 of day -1 and step forward to the plan that is under way at 00:00 of day 0,
   // so a night shift starts the run at work.
@@ -149,11 +210,11 @@ export const init = (city: City, seed: number): World => {
 
 export const now = (w: World) => w.day * MINUTES_PER_DAY + w.minute
 
-/** Node index, or ROAD while travelling, at a minute since 00:00 of day 0. */
+/** Node index, ROAD while travelling, or AWAY outside Taipei and New Taipei, at a minute since 00:00 of day 0. */
 export const where = (w: World, i: number, minute = now(w)): number => {
-  if (minute < w.dep[i] || w.home[i] === w.work[i]) return w.home[i]
+  if (minute < w.dep[i]) return w.home[i]
   if (minute < w.dep[i] + w.dur1[i]) return ROAD
-  if (minute < w.ret[i]) return w.work[i]
+  if (minute < w.ret[i]) return w.dest[i] === PLAY ? w.play[i] : w.dest[i] === GONE ? AWAY : w.work[i]
   if (minute < w.ret[i] + w.dur2[i]) return ROAD
   return w.home[i]
 }
@@ -177,10 +238,12 @@ export const advance = (w: World, minutes: number) => {
 export const counts = (w: World, modes: number) => {
   const c = Uint32Array.from(w.stayers)
   const road = new Uint32Array(modes)
+  let away = 0
   for (const i of w.movers) {
     const at = where(w, i)
-    if (at === ROAD) road[w.mode[i]]++
+    if (at === ROAD) road[w.dest[i] === PLAY ? w.playMode[i] : w.mode[i]]++
+    else if (at === AWAY) away++
     else c[at]++
   }
-  return { nodes: c, road }
+  return { nodes: c, road, away }
 }

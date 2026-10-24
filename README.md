@@ -2,7 +2,7 @@
 
 > Note: Claude Opus 5.5 wrote this README and the code in this repository, with Isaac Huang.
 
-台北鼓動 (Breathing Taipei) shows one weekday in Taipei City and New Taipei City.
+台北鼓動 (Breathing Taipei) shows the days in Taipei City and New Taipei City, from the day you open the page, with the workdays, the days off and the holidays of the office calendar.
 The map shows how people move into the villages (里) in the morning and out of them in the evening.
 
 This is a personal side project.
@@ -77,7 +77,7 @@ Example: `?flex=20&headway=3&bus-lane=1`
 
 - One agent is 10 people. The model has 645,406 agents.
 - Residents come from household registration data for each village (September 2026).
-- MRT commuters come from the hourly MRT origin-destination (OD) data, weekdays of September 2026.
+- MRT commuters come from the hourly MRT origin-destination (OD) data of September 2026: the mean of the 20 workdays, of the 4 Saturdays, and of the 6 Sundays and holidays.
 - The OD data is per station. The model adds it up per district.
 - Inside a district, a trip starts in a village in proportion to its residents. A trip ends in a village by half its MRT arrivals and half its residents.
 - The MRT data does not include people who use a bus, a scooter, a car, or who walk. The model adds these commuters so that the daytime population of each district comes near a target.
@@ -120,8 +120,11 @@ The model uses real open data, but some parts are estimates. The list below show
 - Hospitals, taxis, and other night work are not in the model. Most hospitals are not in the business tax registry.
 - A business address without a village, with a village that the 2021 village map does not have, or with a village name that the map writes with a different character, counts for its district. The model reads 羣, 峯 and 臺 as 群, 峰 and 台, but some addresses use private-use characters (for example in 樹林區 and 萬華區). The model spreads these businesses over the villages of the district (24% of the businesses).
 - Each commuter makes one trip to work and one trip home. The model has no school, shopping, or care trips yet.
-- Every day is a weekday.
-- The bus hours come from the first and last buses in the route files of both cities: most first buses leave at 05:00 or later, and most last buses leave before 24:00. A few routes run until 00:30. The MRT hours come from the MRT data: 44 trips start in hour 05 and 34,851 in hour 06. Hour 00 still has 10,629 trips (the last trains), but the model counts hour 00 as closed.
+- On a day off, 5% of the commuters (Saturday) or 8% (Sunday or holiday) are away from Taipei and New Taipei for the day. These shares are guesses.
+- Each commuter has one fixed day-off place. Non-MRT trips on a day off keep the workday ratio to MRT trips. The night-time groups do the same on every day. These are guesses.
+- The days off after 2027 and the solar terms after 2028 are guesses by rule (DATA.md, "Figures in the code").
+- The bus hours and the MRT hours are those of a workday.
+- The bus hours come from the first and last buses in the route files of both cities: most first buses leave at 05:00 or later, and most last buses leave before 24:00. A few routes run until 00:30. The MRT hours come from the MRT data: on a workday 43 trips start in hour 05 and 36,483 in hour 06. Hour 00 still has 10,471 trips (the last trains), but the model counts hour 00 as closed.
 - A district-level run drops a night-time trip that stays in the home district, because the district is the node. With seed 42 it has 36,210 dinner visitors against 80,560 at village level.
 - Scooters and cars use the bus routes, not the full road network.
 

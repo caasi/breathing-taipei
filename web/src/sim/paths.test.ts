@@ -56,12 +56,12 @@ test.skipIf(!existsSync(bin))('the routes file in web/public matches the road gr
   // The app's run (seed 42, 10 people per agent), both levels, every agent: no road trip may need routing.
   const data = { ...pub('od2.json'), villages: pub('villages2.json'), signal: pub('signal.json'), night: pub('night.json') }
   for (const level of ['village', 'district'] as const) {
-    const c = cityFrom(data, 10, level), w = init(c.city, 42), node = new Map<number, number>()
+    const c = cityFrom(data, 10, level, () => 0), w = init(c.city, 42), node = new Map<number, number>()
     const at = (v: number) => node.get(v) ?? node.set(v, roadNode(net, c.coords, v)).get(v)!
-    const missing = Array.from(w.movers).filter(i => ROAD_MODES.has(w.mode[i]) && at(w.home[i]) !== at(w.work[i])
-      && !routes!.has(routeKey(at(w.home[i]), at(w.work[i])))
+    const missing = (to: Uint16Array, mode: Uint8Array) => Array.from(w.movers).filter(i => ROAD_MODES.has(mode[i]) && at(w.home[i]) !== at(to[i])
+      && !routes!.has(routeKey(at(w.home[i]), at(to[i])))
       // The script leaves out pairs that the road graph does not connect; those are not missing.
-      && Number.isFinite(tree(net.road, at(w.home[i])).dist[at(w.work[i])]))
-    expect({ level, missing: missing.length }).toEqual({ level, missing: 0 })
+      && Number.isFinite(tree(net.road, at(w.home[i])).dist[at(to[i])])).length
+    expect({ level, work: missing(w.work, w.mode), play: missing(w.play, w.playMode) }).toEqual({ level, work: 0, play: 0 })
   }
 }, 60_000)
