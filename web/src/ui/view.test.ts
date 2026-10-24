@@ -16,7 +16,7 @@ test('each device gets the layout the user set', () => {
   const desktop = layoutFor(1440, 900), portrait = layoutFor(430, 932), landscape = layoutFor(932, 430)
   expect(desktop.kind).toBe('desktop'); expect(desktop.box).toEqual({ x: 0, y: 0, w: 1440, h: 900 }); expect(desktop.fit.w).toBe(1440 - DASHBOARD_WIDTH)
   expect(portrait.kind).toBe('portrait'); expect(portrait.box.w / portrait.box.h).toBeCloseTo(4 / 3); expect(portrait.box.w).toBe(430)
-  expect(landscape.kind).toBe('landscape'); expect(landscape.box.w / landscape.box.h).toBeCloseTo(4 / 3); expect(landscape.box.h).toBe(430)
+  expect(landscape.kind).toBe('landscape'); expect(landscape.box.w / landscape.box.h).toBeCloseTo(3 / 4); expect(landscape.box.h).toBe(430)
   expect(layoutFor(1366, 1024).kind).toBe('desktop') // iPad landscape
 })
 

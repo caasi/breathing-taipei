@@ -7,20 +7,20 @@ export type Layout = { kind: 'desktop' | 'portrait' | 'landscape'; box: Rect; fi
 export const MAP_SIZE = 640
 // The event and policy dashboard sits on the right, over the map; the map fits in the rest.
 export const DASHBOARD_WIDTH = 360
-// Below 1 the fitted square shrinks, so more of 新北 around it shows; the user chose this by eye.
-const ZOOM = 0.8
+// Below 1 the fitted square shrinks, so more of 新北 around it shows; the user chose both by eye.
+const ZOOM = { desktop: 0.8, portrait: 1, landscape: 1 }
 // ponytail: phones told apart by size alone; iPhone landscape is at most 440 px high. Use a pointer media query if tablets land wrong.
 const PHONE_LANDSCAPE_HEIGHT = 500
 
-const fitIn = (r: Rect): View => {
-  const k = ZOOM * Math.min(r.w, r.h) / MAP_SIZE
+const fitIn = (r: Rect, zoom: number): View => {
+  const k = zoom * Math.min(r.w, r.h) / MAP_SIZE
   return { k, x: r.x + (r.w - MAP_SIZE * k) / 2, y: r.y + (r.h - MAP_SIZE * k) / 2 }
 }
 
 export const layoutFor = (w: number, h: number): Layout => {
-  const at = (kind: Layout['kind'], box: Rect, fit: Rect = { ...box, x: 0, y: 0 }) => ({ kind, box, fit, view: fitIn(fit) })
+  const at = (kind: Layout['kind'], box: Rect, fit: Rect = { ...box, x: 0, y: 0 }) => ({ kind, box, fit, view: fitIn(fit, ZOOM[kind]) })
   if (h > w) return at('portrait', { x: 0, y: 0, w, h: w * 3 / 4 })
-  if (h < PHONE_LANDSCAPE_HEIGHT) return at('landscape', { x: 0, y: 0, w: h * 4 / 3, h })
+  if (h < PHONE_LANDSCAPE_HEIGHT) return at('landscape', { x: 0, y: 0, w: h * 3 / 4, h })
   return at('desktop', { x: 0, y: 0, w, h }, { x: 0, y: 0, w: w - DASHBOARD_WIDTH, h })
 }
 
