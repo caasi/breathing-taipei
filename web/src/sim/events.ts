@@ -1,5 +1,5 @@
 import { GONE, PLAY, STAY } from './core.ts'
-import type { Calendar } from './calendar.ts'
+import { isoAt, kindAt, type Calendar } from './calendar.ts'
 
 /**
  * One event: t in minutes since 00:00 of day 0. A personal event follows one agent (a character: 10 people at the
@@ -56,16 +56,15 @@ const DAY_OFF_GREETINGS: [number, string][] = [
 
 /** The public events of one simulated day: holidays, commemorations, solar terms, civic days, and greetings. */
 export const publicEvents = (cal: Calendar, startDay: number, day: number): SimEvent[] => {
-  const i = startDay + day, d = cal.days[i], t = day * 24 * 60
-  if (!d) return []
-  const iso = new Date(Date.parse(`${cal.start}T00:00:00Z`) + i * 864e5).toISOString().slice(0, 10)
+  const i = startDay + day, d = cal.days[i], t = day * 24 * 60, iso = isoAt(cal, i)
   const out: { t: number; text: string }[] = []
-  if (d[4] && d[4] !== '補假') out.push({ t, text: `今天是${d[4]}，放假一天` })
-  if (d[4] === '補假') out.push({ t, text: '今天補假，放假一天' })
-  for (const name of d[5] ? d[5].split('、') : []) out.push({ t, text: `今天是${name}` })
-  if (d[3]) out.push({ t, text: `今天${d[3]}` })
+  // Past the end of the table there are no holidays or terms, but the city still greets its days.
+  if (d && d[4] && d[4] !== '補假') out.push({ t, text: `今天是${d[4]}，放假一天` })
+  if (d && d[4] === '補假') out.push({ t, text: '今天補假，放假一天' })
+  for (const name of d?.[5] ? d[5].split('、') : []) out.push({ t, text: `今天是${name}` })
+  if (d?.[3]) out.push({ t, text: `今天${d[3]}` })
   if (CIVIC[iso]) out.push({ t, text: CIVIC[iso] })
-  for (const [hour, text] of d[0] ? DAY_OFF_GREETINGS : WORKDAY_GREETINGS) out.push({ t: t + Math.round(hour * 60), text })
+  for (const [hour, text] of kindAt(cal, i) ? DAY_OFF_GREETINGS : WORKDAY_GREETINGS) out.push({ t: t + Math.round(hour * 60), text })
   // The same day gives the same ids, so a list that is built again keeps its rows.
   return out.map((e, k): SimEvent => ({ ...e, kind: 'public', id: `d${day}-${k}` }))
 }

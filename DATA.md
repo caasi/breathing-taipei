@@ -98,7 +98,7 @@ Note: The data.gov.tw entry for the Taipei shape file was not found. The license
 
 - Days off from 2028 to 2034 follow source M, and the script stops when this rule does not give 2026 and 2027 as source K does: weekends; 開國紀念日, 和平紀念日, 兒童節, 清明節 (the day of the solar term 清明), 勞動節, 教師節, 國慶日, 臺灣光復暨金門古寧頭大捷紀念日 and 行憲紀念日; 小年夜 to 春節 初三, 端午節 and 中秋節 on their lunar dates. A holiday on a Saturday gives a 補假 on the Friday before, and a holiday on a Sunday on the first free workday after; for 春節 the 補假 comes after the whole break. 兒童節 on the day of 清明 moves to the day before, or to the day after when the day before is a Thursday. When a 補假 would fall on a day that is already off (in 2031, 兒童節 is moved to Saturday 4/5 and the Friday before is 清明), there is no 補假: source M does not say where it goes. The user asked to reuse the last year with data. A change in the law after 2026-10-24 is not in it.
 - Solar terms from 2029 to 2034 keep their 2028 date. A real term can be one day earlier or later.
-- After 2034-12-31 the table ends: a Saturday or a Sunday is a day off, there are no holidays, and the clock shows no lunar date.
+- After 2034-12-31 the table ends: a Saturday or a Sunday is a day off, there are no holidays, and the clock shows no lunar date. The greetings of the city go on, by the weekday.
 - The first simulated day is the day the page opens, in Taiwan (UTC+8).
 
 `web/src/sim/city.ts` and `web/src/sim/core.ts` use these guesses for days off (the user agreed on 2026-10-24):

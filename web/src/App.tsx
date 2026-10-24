@@ -58,7 +58,8 @@ export function App() {
   const [s, setS] = useState<FromWorker>()
   // Display settings belong to this viewer, so they stay in this browser; the policies (usePolicies) are in the URL.
   const policies = usePolicies()
-  const [speed, setSpeed] = useStored('speed', 1, oneOf(SPEEDS))
+  // A pause is not restored: a viewer who comes back to a stopped page at 00:00 sees nothing move.
+  const [speed, setSpeed] = useStored('speed', 1, s => (s === '0' ? undefined : oneOf(SPEEDS)(s)))
   const [level, setLevel] = useStored<Level>('level', 'village', oneOf(['district', 'village'] as const))
   const [dot, setDot] = useStored('dot', 50, oneOf(EVERY.map(e => e * PER_AGENT)))
   const every = dot / PER_AGENT

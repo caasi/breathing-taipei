@@ -49,3 +49,9 @@ test('the public events passed to the list hold all of the newest 100 up to now,
       expect(newest(withPublic(personal, cal, start, now, 100))).toEqual(newest(all))
     }
 })
+
+test('past the end of the calendar table the city still greets its days, by the weekday', () => {
+  const end = cal.days.length, at = (k: number) => publicEvents(cal, end + k, 0).map(e => (e.kind === 'public' ? e.text : ''))
+  expect(at(0)).toContain('上班時間快到了，路上的人越來越多') // 2035-01-01, a Monday: no holidays past the table
+  expect(at(5)).toContain('出門走走的人多了起來') // a Saturday
+})
