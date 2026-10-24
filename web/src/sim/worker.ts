@@ -61,9 +61,11 @@ const frame = () => {
   extra.replans = replans(w)
   const c = counts(w, MODES.length)
   const ms = performance.now() - t
-  // Road routing is slow, so it runs in the spare time of each frame.
+  // Road routing is slow, so it runs in the spare time of each frame, but at least 4 ms of it: on a slow
+  // device (iPhone) the simulation alone can fill the 12 ms, and the routing then never started.
   const paths: Batch[] = []
-  while (pending && performance.now() - t < 12) {
+  const until = Math.max(t + 12, performance.now() + 4)
+  while (pending && performance.now() < until) {
     const b = pending.next()
     if (b.done) { pending = undefined; break }
     paths.push(b.value); routed += b.value.ks.length
