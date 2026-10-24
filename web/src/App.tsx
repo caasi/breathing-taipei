@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { HeatMap, projectionFor, type Transit } from './ui/HeatMap.tsx'
+import { HeatMap, projectionFor, taipeiIn, type Transit } from './ui/HeatMap.tsx'
 import { Travellers, MODE_COLOURS, addBatches, type Track } from './ui/Travellers.tsx'
 import { MODES } from './sim/city.ts'
 import type { FromWorker, WorkerError, ToWorker, Level, Trips } from './sim/worker.ts'
@@ -104,7 +104,8 @@ export function App() {
   const ready = projection && villages && s && nodes.length === s.counts.length
   const [size, setSize] = useState({ w: innerWidth, h: innerHeight })
   useEffect(() => { const on = () => setSize({ w: innerWidth, h: innerHeight }); addEventListener('resize', on); return () => removeEventListener('resize', on) }, [])
-  const { kind, box, fit, view } = useMemo(() => layoutFor(size.w, size.h), [size]), phone = kind !== 'desktop'
+  const taipei = useMemo(() => projection && taipeiIn(towns, projection), [projection])
+  const { kind, box, fit, view } = useMemo(() => layoutFor(size.w, size.h, taipei), [size, taipei]), phone = kind !== 'desktop'
   const road = s ? Array.from(s.road) : []
   return (
     <div style={{ position: 'fixed', inset: 0, overflow: 'hidden', background: '#211d1d' }}>

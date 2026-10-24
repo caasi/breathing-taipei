@@ -3,7 +3,7 @@ import { geoArea, geoMercator, geoPath, type GeoProjection } from 'd3-geo'
 import { feature } from 'topojson-client'
 import type { FeatureCollection, Geometry } from 'geojson'
 import { Fills } from './Fills.tsx'
-import { MAP_SIZE, svgTransform, type View } from './view.ts'
+import { MAP_SIZE, svgTransform, type Rect, type View } from './view.ts'
 
 export type Transit = {
   lines: { kind: string; name: string; colour: string; coords: [number, number][] }[]
@@ -46,6 +46,12 @@ const cityTowns = (towns: any) => features(towns, 'towns').filter(f => ['台北�
 export const projectionFor = (towns: any): GeoProjection => {
   const fit = cityTowns(towns).filter(f => VIEW.has(f.properties.COUNTYNAME) || VIEW.has(f.properties.COUNTYNAME + f.properties.TOWNNAME))
   return geoMercator().fitSize([MAP_SIZE, MAP_SIZE], { type: 'FeatureCollection', features: fit })
+}
+
+/** The bounds of 台北市 in map space, which a phone's small map box zooms to. */
+export const taipeiIn = (towns: any, proj: GeoProjection): Rect => {
+  const [[x0, y0], [x1, y1]] = geoPath(proj).bounds({ type: 'FeatureCollection', features: cityTowns(towns).filter(f => f.properties.COUNTYNAME === '台北市') })
+  return { x: x0, y: y0, w: x1 - x0, h: y1 - y0 }
 }
 
 type Props = {

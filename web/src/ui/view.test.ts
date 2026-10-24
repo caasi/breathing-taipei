@@ -4,12 +4,15 @@ import { clip, layoutFor, DASHBOARD_WIDTH, MAP_SIZE } from './view.ts'
 
 const screens = fc.record({ w: fc.integer({ min: 320, max: 4000 }), h: fc.integer({ min: 300, max: 3000 }) })
 
-test('the map square sits inside its fit area, centred, and the fit area inside the box', () => fc.assert(fc.property(screens, ({ w, h }) => {
-  const { box, fit, view: { k, x, y } } = layoutFor(w, h), e = 1e-9
+const rects = fc.record({ x: fc.integer({ min: 0, max: 300 }), y: fc.integer({ min: 0, max: 300 }), w: fc.integer({ min: 50, max: 340 }), h: fc.integer({ min: 50, max: 340 }) })
+
+test('the focus (the map square on a desktop, 台北市 on a phone) sits inside the fit area, centred', () => fc.assert(fc.property(screens, rects, ({ w, h }, taipei) => {
+  const { kind, box, fit, view: { k, x, y } } = layoutFor(w, h, taipei), f = kind === 'desktop' ? { x: 0, y: 0, w: MAP_SIZE, h: MAP_SIZE } : taipei, e = 1e-9
   expect(fit.x).toBeGreaterThanOrEqual(0); expect(fit.x + fit.w).toBeLessThanOrEqual(box.w + e); expect(fit.y + fit.h).toBeLessThanOrEqual(box.h + e)
-  expect(x).toBeGreaterThanOrEqual(fit.x - e); expect(y).toBeGreaterThanOrEqual(fit.y - e)
-  expect(x + MAP_SIZE * k).toBeLessThanOrEqual(fit.x + fit.w + e); expect(y + MAP_SIZE * k).toBeLessThanOrEqual(fit.y + fit.h + e)
-  expect(x + MAP_SIZE * k / 2).toBeCloseTo(fit.x + fit.w / 2); expect(y + MAP_SIZE * k / 2).toBeCloseTo(fit.y + fit.h / 2)
+  const left = k * f.x + x, top = k * f.y + y
+  expect(left).toBeGreaterThanOrEqual(fit.x - e); expect(top).toBeGreaterThanOrEqual(fit.y - e)
+  expect(left + k * f.w).toBeLessThanOrEqual(fit.x + fit.w + e); expect(top + k * f.h).toBeLessThanOrEqual(fit.y + fit.h + e)
+  expect(left + k * f.w / 2).toBeCloseTo(fit.x + fit.w / 2); expect(top + k * f.h / 2).toBeCloseTo(fit.y + fit.h / 2)
 })))
 
 test('each device gets the layout the user set', () => {
