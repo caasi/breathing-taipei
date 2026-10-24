@@ -4,7 +4,8 @@ import { hhmm, H2 } from './format.ts'
 import { actionOf, type PlaceOf, type SimEvent } from '../sim/events.ts'
 
 // ponytail: placeholder policies for the layout only; nothing here reaches the simulation yet.
-const KIND = { personal: ['個人', '#f5f0e8'], public: ['公共', '#c9a7ff'] } as const
+// The kind of an event shows by the colour of its text, not by a label; a bad event (an accident) gets its own colour when it comes.
+const COLOUR = { personal: '#eee', public: '#c9a7ff' } as const
 
 type Policy = { id: string; label: string } & ({ type: 'toggle' } | { type: 'range'; min: number; max: number; step: number; unit: string; start: number })
 // Grouped by the HEART idea of puma.taipei, as the user set.
@@ -48,8 +49,7 @@ export function Events({ events, now, dayLabel, placeOf }: { events: SimEvent[];
         {(i === 0 || dayOf(happened[i - 1]) !== dayOf(e)) && <p style={{ margin: '0 0 6px', fontSize: 12, color: '#888' }}>{dayLabel(dayOf(e))}</p>}
         <div style={{ display: 'flex', gap: 8 }}>
           <span style={{ fontVariantNumeric: 'tabular-nums', color: '#aaa' }}>{hhmm(e.t % 1440)}</span>
-          <span style={{ color: KIND[e.kind][1], whiteSpace: 'nowrap' }}>{KIND[e.kind][0]}</span>
-          <span>{e.kind === 'public' ? e.text : <><span style={{ color: '#aaa' }}>{placeOf(e.home).town}{placeOf(e.home).village}</span>的{e.name}{actionOf(e, placeOf)}</>}</span></div></li>)}
+          <span style={{ color: COLOUR[e.kind] }}>{e.kind === 'public' ? e.text : <><span style={{ color: '#aaa' }}>{placeOf(e.home).town}{placeOf(e.home).village}</span>的{e.name}{actionOf(e, placeOf)}</>}</span></div></li>)}
     </ol> : <p style={{ fontSize: 14, color: '#aaa' }}>還沒有事件。</p>}
   </>
 }
