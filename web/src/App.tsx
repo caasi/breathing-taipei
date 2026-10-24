@@ -167,10 +167,10 @@ export function App() {
   </>
   // A desktop always shows the policies; a phone shows the events below the map and opens the policies only when asked.
   const icons = ([['info', '專案說明與授權', <InfoIcon />], ['settings', '顯示設定與模擬狀況', <GearIcon />], ...(phone ? [['policies', '政策', <SlidersIcon />]] as const : [])] as const).map(([k, label, icon]) =>
-    <button key={k} aria-label={label} title={label} aria-expanded={open === k} aria-controls={k === 'policies' ? 'policies' : 'panel'} onClick={() => setOpen(open === k ? undefined : k)}
+    <button key={k} aria-label={label} title={label} aria-expanded={open === k} aria-controls={k === 'policies' ? 'policies' : open === k ? 'panel' : undefined} onClick={() => setOpen(open === k ? undefined : k)}
       style={{ ...ICON_BUTTON, background: open === k ? '#db6a41' : 'rgba(33, 29, 29, 0.85)' }}>{icon}</button>)
   // On a desktop the panel stays inside the map area, so the event panel never covers it.
-  const panel = (open === 'info' || open === 'settings') && <div id="panel" style={phone ? undefined
+  const panel = (open === 'info' || open === 'settings') && <div id="panel" role="region" aria-label={open === 'info' ? '專案說明與授權' : '顯示設定與模擬狀況'} style={phone ? undefined
     : { width: Math.min(536, fit.w - 32), maxHeight: 'calc(100vh - 180px)', overflowY: 'auto', marginBottom: 8, padding: '4px 12px', background: 'rgba(33, 29, 29, 0.85)', borderRadius: 4 }}>
     {open === 'info' ? info : settings}</div>
   return (
