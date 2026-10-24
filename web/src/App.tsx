@@ -20,7 +20,7 @@ const WINDOWS = [15, 30, 60, KEEP] // simulated minutes the change rate can look
 // A node is a village code (台北市 is county 63000) or a district name.
 const inTaipei = (node: string) => node.startsWith('63000') || node.startsWith('台北市')
 const H2 = { fontSize: 14, color: '#aaa', margin: '12px 0 4px' }
-const ALERT = { position: 'absolute', top: 72, left: 16, right: 16, margin: 0, color: '#ff8b6b' } as const
+const ALERT = { position: 'absolute', top: 72, left: 16, margin: 0, color: '#ff8b6b' } as const
 const SIDE_PANEL = { position: 'absolute', top: 16, bottom: 16, overflowY: 'auto', padding: '0 12px', boxSizing: 'border-box', background: 'rgba(33, 29, 29, 0.85)', borderRadius: 4 } as const
 const ICON_BUTTON = { width: 40, height: 40, marginRight: 8, padding: 8, border: 0, borderRadius: 20, color: '#fff', cursor: 'pointer' }
 const InfoIcon = () => <svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true">
@@ -191,8 +191,8 @@ export function App() {
       <p style={{ position: 'absolute', top: 16, left: fit.x + 16, width: fit.w - 32, margin: 0, textAlign: phone ? 'right' : 'center', fontSize: phone ? 18 : 24, color: '#fff', pointerEvents: 'none', fontVariantNumeric: 'tabular-nums' }}>
         第 {s?.day ?? 0} 天 {hhmm(s?.minute ?? 0)}</p>
       </div>
-      {loadError && <p role="alert" style={ALERT}>無法載入地圖資料：{loadError}</p>}
-      {runError && <p role="alert" style={ALERT}>模擬無法執行：{runError}</p>}
+      {loadError && <p role="alert" style={{ ...ALERT, width: fit.w - 32 }}>無法載入地圖資料：{loadError}</p>}
+      {runError && <p role="alert" style={{ ...ALERT, width: fit.w - 32 }}>模擬無法執行：{runError}</p>}
       {/* On a desktop the panel opens over the map, above the icons. On a phone the icons sit on the map, and the panel opens beside or below it, never over it,
           in the place of the dashboard until it is closed. */}
       {phone
