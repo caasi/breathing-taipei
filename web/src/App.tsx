@@ -10,7 +10,7 @@ import { record, since, KEEP, type Entry } from './history.ts'
 import { layoutFor, PANEL } from './ui/view.ts'
 import { dateText, indexOf, todayInTaipei, type Calendar } from './sim/calendar.ts'
 import { Events, Policies, usePolicies, MAX_EVENTS } from './ui/Dashboard.tsx'
-import { publicEvents, type SimEvent } from './sim/events.ts'
+import { withPublic, type SimEvent } from './sim/events.ts'
 import { hhmm, H2 } from './ui/format.ts'
 
 const SPEEDS = [0, 1, 2, 4, 8]
@@ -147,10 +147,7 @@ export function App() {
   const road = s ? Array.from(s.road) : []
   const date = cal && startDay !== undefined ? dateText(cal, startDay + (s?.day ?? 0)) : undefined
   const dayLabel = (day: number) => (cal && startDay !== undefined ? dateText(cal, startDay + day).roc : '')
-  // A day has about ten public events, so ten days of them always reach past the newest MAX_EVENTS of the list.
-  const events = cal && startDay !== undefined && s
-    ? [...personal.current, ...Array.from({ length: 10 }, (_, k) => s.day - k).filter(d => d >= 0).flatMap(d => publicEvents(cal, startDay, d))]
-    : personal.current
+  const events = cal && startDay !== undefined && s ? withPublic(personal.current, cal, startDay, s.day, MAX_EVENTS) : personal.current
   const placeOf = useMemo(() => {
     const byCode = new Map<string, { town: string; village: string }>()
     for (const g of villages?.objects.villages.geometries ?? []) byCode.set(g.properties.VILLCODE, { town: g.properties.TOWNNAME, village: g.properties.VILLNAME })

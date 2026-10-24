@@ -21,7 +21,7 @@ The app reads the files in `web/public/`. This file lists the source, the licens
 | `mrt-graph.json` | MRT graph built from OpenStreetMap lines and station positions | B, H | ODbL 1.0 (lines) and Open Government Data License (station positions) |
 | `transit.json` | MRT, light rail, railway, high speed rail, motorway and trunk lines, stations, and airport | H | ODbL 1.0 |
 | `night.json` | Businesses of the night-time groups in each village | J, F | Open Government Data License |
-| `road-routes.bin` (not in git, about 4.6 MB, 0.8 MB gzipped) | Road paths of the app's run, made by `pnpm routes` before dev and build | G, and A to F and J through the model | Open Government Data License (Taipei shape file of G and source D not confirmed) |
+| `road-routes.bin` (not in git, about 6.2 MB, 0.97 MB with `gzip -6`) | Road paths of the app's run, made by `pnpm routes` before dev and build | G, and A to F and J through the model | Open Government Data License (Taipei shape file of G and source D not confirmed) |
 | `calendar.json` | Each day from 2026-01-01 to 2034-12-31: workday, Saturday off or other day off, holiday name, lunar date, the solar term that starts that day, and the commemorative days and festivals that are not days off | K, L, M | Open Government Data License |
 | `people.json` | The top 20 surnames of each district by sex, and the 300 most common surnames of Taiwan | N, O, C, D | Open Government Data License |
 | `towns.json`, `villages2-topo.json` | District and village boundaries (TopoJSON) | F, I | MIT (package) and Open Government Data License (boundaries) |
@@ -89,7 +89,7 @@ Note: The data.gov.tw entry for the Taipei shape file was not found. The license
 
 - The 2026 local election is on 115年11月28日 (Saturday), voting from 08:00 to 16:00: 中央社, 2026-08-20, on the notice of 中央選舉委員會 (https://cna.com.tw/news/aipl/202608200078.aspx).
 - The new mayors take office on 12月25日: 蔣萬安 on 2022-12-25 (Taiwan News, https://www.taiwannews.com.tw/ch/news/4761550) and 柯文哲 on 2018-12-25 (公視, https://news.pts.org.tw/article/417381). 2026-12-25 is a guess from those two elections; 2014 was not confirmed.
-- About 48 personal events a day as the base (`EVENTS_PER_DAY`), with the weights `SHOWN`: 0.05 for a plan to work or a day at home, 1 for an outing on a day off, 3 for a day away. The user chose the weights by eye. Measured at village level, seed 42: 2 to 5 personal events on a workday and 15 to 18 on a day off.
+- About 48 personal events a day as the base (`EVENTS_PER_DAY`), with the weights `SHOWN`: 0.05 for a plan to work or a day at home, 1 for an outing on a day off, 3 for a day away. The user chose the weights by eye. Measured at village level, seed 42, from 2026-10-24 (a one-off script that runs the filter of `worker.ts` on the model for 7 days): 16, 15 and 18 personal events on the three days off, then 5, 2, 3 and 2 on the workdays.
 - The greetings of the city: most of their times follow the model (the breakfast shifts, the first buses and trains, the workday peak, dinner, nights out, the overnight shift, the last trains). Their wording, and the 03:00 and 12:00 greetings, are by eye.
 
 `scripts/days.py` and `web/src/sim/calendar.ts` use these guesses for the days that no source covers:

@@ -45,7 +45,7 @@ export function Events({ events, now, dayLabel, placeOf }: { events: SimEvent[];
     <h2 style={H2}>事件</h2>
     <p style={NOTE}>雙北的人們的日常。只留最新 {MAX_EVENTS} 則。</p>
     {happened.length ? <ol style={{ listStyle: 'none', margin: 0, padding: 0 }}>
-      {happened.map((e, i) => <li key={e.kind === 'public' ? `${e.t} ${e.text}` : `${e.t} ${e.name} ${e.home}`} style={{ padding: '6px 0', borderTop: '1px solid #3a3333', fontSize: 14 }}>
+      {happened.map((e, i) => <li key={e.id} style={{ padding: '6px 0', borderTop: '1px solid #3a3333', fontSize: 14 }}>
         {(i === 0 || dayOf(happened[i - 1]) !== dayOf(e)) && <p style={{ margin: '0 0 6px', fontSize: 12, color: '#888' }}>{dayLabel(dayOf(e))}</p>}
         <div style={{ display: 'flex', gap: 8 }}>
           <span style={{ fontVariantNumeric: 'tabular-nums', color: '#aaa' }}>{hhmm(e.t % 1440)}</span>

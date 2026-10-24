@@ -38,6 +38,7 @@ let hoursPerSec = 0
 let extra: Pick<FromWorker, 'nodes' | 'homes' | 'coords' | 'trips' | 'replans'> = {}
 let pending: Generator<Batch> | undefined
 let newEvents: SimEvent[] = []
+let eventId = 0
 let routed = 0
 let idx = new Uint32Array(0) // agent of each sampled trip
 let sentDep = new Int32Array(0) // departure last sent for each sampled trip; a new plan always changes it
@@ -125,6 +126,7 @@ onmessage = async (e: MessageEvent<ToWorker>) => {
     // personal events on a workday and 15 to 18 on a day off. Tune it when the stream feels too fast or too slow.
     const keep = EVENTS_PER_DAY / Math.max(1, w.movers.length)
     newEvents = []
+    eventId = 0
     w.onPlan = i => {
       const dest = world.dest[i]
       if (pickRng() >= keep * SHOWN[dest]) return
@@ -132,7 +134,7 @@ onmessage = async (e: MessageEvent<ToWorker>) => {
       // A day at home has no departure; it shows in the morning of that day.
       const t = dest === STAY ? world.dep[i] - 15 * 60 : world.dep[i]
       if (t < 0) return // a night shift that left on day -1
-      newEvents.push({ t, kind: 'personal', name: nameOf(ids, i), home: world.home[i], to: play ? world.play[i] : world.work[i],
+      newEvents.push({ id: `a${++eventId}`, t, kind: 'personal', name: nameOf(ids, i), home: world.home[i], to: play ? world.play[i] : world.work[i],
         dest, mode: play ? world.playMode[i] : world.mode[i], group })
     }
     // The plans under way at day 0 were made during init, which calls no onPlan: pass them through the same filter.

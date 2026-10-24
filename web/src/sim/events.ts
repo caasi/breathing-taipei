@@ -3,11 +3,12 @@ import type { Calendar } from './calendar.ts'
 
 /**
  * One event: t in minutes since 00:00 of day 0. A personal event follows one agent (a character: 10 people at the
- * app's scale), from its plan; a public event comes from the calendar.
+ * app's scale), from its plan; a public event comes from the calendar. id is unique in a run and is used only as
+ * the key of a list row.
  */
 export type SimEvent =
-  | { t: number; kind: 'personal'; name: string; home: number; to: number; dest: number; mode: number; group: string }
-  | { t: number; kind: 'public'; text: string }
+  | { id: string; t: number; kind: 'personal'; name: string; home: number; to: number; dest: number; mode: number; group: string }
+  | { id: string; t: number; kind: 'public'; text: string }
 
 /** What a place is called: the district, and the village at village level. */
 export type PlaceOf = (node: number) => { town: string; village: string }
@@ -58,12 +59,27 @@ export const publicEvents = (cal: Calendar, startDay: number, day: number): SimE
   const i = startDay + day, d = cal.days[i], t = day * 24 * 60
   if (!d) return []
   const iso = new Date(Date.parse(`${cal.start}T00:00:00Z`) + i * 864e5).toISOString().slice(0, 10)
-  const out: SimEvent[] = []
-  if (d[4] && d[4] !== '補假') out.push({ t, kind: 'public', text: `今天是${d[4]}，放假一天` })
-  if (d[4] === '補假') out.push({ t, kind: 'public', text: '今天補假，放假一天' })
-  for (const name of d[5] ? d[5].split('、') : []) out.push({ t, kind: 'public', text: `今天是${name}` })
-  if (d[3]) out.push({ t, kind: 'public', text: `今天${d[3]}` })
-  if (CIVIC[iso]) out.push({ t, kind: 'public', text: CIVIC[iso] })
-  for (const [hour, text] of d[0] ? DAY_OFF_GREETINGS : WORKDAY_GREETINGS) out.push({ t: t + Math.round(hour * 60), kind: 'public', text })
+  const out: { t: number; text: string }[] = []
+  if (d[4] && d[4] !== '補假') out.push({ t, text: `今天是${d[4]}，放假一天` })
+  if (d[4] === '補假') out.push({ t, text: '今天補假，放假一天' })
+  for (const name of d[5] ? d[5].split('、') : []) out.push({ t, text: `今天是${name}` })
+  if (d[3]) out.push({ t, text: `今天${d[3]}` })
+  if (CIVIC[iso]) out.push({ t, text: CIVIC[iso] })
+  for (const [hour, text] of d[0] ? DAY_OFF_GREETINGS : WORKDAY_GREETINGS) out.push({ t: t + Math.round(hour * 60), text })
+  // The same day gives the same ids, so a list that is built again keeps its rows.
+  return out.map((e, k): SimEvent => ({ ...e, kind: 'public', id: `d${day}-${k}` }))
+}
+
+/**
+ * The personal events and the public events of enough days back that the newest `limit` up to today are all there:
+ * days are added from today back until the events from that day on reach `limit`. ponytail: at most 60 days back,
+ * which a day without public events (after the calendar table ends) can reach; a list that short is then incomplete.
+ */
+export const withPublic = (personal: SimEvent[], cal: Calendar, startDay: number, today: number, limit: number) => {
+  const out = [...personal]
+  for (let day = today; day >= Math.max(0, today - 60); day--) {
+    out.push(...publicEvents(cal, startDay, day))
+    if (out.filter(e => e.t >= day * 1440).length >= limit) break
+  }
   return out
 }
