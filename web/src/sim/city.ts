@@ -96,15 +96,21 @@ const calibrate = (mrt: number[][][], residents: number[], signal: Signal, distr
  * Days off from the MRT OD of a Saturday off and of a Sunday or holiday. Each pair of districts keeps the
  * workday ratio of all trips to MRT trips (ponytail: the non-MRT trips have workday data only), and a district's
  * share of commuters who go out is its trips on that day over its trips on a workday.
+ * ponytail: 20 districts (汐止, 樹林, 林口 and others) have no MRT trips at all. For a pair of districts with no MRT
+ * trips, a day off takes the workday trips of all modes times the city's day-off ratio, spread over the hours of the
+ * city's day-off trips; a district with no MRT trips goes out at the city's ratio. DATA.md gives the figures.
  */
 const daysOff = (mrt: number[][][], days: number[][][][], od: number[][][], kindOf: (day: number) => number): DaysOff => {
   const total = (m: number[][][], a: number, b: number) => m.reduce((s, hour) => s + hour[a][b], 0)
-  const ratio = od[0].map((row, a) => row.map((_, b) => { const t = total(mrt, a, b); return t ? total(od, a, b) / t : 1 }))
+  const all = (m: number[][][]) => sum(m.map(hour => sum(hour.map(sum))))
+  const ratio = od[0].map((row, a) => row.map((_, b) => { const t = total(mrt, a, b); return t ? total(od, a, b) / t : 0 }))
   const from = (m: number[][][], a: number) => sum(m.map(hour => sum(hour[a])))
+  const city = days.map(m => all(m) / all(mrt)), hours = days.map(m => { const t = all(m); return m.map(hour => sum(hour.map(sum)) / t) })
   return {
     kindOf,
-    od: days.map(m => m.map(hour => hour.map((row, a) => row.map((v, b) => v * ratio[a][b])))),
-    out: days.map(m => od[0].map((_, a) => { const w = from(mrt, a); return w ? Math.min(1, from(m, a) / w) : 0 })),
+    od: days.map((m, k) => m.map((hour, h) => hour.map((row, a) => row.map((v, b) =>
+      ratio[a][b] ? v * ratio[a][b] : total(od, a, b) * city[k] * hours[k][h])))),
+    out: days.map((m, k) => od[0].map((_, a) => { const w = from(mrt, a); return Math.min(1, w ? from(m, a) / w : city[k]) })),
     away: AWAY_SHARE,
   }
 }

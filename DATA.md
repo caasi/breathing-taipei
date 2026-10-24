@@ -107,6 +107,7 @@ Note: The data.gov.tw entry for the Taipei shape file was not found. The license
 - The share of commuters who go out on a day off is the district's trips on that kind of day over its workday trips, from the MRT data only.
 - On a day off, the trips that are not MRT trips keep the workday ratio to MRT trips for each pair of districts. Only the workday has telecom data.
 - Each commuter has one day-off place, drawn once from all trips of both kinds of day off.
+- 20 districts have no MRT trips at all in source A (三峽, 三芝, 五股, 八里, 坪林, 平溪, 林口, 樹林, 汐止, 泰山, 深坑, 烏來, 瑞芳, 石碇, 石門, 萬里, 貢寮, 金山, 雙溪, 鶯歌; 1,119,795 of the 6,453,427 residents). For a pair of districts with no MRT trips, a day off takes the workday trips of all modes times the city's day-off ratio (MRT trips of that kind of day over workday MRT trips: 0.853 on a Saturday off, 0.699 on a Sunday or holiday), spread over the hours of the city's day-off MRT trips. A district with no MRT trips goes out at the same city ratio. The user chose this guess on 2026-10-24.
 - The night-time groups (`SHIFTS`, `VISITS`) make the same trips on every day.
 - A commuter who is away for the day leaves and comes back at the hours of the day-off trips inside its home district. No source gives the hours of trips out of the two cities.
 

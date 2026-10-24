@@ -324,3 +324,16 @@ test('a day off has no morning peak, fewer people out, and some away (real data)
   expect(workday.away).toBe(0)
   expect(holiday.away).toBeGreaterThan(0)
 })
+
+test('on a day off, a district with no MRT data still goes out and gets visitors (real data)', () => {
+  const c = cityFrom(data(), 100, 'district', () => 2), names = c.nodes, xizhi = names.indexOf('新北市汐止區')
+  expect(c.city.off!.out[1][xizhi]).toBeGreaterThan(0.3)
+  const w = init(c.city, 11)
+  let out = 0, visitors = 0
+  for (const i of w.movers) {
+    if (w.home[i] === xizhi && w.play[i] !== xizhi) out++
+    if (w.play[i] === xizhi && w.home[i] !== xizhi) visitors++
+  }
+  expect(out).toBeGreaterThan(0)
+  expect(visitors).toBeGreaterThan(0)
+})
