@@ -7,7 +7,7 @@
 The user set this workflow on 2026-10-24, during the 市政 debug 松 (an off-site personal project, not a registered entry):
 
 1. Do the work on a branch, in a git worktree on the RAM disk (`/dev/shm/<branch>`).
-2. Run the review loop (the `review-loop` skill) until two rounds in a row find nothing open. The reviewers are an Opus subagent, a Sonnet subagent, and Codex (`gpt-6-astra`, or `gpt-6-sol` when Codex usage is at 50% or more).
+2. Run the review loop (the `review-loop` skill) until two rounds in a row find nothing open, for at most 5 rounds (the user set the limit on 2026-10-24). After round 5, give the open findings to the user. The reviewers are an Opus subagent, a Sonnet subagent, and Codex (`gpt-6-astra`, or `gpt-6-sol` when Codex usage is at 50% or more).
 3. Group the commits by logical step.
 4. Merge into `main` with `--no-ff` only after the user says yes. Then bump the pointer in the omni repository.
 
