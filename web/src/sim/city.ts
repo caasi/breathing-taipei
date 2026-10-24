@@ -210,6 +210,7 @@ const localTrips = (districts: string[], residents: number[], commuters: number[
     let mode = r1 * (walkRate + bikeRate) < walkRate ? WALK : BIKE
     let l = listFor(home, mode)
     const empty = (x: typeof l) => !x.nodes.length || !x.cum[x.cum.length - 1]
+    // Walkers of a village with no other village of its district in walking range ride instead of staying home.
     if (empty(l) && mode === WALK) { mode = BIKE; l = listFor(home, BIKE) }
     if (empty(l)) return undefined
     const x = r2 * l.cum[l.cum.length - 1]
