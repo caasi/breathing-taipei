@@ -40,10 +40,16 @@ pnpm test
 pnpm typecheck
 ```
 
-## Settings in the URL
+## Settings
 
-All settings are in the query string, so a link shows the same view.
-An unknown value goes back to the default. In `layers`, unknown names are ignored, and a list with no known name goes back to the default. An empty `layers=` hides all layers.
+There are two kinds of settings:
+
+- **Display settings** belong to one viewer and one device. The browser keeps them (local storage), so they are not in a shared link. When the browser cannot keep them (for example in a private window), they go back to the defaults when the page loads again.
+- **Policy settings** are the scenario. They are in the query string, so a link shows the same scenario. The policy panel is a placeholder for now: its settings do not change the simulation.
+
+An unknown value goes back to the default.
+
+Display settings:
 
 | Key | Values | Default |
 |---|---|---|
@@ -54,9 +60,18 @@ An unknown value goes back to the default. In `layers`, unknown names are ignore
 | `dot` | `20`, `50`, `100`, `200`, `500` people for each dot | `50` |
 | `dots` | `1` shows the dots, `0` hides them | `1` |
 | `mode` | `1` colors the dots by mode | `0` |
-| `layers` | Comma list of `mrt`, `lrt`, `tra`, `hsr`, `airport`, `highway` | All except `highway` |
+| `layers` | Comma list of `mrt`, `lrt`, `tra`, `hsr`, `airport`, `highway`. Unknown names are ignored, and a list with no known name goes back to the default. An empty list hides all layers | All except `highway` |
 
-Example: `?speed=4&dot=20&color=rate&window=60&layers=mrt,highway`
+Policy settings (placeholders):
+
+| Key | Values | Default |
+|---|---|---|
+| `bus-lane`, `sidewalk`, `meals`, `rain-off` | `1` on, `0` off | `0` |
+| `flex` | `0` to `50` percent, in steps of `5` | `10` |
+| `headway` | `2` to `8` minutes, in steps of `0.5` | `4` |
+| `stagger` | `0` to `60` minutes, in steps of `15` | `0` |
+
+Example: `?flex=20&headway=3&bus-lane=1`
 
 ## How the model works
 

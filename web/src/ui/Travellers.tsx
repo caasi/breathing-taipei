@@ -3,11 +3,12 @@ import type { GeoProjection } from 'd3-geo'
 import type { Trips } from '../sim/worker.ts'
 import type { Batch } from '../sim/paths.ts'
 import { fit, program, useWebGL2 } from './gl.ts'
+import { clip, type View } from './view.ts'
 
 // Mode colours, in MODES order (捷運, 公車, 機車, 汽車, 步行, 自行車); kept apart from the 洋流橘 heat scale.
 export const MODE_COLOURS = ['#f5f0e8', '#7ec8a5', '#ffd166', '#9ad0ff', '#c9a7ff', '#a0e060']
 
-/** A trip's path in screen space with cumulative lengths, for placing a dot at any progress. */
+/** A trip's path in map space with cumulative lengths, for placing a dot at any progress. */
 export type Track = { xy: Float32Array; len: Float32Array }
 export const track = (pts: Float32Array, proj: GeoProjection): Track => {
   const n = pts.length / 2, xy = new Float32Array(pts.length), len = new Float32Array(n)
@@ -33,7 +34,7 @@ const at = (t: Track, p: number): [number, number] => {
   return [t.xy[2 * lo] + (t.xy[2 * hi] - t.xy[2 * lo]) * f, t.xy[2 * lo + 1] + (t.xy[2 * hi + 1] - t.xy[2 * lo + 1]) * f]
 }
 
-type Props = { tracks: React.MutableRefObject<(Track | undefined)[]>; trips: Trips; clock: () => number; onFps: (fps: number) => void; byMode: boolean }
+type Props = { tracks: React.MutableRefObject<(Track | undefined)[]>; trips: Trips; clock: () => number; onFps: (fps: number) => void; byMode: boolean; view: View }
 
 // The area colour carries the story; dots stay faint and add up (additive blending) so only busy lines glow.
 const DOT = [1, 236 / 255, 214 / 255, 0.4]
@@ -41,12 +42,12 @@ const rgb = (hex: string) => [1, 3, 5].map(i => parseInt(hex.slice(i, i + 2), 16
 
 const VS = `#version 300 es
 in vec2 xy; in float mode;
-uniform vec3 palette[6]; uniform bool byMode; uniform vec4 dot; uniform float size; uniform float gain;
+uniform vec3 palette[6]; uniform bool byMode; uniform vec4 dot; uniform float size; uniform float gain; uniform vec4 view;
 out vec4 c;
 void main() {
   c = byMode ? vec4(palette[int(mode)], gain) : vec4(dot.rgb, dot.a * gain);
   gl_PointSize = size;
-  gl_Position = vec4(xy.x / 320.0 - 1.0, 1.0 - xy.y / 320.0, 0, 1);
+  gl_Position = vec4(xy * view.xy + view.zw, 0, 1);
 }`
 const FS = `#version 300 es
 precision mediump float;
@@ -58,16 +59,16 @@ void main() { o = c; }`
  * The CPU finds each dot's position; WebGL draws them all in one call, because a fillRect per dot was the
  * main cost of the page once the fills moved to WebGL.
  */
-export function Travellers({ tracks, trips, clock, onFps, byMode }: Props) {
+export function Travellers({ tracks, trips, clock, onFps, byMode, view }: Props) {
   const ref = useRef<HTMLCanvasElement>(null)
-  const mode$ = useRef(byMode)
-  mode$.current = byMode
+  const mode$ = useRef(byMode), view$ = useRef(view)
+  mode$.current = byMode; view$.current = view
   useWebGL2(ref, { antialias: false }, (gl, canvas) => {
     const prog = program(gl, VS, FS)
     gl.useProgram(prog)
     gl.uniform3fv(gl.getUniformLocation(prog, 'palette'), MODE_COLOURS.flatMap(rgb))
     gl.uniform4fv(gl.getUniformLocation(prog, 'dot'), DOT)
-    const size = gl.getUniformLocation(prog, 'size'), gain = gl.getUniformLocation(prog, 'gain'), byModeAt = gl.getUniformLocation(prog, 'byMode')
+    const size = gl.getUniformLocation(prog, 'size'), gain = gl.getUniformLocation(prog, 'gain'), byModeAt = gl.getUniformLocation(prog, 'byMode'), viewAt = gl.getUniformLocation(prog, 'view')
     // Colour adds up; alpha adds up too, so the canvas holds premultiplied colour like 'lighter' did.
     gl.enable(gl.BLEND); gl.blendFuncSeparate(gl.SRC_ALPHA, gl.ONE, gl.ONE, gl.ONE)
     const n = trips.home.length, xy = new Float32Array(2 * n), mode = new Float32Array(n)
@@ -83,7 +84,7 @@ export function Travellers({ tracks, trips, clock, onFps, byMode }: Props) {
       frames++
       const now = performance.now()
       if (now - since > 1000) { onFps(frames * 1000 / (now - since)); frames = 0; since = now }
-      const m = clock(), w = fit(gl, canvas), key = `${m} ${w} ${mode$.current} ${routedBatches}`
+      const m = clock(), w = fit(gl, canvas), v = view$.current, key = `${m} ${w} ${canvas.height} ${v.k} ${v.x} ${v.y} ${mode$.current} ${routedBatches}`
       // A paused clock with nothing new draws nothing; the canvas keeps the last picture.
       if (key === drawn) return
       drawn = key
@@ -100,8 +101,9 @@ export function Travellers({ tracks, trips, clock, onFps, byMode }: Props) {
       }
       // A whole number of device pixels: a fractional size covers 1 or 2 pixels by position, and moving dots flicker.
       // Rounded up and the alpha scaled down by the area gained, so the glow stays that of a 1.5-unit dot.
-      const ideal = 1.5 * w / 640, whole = Math.max(1, Math.ceil(ideal))
+      const ideal = 1.5 * v.k * devicePixelRatio, whole = Math.max(1, Math.ceil(ideal))
       gl.uniform1f(size, whole); gl.uniform1f(gain, (ideal / whole) ** 2) // at most 1: the GPU would clamp a larger alpha
+      gl.uniform4fv(viewAt, clip(v, canvas.clientWidth, canvas.clientHeight))
       gl.uniform1i(byModeAt, mode$.current ? 1 : 0)
       gl.clearColor(0, 0, 0, 0); gl.clear(gl.COLOR_BUFFER_BIT)
       // A length of 0 would upload the whole array (WebGL2 reads 0 as "to the end").

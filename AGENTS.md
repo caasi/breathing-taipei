@@ -7,7 +7,7 @@
 The user set this workflow on 2026-10-24, during the 市政 debug 松 (an off-site personal project, not a registered entry):
 
 1. Do the work on a branch, in a git worktree on the RAM disk (`/dev/shm/<branch>`).
-2. Run the review loop (the `review-loop` skill) until two rounds in a row find nothing open. The reviewers are an Opus subagent, a Sonnet subagent, and Codex (`gpt-6-astra`, or `gpt-6-sol` when Codex usage is at 50% or more).
+2. Run the review loop (the `review-loop` skill) until two rounds in a row find nothing open, for at most 5 rounds (the user set the limit on 2026-10-24). After round 5, give the open findings to the user. The reviewers are an Opus subagent, a Sonnet subagent, and Codex (`gpt-6-astra`, or `gpt-6-sol` when Codex usage is at 50% or more).
 3. Group the commits by logical step.
 4. Merge into `main` with `--no-ff` only after the user says yes. Then bump the pointer in the omni repository.
 
@@ -26,20 +26,14 @@ The user set this rule for the repository on 2026-10-24. It is not a "zero comme
 
 ## Next steps, in this order
 
-1. **UI**, as the user planned on 2026-10-24:
-   - A map-to-screen matrix for both WebGL layers and the SVG layers, in place of the fixed `/ 320.0` and 640 (zoom and pan later only change the matrix). The dots' tracks are projected on the main thread today (`addBatches`); they can move to the worker with the same matrix work.
-   - The map as a full-page background, with the event and policy UI on top:
-
-     | Device | Map | Event and policy UI |
-     |---|---|---|
-     | Desktop, iPad landscape | Full page, centre to the left | Right, over the map |
-     | iPhone portrait | Top, 4:3 | Below |
-     | iPhone landscape | Left, 4:3 | Right |
-
-   - Show the user a layout draft before building it.
-2. **Publish to gh-pages** (the target for now). `pnpm build` runs `pnpm routes` first, so the published site has the precomputed road paths. After the first publish, check that GitHub Pages sends `road-routes.bin` gzipped (`curl -sI -H 'Accept-Encoding: gzip' <url>/road-routes.bin`): it is 4.6 MB raw and 0.8 MB gzipped. Not checked yet.
-3. **Personal settings** (people per agent, dot density): to be discussed with the user, and kept apart from the policy settings. A trial of 1 agent = 100 people is on the branch `feat/scale-100` (not merged). It helped an old Intel Mac, but it made the villages too coarse: the median village has about 42 agents at 1/100.
-4. **Later ideas, not started:** events (incidents that change an agent's plan), policy settings (the user grouped them by the HEART idea of puma.taipei: space, opportunity, company, resilience, time), and build scripts for the data files that came from one-off steps.
+1. **Event simulation**, on its own branch. The user set this order on 2026-10-24, after the UI branch `feat/full-page-map`.
+   - The event panel shows placeholders today (`EVENTS` in `web/src/ui/Dashboard.tsx`). The real events replace them, and the panel keeps the latest 100 (`recent`, `MAX_EVENTS`, with a test).
+   - An event is wide (an area) or personal (one resident). A personal event names the district, the village, and the resident. A resident is 先生 or 小姐. A person outside the binary is a nickname with no title, in the share `NICKNAME_SHARE` (1.6%, a U.S. upper bound; DATA.md gives the source).
+   - To change the plan of an agent, move the agent to a new bucket (see "State of the model"). An agent must never be in two buckets.
+   - The policy panel is also a placeholder. Its settings are in the query string (`usePolicies`), and nothing in the simulation reads them yet.
+2. **Publish to gh-pages**, on its own branch. If there is time before the end of the 市政 debug 松, the user will show the site to other people. If there is not, the work continues for the user alone. The user decides on the day whether to publish before the event simulation is done. `pnpm build` runs `pnpm routes` first, so the published site has the precomputed road paths. After the first publish, check that GitHub Pages sends `road-routes.bin` gzipped (`curl -sI -H 'Accept-Encoding: gzip' <url>/road-routes.bin`): it is 4.6 MB raw and 0.8 MB gzipped. Not checked yet.
+3. **Personal settings** (people per agent, dot density): to be discussed with the user, and kept apart from the policy settings. Since 2026-10-24 the display settings are in local storage (`useStored` in `web/src/query.ts`) and the policy settings are in the query string (`usePolicies` in `web/src/ui/Dashboard.tsx`), as the user set; a new personal setting goes with the display settings. A trial of 1 agent = 100 people is on the branch `feat/scale-100` (not merged). It helped an old Intel Mac, but it made the villages too coarse: the median village has about 42 agents at 1/100.
+4. **Later ideas, not started:** policy settings that change the simulation (the user grouped them by the HEART idea of puma.taipei: space, opportunity, company, resilience, time; the Chinese name 陪伴 for "company" is a translation by the agent, not checked against puma.taipei), and build scripts for the data files that came from one-off steps.
 5. **Small items:**
    - A quick 區/里 switch shows NaN in the district labels for a moment.
    - The favicon is an empty data URI (`web/index.html`); the site needs a real icon.
@@ -58,6 +52,13 @@ The user set this rule for the repository on 2026-10-24. It is not a "zero comme
   - Both WebGL layers use `useWebGL2` in `web/src/ui/gl.ts`. The cleanup of each run deletes GL objects and does not lose the context, because the next run gets the same context from the same canvas. An unmount loses the context, to free one of the about 16 contexts that a browser allows. So the canvas must not be mounted again after an unmount: React StrictMode would leave the layers blank, and `web/src/main.tsx` does not use it. Vite fast refresh does the same when you edit `gl.ts`, `Fills.tsx` or `Travellers.tsx`: reload the page after such an edit. (Measured on 2026-10-24: an edit of `Fills.tsx` lost the fills context; an edit of `HeatMap.tsx` lost none.) The page needs WebGL2: without it, or when setup throws, the fills and dots stay empty.
   - Why: with SVG fills, a CPU profile in Chromium showed 75% of the main thread in browser style and paint work. A static SVG is expected to cost about the same as a canvas bitmap when it is composited, and to be expensive only when its content changes; this follows from how browsers composite and was not measured.
 - Performance, 16x with 20 people per dot (16x was removed afterwards), measured by the user after 8 simulated days, before the dots moved to WebGL: with the WebGL fills, 30 to 50 fps on the iPhone 16 Pro Max and 60 fps on the Mac. With SVG fills, the iPhone ran at 20 to 25 fps. On an Intel Mac with OBS open it was about 10 fps. In headless Chromium with the CPU slowed 4 times, `main` before the night model and after it gave the same fps.
+
+- The UI (branch `feat/full-page-map`, 2026-10-24), as the user set it:
+  - One view (`web/src/ui/view.ts`: screen = k * map + (x, y)) places both WebGL layers and the SVG layers. Zoom and pan are to change only the view. The static SVG paths are memoized without the view, so a view change does not rebuild them.
+  - `layoutFor` picks the layout from the window shape. A desktop gets the full-page map left of the event and policy panels (zoom 0.8). A portrait window gets the map in a 4:3 box on top. A landscape window that is too narrow for the desktop map gets the map in a 3:4 box on the left. A phone layout zooms to 台北市.
+  - The info and gear icons open a panel. On a desktop it opens over the map. On a phone the icons sit on the map, and the panel opens below it or beside it. On a phone the events fill that area, and a third icon opens the policies.
+  - Display settings are in local storage (`useStored`), and policy settings are in the query string (`useQuery`). `README.md` lists the keys.
+  - Codex did not review this branch: its usage limit was reached. Five rounds of Opus and Sonnet reviewed it. The last round found nothing open, but the loop wanted two dry rounds in a row and stopped at the limit of 5.
 
 ## Data that is only on this machine
 

@@ -63,6 +63,10 @@ Note: The data.gov.tw entry for the Taipei shape file was not found. The license
 - MRT service hours, 06:00 to 24:00: `od2.json` has 44 trips in hour 05, 34,851 in hour 06, and 10,629 in hour 00 (the last trains). The model counts hour 00 as closed.
 - YouBike rentals in Taipei, 234,000 a day on average in the first half of 2026 (市區公共自行車 平均每日租借 23.4 萬次): 臺北市政府主計處 市政統計週報, 2026-07-29, from data of 臺北市政府交通局.
 
+`web/src/ui/Dashboard.tsx` uses this figure:
+
+- Share of residents named by a nickname with no title (a person outside the binary), 1.6%: Pew Research Center, 2022-06-07, "About 5% of young adults in the U.S. say their gender is different from their sex assigned at birth". 1.6% of U.S. adults are transgender or nonbinary. The report does not give the share of nonbinary adults alone for all ages (it gives 3.0% for adults younger than 30), so 1.6% is an upper bound. It is a U.S. figure: no figure for Taiwan was found (searched on 2026-10-24). The user chose it as a placeholder.
+
 ## Processing
 
 - `od2.json`: Weekday rows of source A. Each station goes to a district by the mean position of its exits (source B) and the district boundaries (source F). Trips are added up per district and divided by the number of weekdays.
