@@ -32,7 +32,7 @@ const EVENTS_PER_DAY = 48
 // Every plan is simulated; the stream shows a few of the everyday ones (to work, home all day) and more of the rarer
 // ones (out on a day off, away from the two cities), as the user asked. Indexed by dest (WORK, PLAY, GONE, STAY).
 // ponytail: weights by eye; an accident, when it comes, is shown every time.
-const SHOWN = [0.3, 1, 3, 0.3]
+const SHOWN = [0.05, 1, 3, 0.05]
 let w: World | undefined
 let every = 20
 let hoursPerSec = 0
