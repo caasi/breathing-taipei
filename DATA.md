@@ -22,7 +22,7 @@ The app reads the files in `web/public/`. This file lists the source, the licens
 | `transit.json` | MRT, light rail, railway, high speed rail, motorway and trunk lines, stations, and airport | H | ODbL 1.0 |
 | `night.json` | Businesses of the night-time groups in each village | J, F | Open Government Data License |
 | `road-routes.bin` (not in git, about 4.6 MB, 0.8 MB gzipped) | Road paths of the app's run, made by `pnpm routes` before dev and build | G, and A to F and J through the model | Open Government Data License (Taipei shape file of G and source D not confirmed) |
-| `calendar.json` | Each day from 2026-01-01 to 2034-12-31: workday, Saturday off or other day off, holiday name, lunar date, and the solar term that starts that day | K, L | Open Government Data License |
+| `calendar.json` | Each day from 2026-01-01 to 2034-12-31: workday, Saturday off or other day off, holiday name, lunar date, the solar term that starts that day, and the commemorative days and festivals that are not days off | K, L, M | Open Government Data License |
 | `towns.json`, `villages2-topo.json` | District and village boundaries (TopoJSON) | F, I | MIT (package) and Open Government Data License (boundaries) |
 
 ## Sources and attribution statements
@@ -61,6 +61,8 @@ Note: The data.gov.tw entry for the Taipei shape file was not found. The license
 **L.** 交通部中央氣象署, 日曆資料 (data.gov.tw 157677): 國農曆日期對照 (A-A0087-001, 2022 to 2050) and 節氣發生日期及時刻資料 (A-A0087-003, 2026 to 2028).
 此開放資料依政府資料開放授權條款 (Open Government Data License) 進行公眾釋出，使用者於遵守本條款各項規定之前提下，得利用之。
 
+**M.** 紀念日及節日實施條例 (全國法規資料庫, pcode D0020095, 民國114年5月28日公布), §3 to §6 and §8: the commemorative days and festivals, which of them are days off, and the 補假 rule. A law is not under copyright in Taiwan (著作權法 §9).
+
 ## Figures in the code
 
 `web/src/sim/city.ts` also uses these figures:
@@ -76,7 +78,7 @@ Note: The data.gov.tw entry for the Taipei shape file was not found. The license
 
 `scripts/calendar.py` and `web/src/sim/calendar.ts` use these guesses for the days that no source covers:
 
-- Days off from 2028 to 2034 follow the rule of 2026 and 2027: weekends; 開國紀念日, 和平紀念日, 兒童節, 清明節 (the day of the solar term 清明), 勞動節, 教師節, 國慶日, 臺灣光復暨金門古寧頭大捷紀念日 and 行憲紀念日; 小年夜 to 春節 初三, 端午節 and 中秋節 on their lunar dates. A holiday on a Saturday gives a 補假 on the Friday before, and a holiday on a Sunday on the first free workday after; for 春節 the 補假 comes after the whole break. 兒童節 on the day of 清明 moves to the day before. The user asked to reuse the last year with data. The script stops when this rule does not give 2026 and 2027 exactly as source K does. A change in the law after 2026-10-24 is not in it.
+- Days off from 2028 to 2034 follow source M, and the script stops when this rule does not give 2026 and 2027 as source K does: weekends; 開國紀念日, 和平紀念日, 兒童節, 清明節 (the day of the solar term 清明), 勞動節, 教師節, 國慶日, 臺灣光復暨金門古寧頭大捷紀念日 and 行憲紀念日; 小年夜 to 春節 初三, 端午節 and 中秋節 on their lunar dates. A holiday on a Saturday gives a 補假 on the Friday before, and a holiday on a Sunday on the first free workday after; for 春節 the 補假 comes after the whole break. 兒童節 on the day of 清明 moves to the day before, or to the day after when the day before is a Thursday. When a 補假 would fall on a day that is already off (in 2031, 兒童節 is moved to Saturday 4/5 and the Friday before is 清明), there is no 補假: source M does not say where it goes. The user asked to reuse the last year with data. A change in the law after 2026-10-24 is not in it.
 - Solar terms from 2029 to 2034 keep their 2028 date. A real term can be one day earlier or later.
 - After 2034-12-31 the table ends: a Saturday or a Sunday is a day off, there are no holidays, and the clock shows no lunar date.
 - The first simulated day is the day the page opens, in Taiwan (UTC+8).
