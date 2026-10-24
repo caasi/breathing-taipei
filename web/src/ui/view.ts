@@ -25,8 +25,8 @@ export const fitIn = (focus: Rect, r: Rect, zoom: number): View => {
 export const layoutFor = (w: number, h: number, taipei: Rect = SQUARE): Layout => {
   const at = (kind: Layout['kind'], box: Rect, fit: Rect = { ...box, x: 0, y: 0 }) =>
     ({ kind, box, fit, view: fitIn(kind === 'desktop' ? SQUARE : taipei, fit, ZOOM[kind]) })
-  if (h > w) return at('portrait', { x: 0, y: 0, w, h: w * 3 / 4 })
-  if (w - DASHBOARD_WIDTH < h * 3 / 4) return at('landscape', { x: 0, y: 0, w: h * 3 / 4, h })
+  if (h > w) return at('portrait', { x: 0, y: 0, w, h: Math.round(w * 3 / 4) })
+  if (w - DASHBOARD_WIDTH < h * 3 / 4) return at('landscape', { x: 0, y: 0, w: Math.round(h * 3 / 4), h })
   return at('desktop', { x: 0, y: 0, w, h }, { x: 0, y: 0, w: w - DASHBOARD_WIDTH, h })
 }
 

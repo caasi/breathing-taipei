@@ -32,6 +32,11 @@ test('each device gets the layout the user set', () => {
   expect(layoutFor(1280, 800).kind).toBe('desktop')
 })
 
+test('the map box has whole CSS pixels, because the canvas reports its size in whole pixels to the shaders', () => fc.assert(fc.property(screens, ({ w, h }) => {
+  const { box } = layoutFor(w, h)
+  expect(Number.isInteger(box.w) && Number.isInteger(box.h)).toBe(true)
+})))
+
 test('clip space puts a map point where the CSS transform puts it', () => fc.assert(fc.property(screens,
   fc.double({ min: 0, max: MAP_SIZE, noNaN: true }), fc.double({ min: 0, max: MAP_SIZE, noNaN: true }), ({ w, h }, mx, my) => {
     const { box, view: v } = layoutFor(w, h), [sx, sy, tx, ty] = clip(v, box.w, box.h)
