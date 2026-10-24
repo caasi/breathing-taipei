@@ -21,7 +21,7 @@ export type Trips = { home: Uint16Array; work: Uint16Array; mode: Uint8Array; pl
 /** New plans of sampled agents since the last message; k indexes Trips. */
 export type Replans = { k: Uint32Array; dest: Uint8Array; dep: Int32Array; dur1: Uint16Array; ret: Int32Array; dur2: Uint16Array }
 /** A failure while starting (load, city build, sampling) ends the worker's work; the page shows it instead of waiting. */
-export type WorkerError = { error: string }
+export type WorkerError = { error: string; start: number } // start: the id of the init that failed
 export type FromWorker = {
   start?: number; nodes?: string[]; homes?: Uint32Array; coords?: [number, number][]; trips?: Trips; replans?: Replans; paths?: Batch[]; routed?: number
   minute: number; day: number; counts: Uint32Array; road: Uint32Array; away: number; ms: number
@@ -156,6 +156,6 @@ onmessage = async (e: MessageEvent<ToWorker>) => {
     extra = { start: m.start, nodes: c.nodes, homes: Uint32Array.from(c.city.homes), coords: c.coords, trips: draw(w, graphs) }
   } catch (err) {
     w = undefined
-    postMessage({ error: String(err) } satisfies WorkerError)
+    postMessage({ error: String(err), start: m.start } satisfies WorkerError)
   }
 }

@@ -98,7 +98,7 @@ export function App() {
     getJson('transit.json').then(setTransit).catch(err => setLoadError(String(err)))
     const w = new Worker(new URL('./sim/worker.ts', import.meta.url), { type: 'module' })
     w.onmessage = (e: MessageEvent<FromWorker | WorkerError>) => {
-      if ('error' in e.data) { setRunError(e.data.error); return }
+      if ('error' in e.data) { if (e.data.start === started.current) setRunError(e.data.error); return }
       const m = e.data
       // Frames of an earlier run can still be on their way after a start (also the first frame of a run that a quick
       // second switch replaced); their day and nodes would be read with the new start and level.
