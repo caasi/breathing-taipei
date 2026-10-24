@@ -131,9 +131,12 @@ onmessage = async (e: MessageEvent<ToWorker>) => {
       const play = dest === PLAY, group = world.kind[i] ? c.city.kinds![world.kind[i] - 1].name : ''
       // A day at home has no departure; it shows in the morning of that day.
       const t = dest === STAY ? world.dep[i] - 15 * 60 : world.dep[i]
+      if (t < 0) return // a night shift that left on day -1
       newEvents.push({ t, kind: 'personal', name: nameOf(ids, i), home: world.home[i], to: play ? world.play[i] : world.work[i],
         dest, mode: play ? world.playMode[i] : world.mode[i], group })
     }
+    // The plans under way at day 0 were made during init, which calls no onPlan: pass them through the same filter.
+    for (const i of w.movers) w.onPlan(i)
     const trips = sample(w)
     extra = { nodes: c.nodes, homes: Uint32Array.from(c.city.homes), coords: c.coords, trips }
     // Same sampled agents every day with fixed home, work and day-off place, so paths are built once per init.
