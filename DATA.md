@@ -90,6 +90,7 @@ Note: The data.gov.tw entry for the Taipei shape file was not found. The license
 - On a day off, the trips that are not MRT trips keep the workday ratio to MRT trips for each pair of districts. Only the workday has telecom data.
 - Each commuter has one day-off place, drawn once from all trips of both kinds of day off.
 - The night-time groups (`SHIFTS`, `VISITS`) make the same trips on every day.
+- A commuter who is away for the day leaves and comes back at the hours of the day-off trips inside its home district. No source gives the hours of trips out of the two cities.
 
 ## Processing
 
