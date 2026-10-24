@@ -137,9 +137,15 @@ const plan = (w: World, i: number, after: number): number => {
     // A commuter home late from the day before can find the drawn hour gone; the departure then rolls into the next day.
     if (dayOf(dep) !== day) continue
     const leave = minuteOf(dayOd, EVENING.filter(x => x > hourOf(dep)), group[to], group[h], w.rng(), w.rng())
-    trip(w, i, gone ? GONE : PLAY, dep, to, gone ? w.mode[i] : w.playMode[i], leave)
-    // Leave for home early enough to be in by 24:00, when the two legs leave room for it.
-    w.ret[i] = Math.max(dep + w.dur1[i], Math.min(w.ret[i], (day + 1) * MINUTES_PER_DAY - w.dur2[i]))
+    const mode = gone ? w.mode[i] : w.playMode[i], end = (day + 1) * MINUTES_PER_DAY
+    trip(w, i, gone ? GONE : PLAY, dep, to, mode, leave)
+    // Leave for home early enough to be in by 24:00, when the two legs leave room for it. An earlier hour can be a peak
+    // hour with a longer way home, so the way home is timed again for it; a few passes settle it.
+    for (let pass = 0; pass < 3 && w.ret[i] + w.dur2[i] > end; pass++) {
+      w.ret[i] = Math.max(dep + w.dur1[i], end - w.dur2[i])
+      w.dur2[i] = leg(w.city.minutes(to, h, mode, hourOf(w.ret[i])))
+    }
+    w.ret[i] = Math.max(dep + w.dur1[i], Math.min(w.ret[i], end - w.dur2[i]))
     return w.ret[i] + w.dur2[i]
   }
 }

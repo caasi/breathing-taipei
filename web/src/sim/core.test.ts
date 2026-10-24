@@ -149,6 +149,21 @@ describe('core properties', () => {
       for (const i of w.movers) if (w.dest[i] === PLAY) expect(city.off!.kindOf(Math.floor(w.dep[i] / MINUTES_PER_DAY))).toBe(2)
   })
 
+  test('a way home moved to an earlier hour is timed for that hour', () => {
+    // An outing that would go home at 23:00 with a 5-hour way home must leave by 19:00, a peak hour where it takes 6 hours.
+    const od = Array.from({ length: 24 }, (_, h) => [[0, h === 10 ? 3000 : 0], [h === 23 ? 3000 : 0, 0]])
+    const minutes = (a: number, _b: number, _m: number, hour: number) => (a === 1 ? (hour >= 17 && hour < 20 ? 360 : 300) : 30)
+    const city: City = { od, group: [0, 1], homes: [200, 0], to: [1, 1], perAgent: 10, modeOf: () => 0, minutes,
+      off: { kindOf: () => 2, od: [od, od], out: [[1, 1], [1, 1]], away: [0, 0] } }
+    const w = init(city, 2), out = Array.from(w.movers).filter(i => w.dest[i] === PLAY)
+    expect(out.length).toBeGreaterThan(0)
+    for (const i of out) {
+      // The plans after init can be on day -1, at negative minutes.
+      expect(w.dur2[i]).toBe(minutes(1, 0, 0, Math.floor((((w.ret[i] % 1440) + 1440) % 1440) / 60)))
+      expect(w.ret[i] + w.dur2[i]).toBeLessThanOrEqual((Math.floor(w.dep[i] / 1440) + 1) * 1440)
+    }
+  })
+
   test('same seed gives the same run', () => {
     fc.assert(fc.property(cityArb, fc.integer(), fc.integer({ min: 0, max: 2 * MINUTES_PER_DAY }), (city, seed, m) => {
       const a = run(city, seed, m), b = run(city, seed, m)

@@ -123,7 +123,7 @@ onmessage = async (e: MessageEvent<ToWorker>) => {
     const world = w, districtOf = Array.from(w.home, h => (m.level === 'village' ? villages[h].town : c.nodes[h]))
     const ids = drawNames(people as People, districtOf, m.seed + 1), pickRng = mulberry32(m.seed + 2)
     // ponytail: EVENTS_PER_DAY is the base rate before the SHOWN weights (each agent makes about one plan a day): measured 2 to 5
-    // personal events on a workday and 15 to 18 on a day off. Tune it when the stream feels too fast or too slow.
+    // personal events on a workday and 12 to 16 on a day off. Tune it when the stream feels too fast or too slow.
     const keep = EVENTS_PER_DAY / Math.max(1, w.movers.length)
     newEvents = []
     eventId = 0
