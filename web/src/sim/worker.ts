@@ -130,6 +130,8 @@ onmessage = async (e: MessageEvent<ToWorker>) => {
     w.onPlan = i => {
       const dest = world.dest[i]
       if (pickRng() >= keep * SHOWN[dest]) return
+      // A STAY on a workday is a commuter who works in its home node (at district level: its own district), not a day of rest.
+      if (dest === STAY && !kindAt(cal as Calendar, m.startDay + Math.floor(world.dep[i] / 1440) - 1)) return
       const play = dest === PLAY, group = world.kind[i] ? c.city.kinds![world.kind[i] - 1].name : ''
       // A day at home has no departure; it shows in the morning of that day.
       const t = dest === STAY ? world.dep[i] - 15 * 60 : world.dep[i]
