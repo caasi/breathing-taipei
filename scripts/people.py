@@ -44,6 +44,11 @@ def main(top20_csv, ranking_csv, villages_json, out):
         rest = [max(0, round(residents[d] * k / sum(listed)) - k) for k in listed]
         districts[d] = {"male": by["男"], "female": by["女"], "rest": rest}
     common = national.most_common(NATIONAL)
+    # people.ts draws a district's top 20 by their place in the national list, so each must be in it.
+    listed = {s for s, _ in common}
+    missing = sorted({s for t in top.values() for s, _ in t["男"] + t["女"]} - listed)
+    if missing:
+        sys.exit(f"top-20 surnames outside the {NATIONAL} most common: {missing}")
     print(f"the {NATIONAL} most common surnames hold {sum(n for _, n in common) / sum(national.values()):.1%} of the people", file=sys.stderr)
     json.dump({"national": [[s, n] for s, n in common], "districts": districts},
               open(out, "w", encoding="utf-8"), ensure_ascii=False, separators=(",", ":"))
