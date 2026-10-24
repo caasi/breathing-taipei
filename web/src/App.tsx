@@ -153,12 +153,13 @@ export function App() {
   // so it is built again then and not on every post.
   const nowMinute = s ? s.day * 1440 + Math.floor(s.minute) : 0, newest = personal.current.at(-1)?.id
   // The time of the event that the clock has passed: it changes with each event passed, so a yes/no would miss the second.
-  const nextDue = useRef(Infinity), passed = nowMinute >= nextDue.current ? nextDue.current : -1
+  // It is state set after the commit, not a ref set in render: a render that React drops must not move it.
+  const [nextDue, setNextDue] = useState(Infinity), passed = nowMinute >= nextDue ? nextDue : -1
   const list = useMemo(() => {
     const events = cal && startDay !== undefined && s ? withPublic(personal.current, cal, startDay, nowMinute, MAX_EVENTS) : personal.current
-    nextDue.current = nextAfter(events, nowMinute)
-    return { now: nowMinute, events }
+    return { now: nowMinute, events, next: nextAfter(events, nowMinute) }
   }, [cal, startDay, newest, !s, s?.day, passed])
+  useEffect(() => setNextDue(list.next), [list.next])
   const placeOf = useMemo(() => {
     const byCode = new Map<string, { town: string; village: string }>()
     for (const g of villages?.objects.villages.geometries ?? []) byCode.set(g.properties.VILLCODE, { town: g.properties.TOWNNAME, village: g.properties.VILLNAME })
