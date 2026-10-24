@@ -1,5 +1,5 @@
 import { getJson } from '../load.ts'
-import { init, advance, counts, type World } from './core.ts'
+import { init, advance, counts, planned, type World } from './core.ts'
 import { cityFrom, MODES } from './city.ts'
 import { networks, tripPaths, type Batch } from './paths.ts'
 
@@ -23,6 +23,7 @@ let hoursPerSec = 0
 let extra: Pick<FromWorker, 'nodes' | 'homes' | 'coords' | 'trips'> = {}
 let pending: Generator<Batch> | undefined
 let routed = 0
+let resample = false
 const data = Promise.all(['od2.json', 'villages2.json', 'signal.json', 'road-graph.json', 'mrt-graph.json'].map(getJson))
 const net = data.then(([, , , road, mrt]) => networks(road, mrt))
 // Both are awaited in the start handler, which reports a failure; mark them handled so a failure
@@ -43,7 +44,9 @@ const frame = () => {
   if (!w) return
   const t = performance.now(), day = w.day
   advance(w, hoursPerSec * 60 / FPS)
-  if (w.day !== day) extra.trips = sample(w)
+  // The day's plans are made over the first hours of the day; sample the dots once all of them exist.
+  if (w.day !== day) resample = true
+  if (resample && planned(w)) { extra.trips = sample(w); resample = false }
   const c = counts(w, MODES.length)
   const ms = performance.now() - t
   // Road routing is slow, so it runs in the spare time of each frame.
@@ -74,6 +77,7 @@ onmessage = async (e: MessageEvent<ToWorker>) => {
     // Same sampled agents every day with fixed home and work, so paths are built once per init.
     pending = tripPaths(trips, c.coords, graphs)
     routed = 0
+    resample = false // the new world is fully planned (init plans day 0)
   } catch (err) {
     w = undefined
     postMessage({ error: String(err) } satisfies WorkerError)

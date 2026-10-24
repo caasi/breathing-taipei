@@ -39,6 +39,7 @@ export type World = {
   ret: Uint16Array // minute the agent leaves work
   dur2: Uint16Array
   movers: Uint32Array // agents whose work node differs from home; the others never leave
+  replanned: number // movers[0 .. replanned) already have today's plan
   stayers: Uint32Array // per node, agents who never leave
   minute: number // 0 <= minute < MINUTES_PER_DAY, may be fractional
   day: number
@@ -54,6 +55,9 @@ export const ROAD = -1
 const MAX_LEG = 600
 
 const MORNING = [5, 6, 7, 8, 9, 10, 11]
+// Every plan for the day is made in the first two hours, well before the first departure (05:00),
+// so the night stays free for later work (events) that may need the day's plans early.
+const REPLAN_BY = 2 * 60
 const EVENING = [12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23]
 
 // The hour comes from OD; the minute inside it is uniform (OD has no finer grain).
@@ -96,7 +100,7 @@ export const init = (city: City, seed: number): World => {
   let n = 0
   for (let v = 0; v < homes.length; v++) n += homes[v]
   const w: World = {
-    city, minute: 0, day: 0, rng: mulberry32(seed), movers: new Uint32Array(0), stayers: new Uint32Array(homes.length),
+    city, minute: 0, day: 0, rng: mulberry32(seed), movers: new Uint32Array(0), replanned: 0, stayers: new Uint32Array(homes.length),
     home: new Uint16Array(n), work: new Uint16Array(n), isLocal: new Uint8Array(n), mode: new Uint8Array(n),
     dep: new Uint16Array(n), dur1: new Uint16Array(n), ret: new Uint16Array(n), dur2: new Uint16Array(n),
   }
@@ -118,6 +122,7 @@ export const init = (city: City, seed: number): World => {
   const movers: number[] = []
   w.home.forEach((h, i) => (h === w.work[i] ? w.stayers[h]++ : movers.push(i)))
   w.movers = Uint32Array.from(movers)
+  w.replanned = w.movers.length // day 0 is planned above
   return w
 }
 
@@ -130,15 +135,25 @@ export const where = (w: World, i: number, minute = w.minute): number => {
   return w.home[i]
 }
 
-/** Moves the clock forward; a new day replans everyone (all are home by then). */
+/**
+ * Moves the clock forward. A new day's plans are made between 00:00 and 02:00, a share of the movers per
+ * call in proportion to the time, so one frame never replans everyone. This is safe because nobody leaves
+ * before 05:00 (MORNING), so an agent with yesterday's plan is at home until it is replanned.
+ */
 export const advance = (w: World, minutes: number) => {
   w.minute += minutes
   while (w.minute >= MINUTES_PER_DAY) {
     w.minute -= MINUTES_PER_DAY
     w.day++
-    for (const i of w.movers) plan(w, i)
+    for (; w.replanned < w.movers.length; w.replanned++) plan(w, w.movers[w.replanned])
+    w.replanned = 0
   }
+  const due = Math.min(w.movers.length, Math.ceil(w.movers.length * w.minute / REPLAN_BY))
+  for (; w.replanned < due; w.replanned++) plan(w, w.movers[w.replanned])
 }
+
+/** True once every mover has its plan for the current day. */
+export const planned = (w: World) => w.replanned === w.movers.length
 
 /** People per node, and the number on the road by mode. */
 export const counts = (w: World, modes: number) => {

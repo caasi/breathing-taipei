@@ -81,6 +81,17 @@ describe('core properties', () => {
   })
 })
 
+test('replanning spread over the night gives the same plans as one big step', () => {
+  fc.assert(fc.property(cityArb, fc.integer(), fc.integer({ min: 120, max: 1439 }), fc.integer({ min: 1, max: 90 }), (city, seed, at, step) => {
+    const big = init(city, seed), small = init(city, seed)
+    advance(big, MINUTES_PER_DAY + at)
+    for (let m = 0; m < MINUTES_PER_DAY + at; m += step) advance(small, Math.min(step, MINUTES_PER_DAY + at - m))
+    expect([small.dep, small.ret, small.dur1, small.dur2]).toEqual([big.dep, big.ret, big.dur1, big.dur2])
+    // Every mover has today's plan by 02:00 (REPLAN_BY), well before the first departure at 05:00.
+    expect(small.replanned).toBe(small.movers.length)
+  }))
+})
+
 test('node indices above 255 survive (village level has 1,465 nodes)', () => {
   const n = 300
   const w = init({
