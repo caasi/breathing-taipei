@@ -28,6 +28,11 @@ const InfoIcon = () => <svg viewBox="0 0 24 24" width="24" height="24" aria-hidd
 const GearIcon = () => <svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true">
   <circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" strokeWidth="4" strokeDasharray={`${Math.PI * 9 / 8} ${Math.PI * 9 / 8}`} />
   <circle cx="12" cy="12" r="5.5" fill="none" stroke="currentColor" strokeWidth="3" /></svg>
+// Figures that change every frame keep their width: zero-padded to a fixed number of digits, in tabular figures.
+const padded = (n: number, digits: number, decimals = 0) => {
+  const [whole, part] = Math.max(0, n).toFixed(decimals).split('.')
+  return whole.padStart(digits, '0').replace(/\B(?=(\d{3})+$)/g, ',') + (part ? '.' + part : '')
+}
 const hhmm = (m: number) => `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(Math.floor(m % 60)).padStart(2, '0')}`
 
 export function App() {
@@ -122,7 +127,7 @@ export function App() {
   const taipei = useMemo(() => projection && taipeiIn(towns, projection), [projection])
   const { kind, box, fit, view } = useMemo(() => layoutFor(size.w, size.h, taipei), [size, taipei]), phone = kind !== 'desktop', titleSize = phone ? 20 : 28
   const road = s ? Array.from(s.road) : []
-  const people = (pick: (node: string) => boolean) => s ? (nodes.reduce((sum, n, i) => pick(n) ? sum + s.counts[i] : sum, 0) * PER_AGENT).toLocaleString() : ''
+  const people = (pick: (node: string) => boolean) => padded(s ? nodes.reduce((sum, n, i) => pick(n) ? sum + s.counts[i] : sum, 0) * PER_AGENT : 0, 7)
   const settings = <>
     <h2 style={H2}>顯示</h2>
     <p>{SPEEDS.map(v => <button key={v} onClick={() => setSpeed(v)} style={{ marginRight: 4, fontWeight: v === speed ? 'bold' : 'normal' }}>{v === 0 ? '暫停' : `${v}x`}</button>)}
@@ -137,11 +142,13 @@ export function App() {
         style={{ marginRight: 4, fontWeight: v === rateWindow ? 'bold' : 'normal' }}>{v} 分</button>)}</span>}</p>
     <p>{LAYERS.map(([k, label]) => <label key={k} style={{ marginRight: 12 }}><input type="checkbox" checked={show.has(k)} onChange={() => toggle(k)} />{label}</label>)}</p>
     <h2 style={H2}>模擬</h2>
-    <p>台北市 {people(inTaipei)} 人，新北市 {people(n => !inTaipei(n))} 人，路上 {(road.reduce((a, b) => a + b, 0) * PER_AGENT).toLocaleString()} 人</p>
+    <div style={{ fontVariantNumeric: 'tabular-nums' }}>
+    <p>台北市 {people(inTaipei)} 人，新北市 {people(n => !inTaipei(n))} 人，路上 {padded(road.reduce((a, b) => a + b, 0) * PER_AGENT, 6)} 人</p>
     <p style={{ fontSize: 13 }}>{MODES.map((m, k) => <span key={m} style={{ marginRight: 10 }}>
-      <span style={{ color: MODE_COLOURS[k] }}>●</span> {m} {((road[k] ?? 0) * PER_AGENT).toLocaleString()}</span>)}</p>
-    {trips && <p>{trips.home.length} 點{routed < trips.home.length ? `，路網計算中 ${Math.floor(100 * routed / trips.home.length)}%` : ''}</p>}
-    <p>模擬每幀 {s?.ms.toFixed(1)} ms，畫面 {fps.toFixed(0)} fps</p>
+      <span style={{ color: MODE_COLOURS[k] }}>●</span> {m} {padded((road[k] ?? 0) * PER_AGENT, 6)}</span>)}</p>
+    {trips && <p>{padded(trips.home.length, 6)} 點{routed < trips.home.length ? `，路網計算中 ${padded(Math.floor(100 * routed / trips.home.length), 2)}%` : ''}</p>}
+    <p>模擬每幀 {padded(s?.ms ?? 0, 2, 1)} ms，畫面 {padded(fps, 3)} fps</p>
+    </div>
   </>
   const info = <>
     <p>台北鼓動模擬台北市與新北市的一個平日：早上人們湧入各里，傍晚離開。這是個人的業餘專案，起於 2026-10-24 的市政 debug 松，但沒有報名參賽。</p>
