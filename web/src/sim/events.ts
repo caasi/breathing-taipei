@@ -91,7 +91,7 @@ export const nextAfter = (events: SimEvent[], now: number) => events.reduce((t, 
 
 /**
  * Picks the plans that the stream shows: about rates[kind] of the plans of each kind, but by error diffusion instead of
- * one draw for each plan, so a viewer sees fewer groups and long gaps (#10).
+ * one draw for each plan, so a viewer sees fewer groups of events and fewer long gaps between them (#10).
  */
 export const evenPick = (rates: number[], rand: () => number) => {
   const sums = rates.map(() => rand())
