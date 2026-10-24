@@ -40,6 +40,7 @@ def main(top20_csv, ranking_csv, villages_json, out):
     districts = {}
     for d, by in sorted(top.items()):
         listed = [sum(n for _, n in by[s]) for s in ("男", "女")]
+        # ponytail: the sex split of the residents is that of the top 20; use the residents by sex when a file has them.
         rest = [max(0, round(residents[d] * k / sum(listed)) - k) for k in listed]
         districts[d] = {"male": by["男"], "female": by["女"], "rest": rest}
     common = national.most_common(NATIONAL)

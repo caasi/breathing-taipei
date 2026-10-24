@@ -85,6 +85,13 @@ Note: The data.gov.tw entry for the Taipei shape file was not found. The license
 - The nickname patterns (阿 or 小 with one character, a doubled character, a food or a thing, an English name) are a guess. A search on 2026-10-24 found no commonly used Chinese names or titles for non-binary people.
 - The sex split of a district's residents is that of its top 20 surnames (source N); `villages2.json` has no split by sex.
 
+`web/src/sim/events.ts` and `web/src/sim/worker.ts` use these figures and guesses for the events:
+
+- The 2026 local election is on 115年11月28日 (Saturday), voting from 08:00 to 16:00: 中央社, 2026-08-20, on the notice of 中央選舉委員會 (https://cna.com.tw/news/aipl/202608200078.aspx).
+- The new mayors take office on 12月25日: 蔣萬安 on 2022-12-25 (Taiwan News, https://www.taiwannews.com.tw/ch/news/4761550) and 柯文哲 on 2018-12-25 (公視, https://news.pts.org.tw/article/417381). 2026-12-25 is a guess from those two elections; 2014 was not confirmed.
+- About 48 personal events a day as the base (`EVENTS_PER_DAY`), with the weights `SHOWN`: 0.05 for a plan to work or a day at home, 1 for an outing on a day off, 3 for a day away. The user chose the weights by eye. Measured at village level, seed 42: 2 to 5 personal events on a workday and 15 to 18 on a day off.
+- The greetings of the city: most of their times follow the model (the breakfast shifts, the first buses and trains, the workday peak, dinner, nights out, the overnight shift, the last trains). Their wording, and the 03:00 and 12:00 greetings, are by eye.
+
 `scripts/days.py` and `web/src/sim/calendar.ts` use these guesses for the days that no source covers:
 
 - Days off from 2028 to 2034 follow source M, and the script stops when this rule does not give 2026 and 2027 as source K does: weekends; 開國紀念日, 和平紀念日, 兒童節, 清明節 (the day of the solar term 清明), 勞動節, 教師節, 國慶日, 臺灣光復暨金門古寧頭大捷紀念日 and 行憲紀念日; 小年夜 to 春節 初三, 端午節 and 中秋節 on their lunar dates. A holiday on a Saturday gives a 補假 on the Friday before, and a holiday on a Sunday on the first free workday after; for 春節 the 補假 comes after the whole break. 兒童節 on the day of 清明 moves to the day before, or to the day after when the day before is a Thursday. When a 補假 would fall on a day that is already off (in 2031, 兒童節 is moved to Saturday 4/5 and the Friday before is 清明), there is no 補假: source M does not say where it goes. The user asked to reuse the last year with data. A change in the law after 2026-10-24 is not in it.
