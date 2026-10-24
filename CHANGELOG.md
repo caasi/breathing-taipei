@@ -4,6 +4,18 @@ This file lists the changes that a user of the site can see, for each version. T
 
 ## [Unreleased]
 
+## [0.1.3] - 2026-10-24
+
+### Changed
+
+- A change of the dot density (1 dot = N people) no longer starts the simulation again. Other agents are drawn as dots, and the run goes on.
+- A switch between district and village level starts a new run on the day that the clock shows, from 00:00 of that day, not on the first day. A note in the settings panel says so.
+- A workday shows more personal events: the weight of a plan to work in the event stream is 0.25 (it was 0.05).
+
+### Fixed
+
+- The clock shows no time before the first frame of a run, so the page no longer shows 00:00 while it starts.
+
 ## [0.1.2] - 2026-10-24
 
 ### Added
@@ -53,7 +65,8 @@ The first public version.
 - A placeholder policy panel. Its settings do not change the simulation yet.
 - Publishing to GitHub Pages by a workflow on each push to `main`.
 
-[Unreleased]: https://github.com/caasi/breathing-taipei/compare/v0.1.2...HEAD
+[Unreleased]: https://github.com/caasi/breathing-taipei/compare/v0.1.3...HEAD
+[0.1.3]: https://github.com/caasi/breathing-taipei/compare/v0.1.2...v0.1.3
 [0.1.2]: https://github.com/caasi/breathing-taipei/compare/v0.1.1...v0.1.2
 [0.1.1]: https://github.com/caasi/breathing-taipei/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/caasi/breathing-taipei/releases/tag/v0.1.0
