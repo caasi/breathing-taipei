@@ -15,14 +15,19 @@ Codex cannot read `/dev/shm`. Give it the omni checkout (`~/GitHub/omni/breathin
 
 Before you push, run `pnpm typecheck` and `pnpm test` in `web/`.
 
+## Comments
+
+The user set this rule for the repository on 2026-10-24. It is not a "zero comment" rule:
+
+- Do not write a comment that says what the line already says. Give the thing a better name.
+- Do not keep a comment on an invariant that a test checks. If no test checks it, write the test, then delete the comment. Example: the ring of three days in `core.ts` has no comment, because the plan property test fails when the ring is one or two days.
+- Keep every source and every guess. Give the details in DATA.md ("Figures in the code") and keep one line in the code that points there. Mark a guess with `ponytail:` in the code: if a guess has no comment, the next reader takes it for data.
+- A comment that says why the code must be this way (a constraint, a trap, a fix for a device) stays.
+
 ## Next steps, in this order
 
-1. **Remove comments that repeat the code.** The user chose this on 2026-10-24. It is not a "zero comment" rule:
-   - Delete a comment that says what the line already says. Give the thing a better name if necessary.
-   - Delete a comment on an invariant only when a test fails if the invariant breaks. If no test covers it, write the test first. Example: the RING size in `core.ts` is covered, because the plan property test fails when RING is 1 or 2 days.
-   - Keep every source and every guess. Move the details to "Figures in the code" in DATA.md, and keep one line in the code that points there. If a guess has no comment, the next reader takes it for data.
-2. **Try 1 agent = 100 people** (now 10). Change `PER_AGENT` in `web/src/App.tsx`, and change `EVERY` so that the dot choices are 100, 200 and 500 people. Measured in Node on 2026-10-24: 64,558 agents, init 233 ms, and a frame (16x) of 0.9 ms median and 2.3 ms maximum. At 1/10 these were 645,406 agents, 808 ms, 9.6 ms and 35 ms. Every village still has agents at 1/100. On the iPhone the drawing, not the simulation, sets the frame rate, so also measure with fewer dots.
-3. **Later ideas, not started:** events (incidents that change an agent's plan), policy settings (the user grouped them by the HEART idea of puma.taipei: space, opportunity, company, resilience, time), WebGL drawing, and build scripts for the data files that came from one-off steps.
+1. **Try 1 agent = 100 people** (now 10). Change `PER_AGENT` in `web/src/App.tsx`, and change `EVERY` so that the dot choices are 100, 200 and 500 people. Measured in Node on 2026-10-24: 64,558 agents, init 233 ms, and a frame (16x) of 0.9 ms median and 2.3 ms maximum. At 1/10 these were 645,406 agents, 808 ms, 9.6 ms and 35 ms. Every village still has agents at 1/100. On the iPhone the drawing, not the simulation, sets the frame rate, so also measure with fewer dots.
+2. **Later ideas, not started:** events (incidents that change an agent's plan), policy settings (the user grouped them by the HEART idea of puma.taipei: space, opportunity, company, resilience, time), WebGL drawing, and build scripts for the data files that came from one-off steps.
 
 ## State of the model (2026-10-24)
 

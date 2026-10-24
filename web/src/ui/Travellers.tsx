@@ -34,7 +34,7 @@ type Props = { tracks: React.MutableRefObject<(Track | undefined)[]>; trips: Tri
 // The area colour carries the story; dots stay faint and add up (additive blending) so only busy lines glow.
 const DOT = 'rgba(255, 236, 214, 0.4)'
 
-/** Dots for sampled commuters on the road, moving along their routed paths (trips not yet routed are not drawn). */
+/** Dots for sampled agents on the road, moving along their routed paths (trips not yet routed are not drawn). */
 export function Travellers({ tracks, trips, clock, onFps, byMode }: Props) {
   const ref = useRef<HTMLCanvasElement>(null)
   useEffect(() => {

@@ -9,20 +9,17 @@ export type Data = { od: number[][][]; districts: string[]; villages: Village[];
 export const MODES = ['捷運', '公車', '機車', '汽車', '步行', '自行車'] as const
 export const MRT = 0
 export const WALK = 4, BIKE = 5
-// Taipei residents' weekday trips, 2024 (MOTC survey via Taipei DBAS weekly 1341): bus 13.7, scooter 16.3,
-// car 20.1, walk 20.8, bike 3.8 percent. New Taipei uses the same split until its own figures are found.
+// Mode share of Taipei residents, 2024 (DATA.md, "Figures in the code"). New Taipei uses the same split until its own figures are found.
 const OTHER = [0, 13.7, 16.3, 20.1, 20.8, 3.8], MRT_SHARE = 16.0
 // ponytail: assumed door-to-door speeds (km/h) and access minutes; calibrate with TDX travel times later.
 const SPEED = [30, 14, 26, 22, 4.5, 12], PEAK_SPEED = [30, 11, 20, 15, 4.5, 12], ACCESS = [12, 12, 3, 6, 0, 2]
-export const MAX_KM = [Infinity, Infinity, Infinity, Infinity, 2.5, 6] // walk and bike only for short trips
-// Short trips (walk and bike) by people who do not commute on the OD, calibrated on two public figures:
-// walking trips per MRT trip from the 2024 Taipei mode share (20.8 / 16.0), and YouBike rentals in Taipei,
-// 234,000 a day in the first half of 2026 (DBAS weekly, 2026-07-29); one person rents twice (there and back).
-// New Taipei uses Taipei's rates until its own figures are found.
+export const MAX_KM = [Infinity, Infinity, Infinity, Infinity, 2.5, 6] // walk and bike only within these distances
+// Short-trip rates from the mode share and the YouBike rentals (DATA.md, "Figures in the code"); one person rents
+// twice (there and back). New Taipei uses Taipei's rates until its own figures are found.
 const WALK_PER_MRT = 20.8 / 16.0, YOUBIKE_RENTALS = 234_000
 // ponytail: assumed distance decay (km) of short-trip destinations; calibrate with YouBike station OD later.
 const DECAY_KM: Record<number, number> = { [WALK]: 0.8, [BIKE]: 2 }
-// arrivals in villages2.json are morning MRT exits summed over the 30 days of 2026-09.
+// arrivals in villages2.json are summed over 30 days (DATA.md, "Processing").
 const ARRIVAL_DAYS = 30
 const PEAK = new Set([7, 8, 9, 17, 18, 19])
 const MORNING = [5, 6, 7, 8, 9, 10, 11], EVENING = [12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23]
@@ -42,9 +39,7 @@ const VISITS = [
   { name: 'dinner', shift: 'evening', per: 1, dep: [18, 19], ret: [20], decay: 2 },
   { name: 'night-out', shift: 'nightlife', per: 5, dep: [21, 22], ret: [0, 1], decay: 6 },
 ]
-// Hours (start, end) in which a mode runs. Buses of both cities: most first buses leave at 05:00 or later
-// and most last buses before 24:00 (route files GetRoute.gz, 2026-10-24). MRT: od2.json has 44 trips in
-// hour 5 and 34,851 in hour 6; hour 0 still has 10,629 (the last trains) but counts as closed here.
+// Hours [start, end) in which a mode runs (DATA.md, "Figures in the code"); hour 00 counts as closed.
 const SERVICE: Record<number, [number, number]> = { [MRT]: [6, 24], 1: [5, 24] }
 const runs = (mode: number, hours: number[]) => !SERVICE[mode] || hours.every(h => h >= SERVICE[mode][0] && h < SERVICE[mode][1])
 /** Mode by the survey split of Taipei residents, for a trip of d km in the given hours. */
@@ -155,7 +150,6 @@ const nightTrips = (night: Night, villageGroup: number[], nodeGroup: number[], v
   })
   return [...shifts.map(s => ({ ...s, places: s.jobs })), ...visits].map(k => {
     const people = sum(k.jobs)
-    // Places per node: villages at village level, districts at district level.
     const place = new Array(nodeGroup.length).fill(0)
     k.places.forEach((p, v) => (place[village ? v : villageGroup[v]] += p))
     const placeD = new Array(G).fill(0)
@@ -216,7 +210,7 @@ const localTrips = (districts: string[], residents: number[], commuters: number[
     let mode = r1 * (walkRate + bikeRate) < walkRate ? WALK : BIKE
     let l = listFor(home, mode)
     const empty = (x: typeof l) => !x.nodes.length || !x.cum[x.cum.length - 1]
-    // A village with no other village of its district within walking range sends its walkers by bicycle.
+    // Walkers of a village with no other village of its district in walking range ride instead of staying home.
     if (empty(l) && mode === WALK) { mode = BIKE; l = listFor(home, BIKE) }
     if (empty(l)) return undefined
     const x = r2 * l.cum[l.cum.length - 1]

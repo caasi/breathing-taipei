@@ -55,10 +55,11 @@ Note: The data.gov.tw entry for the Taipei shape file was not found. The license
 
 ## Figures in the code
 
-`web/src/sim/city.ts` also uses figures that are not data files:
+`web/src/sim/city.ts` also uses these figures:
 
-- Mode share of Taipei residents, 2024 (bus 13.7%, scooter 16.3%, car 20.1%, walk 20.8%, bike 3.8%, MRT 16.0%): 交通部統計處「民眾日常使用運具狀況調查」, as published in 臺北市政府主計處 市政統計週報 第1341號 (2025-07-16).
+- Mode share of the weekday trips of Taipei residents, 2024 (bus 13.7%, scooter 16.3%, car 20.1%, walk 20.8%, bike 3.8%, MRT 16.0%): 交通部統計處「民眾日常使用運具狀況調查」, as published in 臺北市政府主計處 市政統計週報 第1341號 (2025-07-16).
 - Bus service hours, 05:00 to 24:00: most first buses leave at 05:00 or later and most last buses before 24:00, in the route files of Taipei (`https://tcgbusfs.blob.core.windows.net/blobbus/GetRoute.gz`) and New Taipei (`https://tcgbusfs.blob.core.windows.net/ntpcbus/GetRoute.gz`), read on 2026-10-24 (same provider as source G).
+- MRT service hours, 06:00 to 24:00: `od2.json` has 44 trips in hour 05, 34,851 in hour 06, and 10,629 in hour 00 (the last trains). The model counts hour 00 as closed.
 - YouBike rentals in Taipei, 234,000 a day on average in the first half of 2026 (市區公共自行車 平均每日租借 23.4 萬次): 臺北市政府主計處 市政統計週報, 2026-07-29, from data of 臺北市政府交通局.
 
 ## Processing

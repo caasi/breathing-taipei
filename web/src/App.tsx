@@ -90,7 +90,7 @@ export function App() {
   }, [projection])
   // The worker posts about 30 times a second; between posts the dots move on the extrapolated clock.
   const clock = () => { const l = last.current; return l.minute + (performance.now() - l.at) / 1000 * l.speed * 60 }
-  // Change per hour over the last RATE_WINDOW minutes, as a share of the node's residents.
+  // Change per hour over the last rateWindow minutes, as a share of the node's residents.
   const rate = useMemo(() => {
     const h = history.current
     if (colourBy !== 'rate' || !s || !h.length) return undefined
