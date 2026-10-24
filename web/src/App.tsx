@@ -7,6 +7,7 @@ import { getJson } from './load.ts'
 import type { Batch } from './sim/paths.ts'
 import { useQuery, oneOf, setOf, bool, fromBool } from './query.ts'
 import { record, since, KEEP, type Entry } from './history.ts'
+import { viewFor, DASHBOARD_WIDTH } from './ui/view.ts'
 
 const SPEEDS = [0, 1, 2, 4, 8]
 const EVERY = [2, 5, 10, 20, 50]
@@ -101,13 +102,27 @@ export function App() {
     return out
   }, [s, colourBy, rateWindow])
   const ready = projection && villages && s && nodes.length === s.counts.length
+  const [size, setSize] = useState({ w: innerWidth, h: innerHeight })
+  useEffect(() => { const on = () => setSize({ w: innerWidth, h: innerHeight }); addEventListener('resize', on); return () => removeEventListener('resize', on) }, [])
+  const view = useMemo(() => viewFor(size.w, size.h), [size])
   const road = s ? Array.from(s.road) : []
   return (
-    <div style={{ padding: 16, maxWidth: 640 }}>
-      <h1 style={{ fontSize: 20 }}>台北鼓動：雙北 {s ? ((Array.from(s.counts).reduce((a, b) => a + b, 0) + road.reduce((a, b) => a + b, 0)) * PER_AGENT).toLocaleString() : ''} 人</h1>
+    <div style={{ position: 'fixed', inset: 0, overflow: 'hidden', background: '#211d1d' }}>
+      {ready && <>
+        <HeatMap towns={towns} villages={villages} level={level} nodes={nodes} counts={s.counts} perAgent={PER_AGENT} proj={projection} transit={transit} show={show} rate={rate} speed={speed} view={view} />
+        {dots && trips && <Travellers tracks={tracks} trips={trips} clock={clock} onFps={setFps} byMode={byMode} view={view} />}
+      </>}
+      <header style={{ position: 'absolute', top: 16, left: 16, pointerEvents: 'none' }}>
+        <h1 style={{ margin: 0, fontSize: 28, fontWeight: 'bold', color: '#fff' }}>台北鼓動</h1>
+        <p style={{ margin: 0, fontSize: 14, color: '#ccc' }}>Breathing Taipei</p>
+      </header>
+      <p style={{ position: 'absolute', top: 16, left: 0, right: DASHBOARD_WIDTH, margin: 0, textAlign: 'center', fontSize: 24, color: '#fff', pointerEvents: 'none', fontVariantNumeric: 'tabular-nums' }}>
+        第 {s?.day ?? 0} 天 {hhmm(s?.minute ?? 0)}</p>
+      <div style={{ position: 'absolute', left: 16, bottom: 16, maxWidth: 560, maxHeight: 'calc(100% - 120px)', overflowY: 'auto', padding: '4px 12px', background: 'rgba(33, 29, 29, 0.85)', borderRadius: 4 }}>
+      <p>雙北 {s ? ((Array.from(s.counts).reduce((a, b) => a + b, 0) + road.reduce((a, b) => a + b, 0)) * PER_AGENT).toLocaleString() : ''} 人</p>
       {loadError && <p role="alert" style={{ color: '#ff8b6b' }}>無法載入地圖資料：{loadError}</p>}
       {runError && <p role="alert" style={{ color: '#ff8b6b' }}>模擬無法執行：{runError}</p>}
-      <p>第 {s?.day ?? 0} 天 {hhmm(s?.minute ?? 0)}，模擬每幀 {s?.ms.toFixed(1)} ms，畫面 {fps.toFixed(0)} fps</p>
+      <p>模擬每幀 {s?.ms.toFixed(1)} ms，畫面 {fps.toFixed(0)} fps</p>
       <p>{SPEEDS.map(v => <button key={v} onClick={() => setSpeed(v)} style={{ marginRight: 4, fontWeight: v === speed ? 'bold' : 'normal' }}>{v === 0 ? '暫停' : `${v}x`}</button>)}
         <span style={{ marginLeft: 12 }}>{(['district', 'village'] as Level[]).map(l => <button key={l} onClick={() => setLevel(l)}
           style={{ marginRight: 4, fontWeight: l === level ? 'bold' : 'normal' }}>{l === 'district' ? '區' : '里'}</button>)}</span></p>
@@ -122,10 +137,6 @@ export function App() {
         {colourBy === 'rate' && <span style={{ marginLeft: 8 }}>變化區間：{WINDOWS.map(v => <button key={v} onClick={() => setRateWindow(v)}
           style={{ marginRight: 4, fontWeight: v === rateWindow ? 'bold' : 'normal' }}>{v} 分</button>)}</span>}</p>
       <p>{LAYERS.map(([k, label]) => <label key={k} style={{ marginRight: 12 }}><input type="checkbox" checked={show.has(k)} onChange={() => toggle(k)} />{label}</label>)}</p>
-      {ready && <div style={{ position: 'relative' }}>
-        <HeatMap towns={towns} villages={villages} level={level} nodes={nodes} counts={s.counts} perAgent={PER_AGENT} proj={projection} transit={transit} show={show} rate={rate} speed={speed} />
-        {dots && trips && <Travellers tracks={tracks} trips={trips} clock={clock} onFps={setFps} byMode={byMode} />}
-      </div>}
       <p style={{ fontSize: 12, color: '#aaa' }}>
         {/* ODbL and the Open Government Data License both ask for credit where people see the map. */}
         地圖資料：© <a href="https://www.openstreetmap.org/copyright" style={{ color: '#ccc' }}>OpenStreetMap contributors</a>（ODbL）；
@@ -133,6 +144,7 @@ export function App() {
         邊界來自 <a href={`${import.meta.env.BASE_URL}licenses/taiwan-atlas-MIT.txt`} style={{ color: '#ccc' }}>taiwan-atlas</a>（MIT，© 2020 Daniel Kao）。
         完整來源見 <a href="https://github.com/caasi/breathing-taipei/blob/main/DATA.md" style={{ color: '#ccc' }}>DATA.md</a>。</p>
       <p style={{ fontSize: 12, color: '#aaa' }}>人口密度：現在每平方公里的人數（對數，300 到 100,000）。人口變化率：最近 {rateWindow} 分鐘、每小時的人數變化除以居民數，橘色是流入，藍綠色是流出，滿格是 ±30%。區名下是現在的人數。新北調淡。點：路上的人。捷運沿捷運線，公車、機車、汽車沿公車路線，步行和自行車走直線。1x = 每秒 1 小時。</p>
+      </div>
     </div>
   )
 }
