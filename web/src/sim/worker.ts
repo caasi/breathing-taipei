@@ -1,8 +1,8 @@
 import { getJson, getOptional } from '../load.ts'
-import { init, advance, counts, PLAY, STAY, type World } from './core.ts'
+import { init, advance, counts, PLAY, STAY, WORK, type World } from './core.ts'
 import { kindAt, WORKDAY, type Calendar } from './calendar.ts'
 import { drawNames, nameOf, type People } from './people.ts'
-import type { SimEvent } from './events.ts'
+import { evenPick, type SimEvent } from './events.ts'
 import { mulberry32 } from './rng.ts'
 import { cityFrom, MODES } from './city.ts'
 import { networks, readRoutes, tripPaths, type Batch, type Routes } from './paths.ts'
@@ -138,17 +138,21 @@ onmessage = async (e: MessageEvent<ToWorker>) => {
     const keep = EVENTS_PER_DAY / Math.max(1, w.movers.length)
     newEvents = []
     eventId = 0
+    const pick = evenPick(SHOWN.map(s => keep * s), pickRng)
     w.onPlan = i => {
       const dest = world.dest[i]
-      if (pickRng() >= keep * SHOWN[dest]) return
       // A STAY on a workday is a commuter who works in its home node (at district level: its own district), not a day of rest.
       if (dest === STAY && kindAt(cal as Calendar, m.startDay + Math.floor(world.dep[i] / 1440) - 1) === WORKDAY) return
       const play = dest === PLAY, group = world.kind[i] ? c.city.kinds![world.kind[i] - 1].name : ''
       // A day at home has no departure. ponytail: it shows at 09:00 of that day, a time chosen by eye.
       const t = dest === STAY ? world.dep[i] - 15 * 60 : world.dep[i]
       if (t < 0) return // a night shift that left on day -1
-      newEvents.push({ id: `a${++eventId}`, t, kind: 'personal', name: nameOf(ids, i), home: world.home[i], to: play ? world.play[i] : world.work[i],
-        dest, mode: play ? world.playMode[i] : world.mode[i], group })
+      if (!pick(dest)) return
+      const e = { t, kind: 'personal' as const, name: nameOf(ids, i), home: world.home[i], to: play ? world.play[i] : world.work[i],
+        dest, mode: play ? world.playMode[i] : world.mode[i], group }
+      newEvents.push({ ...e, id: `a${++eventId}` })
+      // A shown trip also shows its way home, so the stream follows one character through the day.
+      if (dest === WORK || play) newEvents.push({ ...e, id: `a${++eventId}`, t: world.ret[i], back: true })
     }
     // The plans under way at day 0 were made during init, which calls no onPlan: pass them through the same filter.
     for (const i of w.movers) w.onPlan(i)

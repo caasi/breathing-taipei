@@ -1,6 +1,8 @@
 import { readFileSync } from 'node:fs'
 import { expect, test } from 'vitest'
-import { actionOf, nextAfter, publicEvents, withPublic, type SimEvent } from './events.ts'
+import fc from 'fast-check'
+import { actionOf, evenPick, nextAfter, publicEvents, withPublic, type SimEvent } from './events.ts'
+import { mulberry32 } from './rng.ts'
 import { indexOf, type Calendar } from './calendar.ts'
 import { GONE, PLAY, STAY, WORK } from './core.ts'
 
@@ -28,6 +30,9 @@ test('a personal event says where the character goes and how', () => {
   expect(actionOf(e(GONE, 0, 0), at)).toBe('今天出遠門，離開雙北')
   expect(actionOf(e(STAY, 0, 0), at)).toBe('今天在家休息')
   expect(actionOf(e(WORK, 1, 2, 'early'), at)).toBe('騎機車去早餐店上早班')
+  expect(actionOf({ ...e(WORK, 2, 0), back: true }, at)).toBe('搭捷運下班回家')
+  expect(actionOf({ ...e(PLAY, 2, 3), back: true }, at)).toBe('開車從中山區回家')
+  expect(actionOf({ ...e(WORK, 1, 2, 'early'), back: true }, at)).toBe('騎機車回家')
 })
 
 test('greetings follow the kind of day', () => {
@@ -63,4 +68,20 @@ test('the shown list stays the same until the clock passes the next event', () =
   const shown = (t: number) => events.filter(e => e.t <= t).map(e => e.id).join()
   expect(shown(next - 1)).toBe(shown(now))
   expect(shown(next)).not.toBe(shown(now))
+})
+
+test('evenPick shows each kind at its rate, with no gap longer than one step of the rate, when the kinds come mixed', () => {
+  fc.assert(fc.property(fc.array(fc.double({ min: 0.01, max: 1, noNaN: true }), { minLength: 1, maxLength: 4 }), fc.integer(), fc.integer(), (rates, seed, order) => {
+    const pick = evenPick(rates, mulberry32(seed)), next = mulberry32(order), n = rates.map(() => 0), shown: number[][] = rates.map(() => [])
+    // The worker calls the kinds in the order of the plans: each kind keeps its own sum, whatever comes between.
+    for (let i = 0; i < 1000 * rates.length; i++) {
+      const kind = Math.floor(next() * rates.length)
+      if (pick(kind)) shown[kind].push(n[kind])
+      n[kind]++
+    }
+    rates.forEach((rate, kind) => {
+      expect(Math.abs(shown[kind].length - rate * n[kind])).toBeLessThanOrEqual(1)
+      for (let k = 1; k < shown[kind].length; k++) expect(shown[kind][k] - shown[kind][k - 1]).toBeLessThanOrEqual(Math.ceil(1 / rate))
+    })
+  }))
 })
