@@ -21,6 +21,7 @@ const PER_AGENT = 10
 const KEEP_EVENTS = 3 * MAX_EVENTS
 // On a phone the clock sits right of the title, and a long holiday name wraps instead of running under it.
 const TITLE_ROOM = 116
+const LIST_MS = 500
 // The English subtitle at this share of the title size is a little narrower than 台北鼓動; the user chose it by eye.
 const SUBTITLE_SCALE = 0.46
 const WINDOWS = [15, 30, 60, KEEP] // simulated minutes the change rate can look back; history keeps the longest
@@ -148,10 +149,13 @@ export function App() {
   const road = s ? Array.from(s.road) : []
   const date = cal && startDay !== undefined ? dateText(cal, startDay + (s?.day ?? 0)) : undefined
   const dayLabel = useMemo(() => (day: number) => (cal && startDay !== undefined ? dateText(cal, startDay + day).roc : ''), [cal, startDay])
-  // The worker posts about 30 times a second; the list changes only with the minute or a new event, so build it then.
+  // The worker posts about 30 times a second, and at any speed above a pause the simulated minute changes on each post.
+  // The list is built again on a beat of real time (LIST_MS), or when a new event comes, and not on every post.
+  const [beat, setBeat] = useState(0)
+  useEffect(() => { const id = setInterval(() => setBeat(b => b + 1), LIST_MS); return () => clearInterval(id) }, [])
   const nowMinute = s ? s.day * 1440 + Math.floor(s.minute) : 0, newest = personal.current.at(-1)?.id
-  const events = useMemo(() => (cal && startDay !== undefined && s ? withPublic(personal.current, cal, startDay, nowMinute, MAX_EVENTS) : personal.current),
-    [cal, startDay, nowMinute, newest, !s])
+  const list = useMemo(() => ({ now: nowMinute, events: cal && startDay !== undefined && s
+    ? withPublic(personal.current, cal, startDay, nowMinute, MAX_EVENTS) : personal.current }), [cal, startDay, beat, newest, !s])
   const placeOf = useMemo(() => {
     const byCode = new Map<string, { town: string; village: string }>()
     for (const g of villages?.objects.villages.geometries ?? []) byCode.set(g.properties.VILLCODE, { town: g.properties.TOWNNAME, village: g.properties.VILLNAME })
@@ -233,12 +237,12 @@ export function App() {
           <div style={{ position: 'absolute', left: box.x + 12, top: box.y + box.h - 52 }}>{icons}</div>
           <div style={{ position: 'absolute', left: kind === 'landscape' ? box.w : 0, top: kind === 'portrait' ? box.h : 0, right: 0, bottom: 0, overflowY: 'auto', padding: '0 12px' }}>{panel || (open === 'policies'
             ? <div id="policies" role="region" aria-label="政策"><Policies {...policies} /></div>
-            : <section aria-label="事件"><Events events={events} now={nowMinute} dayLabel={dayLabel} placeOf={placeOf} /></section>)}</div>
+            : <section aria-label="事件"><Events events={list.events} now={list.now} dayLabel={dayLabel} placeOf={placeOf} /></section>)}</div>
         </>
         : <div style={{ position: 'absolute', left: 16, bottom: 16, display: 'flex', flexDirection: 'column-reverse' }}>
           <div>{icons}</div>{panel}</div>}
       {!phone && <>
-        <aside aria-label="事件" style={{ ...SIDE_PANEL, right: 2 * PANEL.gap + PANEL.policies, width: PANEL.events }}><Events events={events} now={nowMinute} dayLabel={dayLabel} placeOf={placeOf} /></aside>
+        <aside aria-label="事件" style={{ ...SIDE_PANEL, right: 2 * PANEL.gap + PANEL.policies, width: PANEL.events }}><Events events={list.events} now={list.now} dayLabel={dayLabel} placeOf={placeOf} /></aside>
         <aside aria-label="政策" style={{ ...SIDE_PANEL, right: PANEL.gap, width: PANEL.policies }}><Policies {...policies} /></aside>
       </>}
     </div>
