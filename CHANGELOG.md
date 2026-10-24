@@ -24,7 +24,7 @@ This file lists the changes that a user of the site can see, for each version. T
 
 ### Fixed
 
-- A trip on a day off leaves on that day, and the person is home by 24:00.
+- A trip on a day off leaves on that day. When the two legs leave room for it, the way home moves earlier so that the person is home by 24:00.
 - The way home from a day-off outing is timed for its final hour.
 - A day at home on a workday no longer shows as a day of rest.
 - The event list follows the clock at every speed, also when two events are close in time.
@@ -45,7 +45,7 @@ The first public version.
 - Short walk and YouBike trips inside each district.
 - Night-time workers and visitors from the business tax registry, and night-time modes limited by the service hours of bus and MRT.
 - A full-page map: village fills and dots in WebGL, the static map layers in SVG. Layouts for desktop, phone portrait and phone landscape.
-- Road paths made ahead of time by `pnpm routes`, so the dots do not wait for the routing in the browser.
+- Road paths are made ahead of time, so the dots do not wait for the routing in the browser.
 - Info and settings panels that open from icons. Display settings stay in the browser. Policy settings are in the URL.
 - A calendar: the run starts on the day the page opens, with the office calendar, the lunar date, the solar terms and the commemorative days, from 2026 to 2034.
 - Days off change how commuters move: away from the two cities for the day, out to a place for the day off, or home.
