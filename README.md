@@ -57,10 +57,10 @@ Display settings:
 | Key | Values | Default |
 |---|---|---|
 | `speed` | `0` (pause), `1`, `2`, `4`, `8` simulated hours per second | `1` |
-| `level` | `village`, `district` | `village` |
+| `level` | `village`, `district`. A switch starts a new run at 00:00 of the day on the clock | `village` |
 | `color` | `rate`, `density` | `rate` |
 | `window` | `15`, `30`, `60`, `120` simulated minutes for the change rate | `30` |
-| `dot` | `20`, `50`, `100`, `200`, `500` people for each dot | `50` |
+| `dot` | `20`, `50`, `100`, `200`, `500` people for each dot. A switch draws other agents as dots, and the run goes on | `50` |
 | `dots` | `1` shows the dots, `0` hides them | `1` |
 | `mode` | `1` colors the dots by mode | `0` |
 | `layers` | Comma list of `mrt`, `lrt`, `tra`, `hsr`, `airport`, `highway`. Unknown names are ignored, and a list with no known name goes back to the default. An empty list hides all layers | All except `highway` |

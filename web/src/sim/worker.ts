@@ -9,8 +9,9 @@ import { networks, readRoutes, tripPaths, type Batch, type Routes } from './path
 
 export type Level = 'district' | 'village'
 export type ToWorker =
-  | { type: 'init'; perAgent: number; seed: number; level: Level; every: number; startDay: number } // startDay: index into calendar.json of day 0
+  | { type: 'init'; perAgent: number; seed: number; level: Level; startDay: number } // startDay: index into calendar.json of day 0
   | { type: 'speed'; hoursPerSec: number }
+  | { type: 'sample'; every: number } // the run goes on; only the agents drawn as dots change
 /**
  * Sampled agents' current plans (minutes since 00:00 of day 0), for the renderer to interpolate.
  * dest is WORK, PLAY, GONE or STAY (core.ts); the path of trip k to work is path k, to its day-off place path n + k.
@@ -108,17 +109,26 @@ const frame = () => {
 }
 setInterval(frame, 1000 / FPS)
 
-let run = 0 // the latest start; a routes file that arrives after a newer start is not applied to the old one
+let run = 0 // the latest draw; a routes file that arrives after a newer draw is not applied to the old one
+let coords: [number, number][] = []
+// Same sampled agents every day with fixed home, work and day-off place, so paths are built once per draw.
+// The simulation does not wait for the routes file (megabytes); the paths start when it is there.
+const draw = (world: World, graphs: Awaited<typeof net>) => {
+  const trips = sample(world), thisRun = ++run
+  pending = undefined
+  routed = 0
+  routes.then(known => { if (thisRun === run) pending = bothPaths(trips, coords, graphs, known) }, () => {})
+  return trips
+}
 onmessage = async (e: MessageEvent<ToWorker>) => {
   const m = e.data
   if (m.type === 'speed') { hoursPerSec = m.hoursPerSec; return }
+  if (m.type === 'sample') { every = m.every; if (w) extra = { ...extra, trips: draw(w, await net) }; return }
   // Any failure while starting (loading, building the city, sampling) goes to the page.
   // The async handler would otherwise reject without a message, and onerror does not see a rejection.
-  const thisRun = ++run
   try {
     const [[od2, villages, signal, , , night, cal, people], graphs] = await Promise.all([data, net])
     const c = cityFrom({ ...od2, villages, signal, night }, m.perAgent, m.level, day => kindAt(cal as Calendar, m.startDay + day))
-    every = m.every
     w = init(c.city, m.seed)
     const world = w, districtOf = Array.from(w.home, h => (m.level === 'village' ? villages[h].town : c.nodes[h]))
     const ids = drawNames(people as People, districtOf, m.seed + 1), pickRng = mulberry32(m.seed + 2)
@@ -141,13 +151,8 @@ onmessage = async (e: MessageEvent<ToWorker>) => {
     }
     // The plans under way at day 0 were made during init, which calls no onPlan: pass them through the same filter.
     for (const i of w.movers) w.onPlan(i)
-    const trips = sample(w)
-    extra = { nodes: c.nodes, homes: Uint32Array.from(c.city.homes), coords: c.coords, trips }
-    // Same sampled agents every day with fixed home, work and day-off place, so paths are built once per init.
-    // The simulation does not wait for the routes file (megabytes); the paths start when it is there.
-    pending = undefined
-    routed = 0
-    routes.then(known => { if (thisRun === run) pending = bothPaths(trips, c.coords, graphs, known) }, () => {})
+    coords = c.coords
+    extra = { nodes: c.nodes, homes: Uint32Array.from(c.city.homes), coords: c.coords, trips: draw(w, graphs) }
   } catch (err) {
     w = undefined
     postMessage({ error: String(err) } satisfies WorkerError)
