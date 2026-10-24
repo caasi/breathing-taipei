@@ -6,8 +6,8 @@
  *
  * Reads web/public/*.json and writes web/public/road-routes.bin. It runs the model as the app does
  * (seed 42, 10 people per agent, village and district level) and routes every road trip (bus, scooter,
- * car) between two different road nodes that the road graph connects. Run it again after a change to the
- * road graph, the routing code, the model, or the app's seed or PER_AGENT. The worker ignores a file for
+ * car), to work and to the day-off place, between two different road nodes that the road graph connects.
+ * Run it again after a change to the road graph, the routing code, the model, or the app's seed or PER_AGENT. The worker ignores a file for
  * another road graph; for a stale model it routes the trips that the file does not hold.
  */
 import { readFileSync, writeFileSync } from 'node:fs'
@@ -23,14 +23,16 @@ const net = networks(pub('road-graph.json'), pub('mrt-graph.json'))
 
 const wanted = new Map<number, Set<number>>() // from road node -> to road nodes
 for (const level of ['village', 'district'] as const) {
-  const c = cityFrom(data, PER_AGENT, level), w = init(c.city, SEED)
+  // The kind of each day does not matter here: the day-off places are drawn at init, whatever the calendar says.
+  const c = cityFrom(data, PER_AGENT, level, () => 0), w = init(c.city, SEED)
   const node = new Map<number, number>()
   const at = (v: number) => node.get(v) ?? node.set(v, roadNode(net, c.coords, v)).get(v)!
-  for (const i of w.movers) {
-    if (!ROAD_MODES.has(w.mode[i])) continue
-    const a = at(w.home[i]), b = at(w.work[i])
+  const want = (home: number, to: number, mode: number) => {
+    if (!ROAD_MODES.has(mode)) return
+    const a = at(home), b = at(to)
     if (a !== b) (wanted.get(a) ?? wanted.set(a, new Set()).get(a)!).add(b)
   }
+  for (const i of w.movers) { want(w.home[i], w.work[i], w.mode[i]); want(w.home[i], w.play[i], w.playMode[i]) }
 }
 const paths = new Map<number, number[]>()
 for (const [a, bs] of wanted) {

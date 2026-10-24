@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'vitest'
 import fc from 'fast-check'
 import { readFileSync } from 'node:fs'
-import { init, advance, counts, where, ROAD, MINUTES_PER_DAY, type City, type World } from './core.ts'
+import { init, advance, counts, where, ROAD, AWAY, MINUTES_PER_DAY, type City, type World } from './core.ts'
 import { cityFrom, km, MODES, MAX_KM, WALK, BIKE } from './city.ts'
 
 // 1-5 groups with 1-4 nodes each, sparse non-negative OD, any destination weights,
@@ -21,8 +21,14 @@ const cityArb = fc.integer({ min: 1, max: 5 }).chain(g => fc.record({
       dep: fc.array(fc.oneof(fc.constant(0), fc.nat(5)), { minLength: 24, maxLength: 24 }),
       ret: fc.array(fc.oneof(fc.constant(0), fc.nat(5)), { minLength: 24, maxLength: 24 }),
     }), { maxLength: 3 }),
-  }).map(({ homes, to, kinds }): City => ({
+    // Optional days off: any weekly pattern of the three kinds of day, any shares; the day-off OD is the workday one.
+    off: fc.option(fc.record({
+      week: fc.array(fc.integer({ min: 0, max: 2 }), { minLength: 7, maxLength: 7 }),
+      out: fc.double({ min: 0, max: 1, noNaN: true }), away: fc.double({ min: 0, max: 0.5, noNaN: true }),
+    }), { nil: undefined }),
+  }).map(({ homes, to, kinds, off }): City => ({
     od, group, homes, to, perAgent: 10,
+    off: off && { kindOf: d => off.week[((d % 7) + 7) % 7], od: [od, od], out: [group.map(() => off.out), group.map(() => off.out)], away: [off.away, off.away] },
     kinds: kinds.map((k, c) => ({
       name: `k${c}`, rate: group.map(() => k.rate), dep: k.dep, ret: k.ret,
       pick: (_home, rng) => { const r1 = rng(), r2 = rng(); return r1 < k.none ? undefined : { work: Math.floor(r2 * group.length), mode: Math.floor(r1 * MODES.length) } },
@@ -34,14 +40,14 @@ const cityArb = fc.integer({ min: 1, max: 5 }).chain(g => fc.record({
 
 const total = (city: City) => Array.from(city.homes).reduce((a, b) => a + b, 0)
 const run = (city: City, seed: number, minutes: number) => { const w = init(city, seed); advance(w, minutes); return w }
-const sumOf = (c: { nodes: Uint32Array; road: Uint32Array }) => c.nodes.reduce((a, b) => a + b, 0) + c.road.reduce((a, b) => a + b, 0)
+const sumOf = (c: { nodes: Uint32Array; road: Uint32Array; away: number }) => c.nodes.reduce((a, b) => a + b, 0) + c.road.reduce((a, b) => a + b, 0) + c.away
 
 describe('core properties', () => {
   test('everyone is at a valid node or on the road, never lost', () => {
     fc.assert(fc.property(cityArb, fc.integer(), fc.integer({ min: 0, max: 3 * MINUTES_PER_DAY }), (city, seed, m) => {
       const w = run(city, seed, m)
       expect(sumOf(counts(w, MODES.length))).toBe(total(city))
-      w.home.forEach((_, i) => { const at = where(w, i); expect(at === ROAD || (at >= 0 && at < city.homes.length)).toBe(true) })
+      w.home.forEach((_, i) => { const at = where(w, i); expect(at === ROAD || at === AWAY || (at >= 0 && at < city.homes.length)).toBe(true) })
     }))
   })
 
@@ -184,4 +190,25 @@ test('night-time groups with an hour outside the MRT and bus hours use neither (
   const dinner = c.city.kinds!.findIndex(k => k.name === 'dinner') + 1
   const all = w.movers.filter(i => w.kind[i] === dinner)
   expect(all.filter(i => w.mode[i] === 0).length / all.length).toBeLessThan(0.5)
+})
+
+test('a day off has no morning peak, fewer people out, and some away (real data)', () => {
+  const leaving = (kindOf: (day: number) => number) => {
+    const c = cityFrom(data(), 100, 'district', kindOf), w = init(c.city, 7)
+    const perHour = new Array(24).fill(0)
+    let away = 0
+    for (let m = 0; m < MINUTES_PER_DAY; m += 10) {
+      advance(w, 10)
+      for (const i of w.movers) if (w.dep[i] >= m && w.dep[i] < m + 10 && w.dur1[i]) perHour[Math.floor(w.dep[i] / 60) % 24]++
+      if (m === 12 * 60) away = counts(w, MODES.length).away
+    }
+    return { perHour, away, out: perHour.reduce((a, b) => a + b, 0) }
+  }
+  const workday = leaving(() => 0), holiday = leaving(() => 2)
+  const peak = (p: number[]) => Math.max(...p.slice(7, 9)) / (p.slice(10, 17).reduce((a, b) => a + b, 0) / 7)
+  expect(peak(workday.perHour)).toBeGreaterThan(2)
+  expect(peak(holiday.perHour)).toBeLessThan(1.5)
+  expect(holiday.out).toBeLessThan(workday.out)
+  expect(workday.away).toBe(0)
+  expect(holiday.away).toBeGreaterThan(0)
 })

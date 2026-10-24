@@ -97,7 +97,7 @@ export function App() {
       if (m.trips) { tripsRef.current = m.trips; setTrips(m.trips) }
       // The dots read the arrays every frame, so new plans are written into them in place.
       const t = tripsRef.current, r = m.replans
-      if (t && r) r.k.forEach((k, j) => { t.dep[k] = r.dep[j]; t.dur1[k] = r.dur1[j]; t.ret[k] = r.ret[j]; t.dur2[k] = r.dur2[j] })
+      if (t && r) r.k.forEach((k, j) => { t.dest[k] = r.dest[j]; t.dep[k] = r.dep[j]; t.dur1[k] = r.dur1[j]; t.ret[k] = r.ret[j]; t.dur2[k] = r.dur2[j] })
       // The worker sends each batch once; keep the ones that arrive before the map projection exists.
       if (m.paths?.length) proj.current ? addBatches(tracks.current, m.paths, proj.current) : unplaced.current.push(...m.paths)
       if (m.routed !== undefined) setRouted(m.routed)
@@ -109,7 +109,10 @@ export function App() {
     worker.current = w
     return () => w.terminate()
   }, [])
-  useEffect(() => { setS(undefined); setRunError(undefined); post({ type: 'init', perAgent: PER_AGENT, seed: 42, level, every }) }, [level, every])
+  useEffect(() => {
+    if (startDay === undefined) return
+    setS(undefined); setRunError(undefined); post({ type: 'init', perAgent: PER_AGENT, seed: 42, level, every, startDay })
+  }, [level, every, startDay])
   useEffect(() => { last.current.speed = speed; post({ type: 'speed', hoursPerSec: speed }) }, [speed])
 
   const projection = useMemo(() => towns && projectionFor(towns), [towns])
@@ -157,10 +160,10 @@ export function App() {
     <p>{LAYERS.map(([k, label]) => <label key={k} style={{ marginRight: 12 }}><input type="checkbox" checked={show.has(k)} onChange={() => toggle(k)} />{label}</label>)}</p>
     <h2 style={H2}>模擬</h2>
     <div style={{ fontVariantNumeric: 'tabular-nums' }}>
-    <p>台北市 {people(inTaipei)} 人，新北市 {people(n => !inTaipei(n))} 人，路上 {padded(road.reduce((a, b) => a + b, 0) * PER_AGENT, 6)} 人</p>
+    <p>台北市 {people(inTaipei)} 人，新北市 {people(n => !inTaipei(n))} 人，路上 {padded(road.reduce((a, b) => a + b, 0) * PER_AGENT, 6)} 人，外地 {padded((s?.away ?? 0) * PER_AGENT, 6)} 人</p>
     <p style={{ fontSize: 13 }}>{MODES.map((m, k) => <span key={m} style={{ marginRight: 10, whiteSpace: 'nowrap', display: 'inline-block' }}>
       <span style={{ color: MODE_COLOURS[k] }}>●</span> {m} {padded((road[k] ?? 0) * PER_AGENT, 6)}</span>)}</p>
-    {trips && <p>{padded(trips.home.length, 6)} 點{routed < trips.home.length ? `，路網計算中 ${padded(Math.floor(100 * routed / trips.home.length), 2)}%` : ''}</p>}
+    {trips && <p>{padded(trips.home.length, 6)} 點{routed < 2 * trips.home.length ? `，路網計算中 ${padded(Math.floor(50 * routed / trips.home.length), 2)}%` : ''}</p>}
     <p>模擬每幀 {padded(s?.ms ?? 0, 2, 1)} ms，畫面 {padded(fps, 3)} fps</p>
     </div>
   </>
