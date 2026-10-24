@@ -2,7 +2,9 @@ import { useState } from 'react'
 
 // ponytail: placeholder events and policies for the layout only; nothing here reaches the simulation. Replace with the event model.
 // A wide event touches an area; a personal one follows one resident. A resident is 先生 or 小姐, or, for a person outside the binary,
-// a nickname with no title. ponytail: the share of nicknames is not set yet; here it is 2 of 7 by hand.
+// a nickname with no title, in this share of residents (DATA.md, "Figures in the code").
+// ponytail: a U.S. upper bound, for the event model; the hand-written placeholders below do not follow it.
+export const NICKNAME_SHARE = 0.016
 type Event = { at: number; kind: string; text: string; who?: { town: string; village: string; name: string } }
 const EVENTS: Event[] = [
   { at: 6 * 60 + 50, kind: '交通', text: '板南線忠孝復興站號誌異常，班距拉長到 8 分鐘' },
