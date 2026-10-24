@@ -49,10 +49,17 @@ Note: The data.gov.tw entry for the Taipei shape file was not found. The license
 **I.** 內政部國土測繪中心, 村里界圖(TWD97經緯度) (data.gov.tw 7438) and 鄉鎮市區界線(TWD97經緯度) (data.gov.tw 7441), through source F.
 此開放資料依政府資料開放授權條款 (Open Government Data License) 進行公眾釋出，使用者於遵守本條款各項規定之前提下，得利用之。
 
+## Figures in the code
+
+`web/src/sim/city.ts` also uses figures that are not data files:
+
+- Mode share of Taipei residents, 2024 (bus 13.7%, scooter 16.3%, car 20.1%, walk 20.8%, bike 3.8%, MRT 16.0%): 交通部統計處「民眾日常使用運具狀況調查」, as published in 臺北市政府主計處 市政統計週報 第1341號 (2025-07-16).
+- YouBike rentals in Taipei, 234,000 a day on average in the first half of 2026 (市區公共自行車 平均每日租借 23.4 萬次): 臺北市政府主計處 市政統計週報, 2026-07-29, from data of 臺北市政府交通局.
+
 ## Processing
 
 - `od2.json`: Weekday rows of source A. Each station goes to a district by the mean position of its exits (source B) and the district boundaries (source F). Trips are added up per district and divided by the number of weekdays.
-- `villages2.json`: Residents from sources C and D. New Taipei has 30 villages that source F does not show. Their residents go to the other villages of the same district, in proportion to residents. Arrivals are the morning (05:00 to 11:59) trips that end at the stations in each village.
+- `villages2.json`: Residents from sources C and D. New Taipei has 30 villages that source F does not show. Their residents go to the other villages of the same district, in proportion to residents. Arrivals are the morning (05:00 to 11:59) trips that end at the stations in each village, summed over all 30 days of September 2026 (weekdays and weekends). The model divides them by 30 to get a daily number.
 - `signal.json`: The columns `DAY_WORK(0700~1300)` and `NIGHT_WORK` of source E for the 41 districts.
 - `road-graph.json` and `mrt-graph.json`: Built by `scripts/graphs.py`. Points snap to a grid of about 120 m (roads) or 10 m (MRT), and the points in one grid cell become one node. Nodes with exactly two neighbors become points inside an edge, except stations and one node of each separate loop (a component in which every node has two neighbors). The points inside each edge are simplified (Douglas-Peucker, about 20 m). Each station is a node at the mean position of its exits. It links to the nearest point of each MRT line within 350 m, at a cost of 300 m for boarding or changing lines.
 - Only `scripts/graphs.py` is in the repository. Its docstring lists the input files and the command. The other files came from one-off steps that are not in the repository yet.
