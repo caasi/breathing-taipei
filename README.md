@@ -67,7 +67,13 @@ Example: `?speed=4&dot=20&color=rate&window=60&layers=mrt,highway`
 - Inside a district, a trip starts in a village in proportion to its residents. A trip ends in a village by half its MRT arrivals and half its residents.
 - The MRT data does not include people who use a bus, a scooter, a car, or who walk. The model adds these commuters so that the daytime population of each district comes near a target.
 - The target is the registered residents of the district multiplied by its day/night ratio in the telecom signal statistics (November 2023). It is not the telecom daytime count itself.
-- Each commuter gets a mode. MRT commuters use the MRT. The other commuters get a mode from the 2024 mode share of Taipei residents.
+- Each commuter gets a mode. MRT commuters use the MRT. The other commuters get a mode from the 2024 mode share of Taipei residents. Walking is possible only for trips of 2.5 km or less between the two villages (between the district centers in a district-level run), and cycling only for 6 km or less.
+- Short trips are added for people who walk or ride a bicycle (for example YouBike) to another village of their own district. Their number comes from two public figures:
+  - Walking trips per MRT trip, from the 2024 mode share of Taipei residents (20.8% walk, 16.0% MRT).
+  - YouBike rentals in Taipei, 234,000 a day in the first half of 2026. One person rents twice, there and back.
+- The two rates are per resident, and they are the same in every village.
+- A short trip goes to another village of the same district. The model weights each village by its residents plus its daily MRT arrivals, and less when it is farther away. A district-level run has no short trips, because it cannot show a move inside a district.
+- A short trip leaves and comes back at the hours of all MRT trips in the city, because many districts have no MRT trips inside them.
 - Each agent gets one plan for each day: leave home, travel, work, travel, go home. The position of an agent at a time is a function of this plan.
 - The simulation runs in a Web Worker. The map is SVG. The dots are on a 2D canvas.
 
@@ -80,7 +86,11 @@ The model uses real open data, but some parts are estimates. The list below show
 - New Taipei uses the mode share of Taipei, because the model has no New Taipei figures yet.
 - The work village inside a district is an estimate (half MRT arrivals, half residents).
 - The added (non-MRT) commuters always work in another district. Their destination districts depend only on how many people each district is short, not on distance.
-- Walking is possible only when the centers of the two districts (the centers of their villages, weighted by residents) are 2.5 km apart or less, and cycling only at 6 km or less. Few district pairs are that close, so the model has far fewer walkers and cyclists than the 2024 mode share. The distance check uses district centers, so a walker can travel more than 2.5 km between villages.
+- New Taipei uses the walking and YouBike rates of Taipei, because the model has no New Taipei figures yet.
+- The distance decay of short-trip destinations (0.8 km for walking, 2 km for cycling) is an assumption.
+- The YouBike figure counts every rental, also trips that are not to work or school. The model gives all of them to short trips.
+- Commuters who walk or ride across a district border come on top of the two targets. With seed 1 they are about 0.1% (walk) and 1% (bike) of them.
+- Walkers in 33 villages ride instead, because no other village of their district is within 2.5 km. 3 villages (2,259 residents) have no short trip, because no village of their district is within 6 km.
 - New Taipei has 30 villages that the 2021 village map does not show. The model gives their residents to the other villages in the same district.
 - Each commuter makes one trip to work and one trip home. The model has no school, shopping, or care trips yet.
 - Scooters and cars use the bus routes, not the full road network.
@@ -98,7 +108,11 @@ The tests use Vitest and fast-check. The property tests use random cities, rando
 - A URL setting reads back as the value that the app wrote. An unknown value gives the default.
 - The change-rate history does not grow while the clock is paused. After the first window of a run, it spans the selected window.
 
-A test with real data runs the district model to 11:00. It makes sure that the population of each district with 50,000 people or more is within 15% of its target.
+The tests with real data:
+
+- One runs the district model to 11:00. It makes sure that the population of each district with 50,000 people or more is within 15% of its target.
+- One uses a village run. It computes the two targets from the public figures and makes sure that the short walking and cycling trips of Taipei residents are within 10% of them. It also makes sure that every short trip stays in its district. No walk is longer than 2.5 km, and no ride is longer than 6 km.
+- One makes sure that short trips in a district without MRT trips inside it follow the morning peak, not an even spread: more than 10 times as many leave at 08:00 as at 05:00.
 
 ## Known gaps
 
