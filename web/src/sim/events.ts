@@ -7,7 +7,8 @@ import { isoAt, kindAt, type Calendar } from './calendar.ts'
  * the key of a list row.
  */
 export type SimEvent =
-  | { id: string; t: number; kind: 'personal'; name: string; home: number; to: number; dest: number; mode: number; group: string }
+  // back: the way home of the same plan, at the minute the character leaves work or the day-off place.
+  | { id: string; t: number; kind: 'personal'; name: string; home: number; to: number; dest: number; mode: number; group: string; back?: boolean }
   | { id: string; t: number; kind: 'public'; text: string }
 
 /** What a place is called: the district, and the village at village level. */
@@ -25,6 +26,7 @@ const PURPOSE: Record<string, string> = {
 export const actionOf = (e: Extract<SimEvent, { kind: 'personal' }>, placeOf: PlaceOf) => {
   const by = BY[e.mode], there = placeOf(e.to), here = placeOf(e.home)
   const place = there.town === here.town ? (there.village || there.town) : there.town
+  if (e.back) return e.dest === PLAY ? `${by}從${place}回家` : e.group ? `${by}回家` : `${by}下班回家`
   if (e.dest === STAY) return '今天在家休息'
   if (e.dest === GONE) return '今天出遠門，離開雙北'
   if (e.dest === PLAY) return `${by}去${place}走走`
@@ -86,3 +88,22 @@ export const withPublic = (personal: SimEvent[], cal: Calendar, startDay: number
 
 /** The time of the first event after `now`, or Infinity: until the clock passes it, the shown list stays the same. */
 export const nextAfter = (events: SimEvent[], now: number) => events.reduce((t, e) => (e.t > now && e.t < t ? e.t : t), Infinity)
+
+/**
+ * Picks the plans that the stream shows: about rates[kind] of the plans of each kind, but by error diffusion instead of
+ * one draw for each plan, so a viewer sees fewer groups and long gaps (#10). A plan from a district that one of the
+ * last `recent` shown events used is not shown, and the next plan of that kind takes its place.
+ * ponytail: 3 recent districts is a guess by eye; DATA.md lists it.
+ */
+export const evenPick = (rates: number[], rand: () => number, recent = 3) => {
+  const sums = rates.map(() => rand()), last: string[] = []
+  return (kind: number, place: string) => {
+    sums[kind] += rates[kind]
+    if (sums[kind] < 1) return false
+    if (last.includes(place)) { sums[kind] = 1; return false }
+    sums[kind] -= 1
+    last.push(place)
+    if (last.length > recent) last.shift()
+    return true
+  }
+}

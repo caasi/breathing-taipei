@@ -1,6 +1,8 @@
 import { readFileSync } from 'node:fs'
 import { expect, test } from 'vitest'
-import { actionOf, nextAfter, publicEvents, withPublic, type SimEvent } from './events.ts'
+import fc from 'fast-check'
+import { actionOf, evenPick, nextAfter, publicEvents, withPublic, type SimEvent } from './events.ts'
+import { mulberry32 } from './rng.ts'
 import { indexOf, type Calendar } from './calendar.ts'
 import { GONE, PLAY, STAY, WORK } from './core.ts'
 
@@ -28,6 +30,9 @@ test('a personal event says where the character goes and how', () => {
   expect(actionOf(e(GONE, 0, 0), at)).toBe('今天出遠門，離開雙北')
   expect(actionOf(e(STAY, 0, 0), at)).toBe('今天在家休息')
   expect(actionOf(e(WORK, 1, 2, 'early'), at)).toBe('騎機車去早餐店上早班')
+  expect(actionOf({ ...e(WORK, 2, 0), back: true }, at)).toBe('搭捷運下班回家')
+  expect(actionOf({ ...e(PLAY, 2, 3), back: true }, at)).toBe('開車從中山區回家')
+  expect(actionOf({ ...e(WORK, 1, 2, 'early'), back: true }, at)).toBe('騎機車回家')
 })
 
 test('greetings follow the kind of day', () => {
@@ -63,4 +68,24 @@ test('the shown list stays the same until the clock passes the next event', () =
   const shown = (t: number) => events.filter(e => e.t <= t).map(e => e.id).join()
   expect(shown(next - 1)).toBe(shown(now))
   expect(shown(next)).not.toBe(shown(now))
+})
+
+test('evenPick shows a plan from none of the last 3 shown districts', () => {
+  fc.assert(fc.property(fc.double({ min: 0.01, max: 1, noNaN: true }), fc.integer(), fc.integer({ min: 2, max: 40 }), (rate, seed, places) => {
+    const pick = evenPick([rate], mulberry32(seed)), shown: number[] = []
+    for (let i = 0; i < 2000; i++) if (pick(0, `d${i % places}`)) shown.push(i % places)
+    for (let k = 1; k < shown.length; k++) expect(shown.slice(Math.max(0, k - 3), k)).not.toContain(shown[k])
+  }))
+})
+
+test('evenPick with distinct places shows each kind at its rate, with no gap longer than one step of the rate', () => {
+  fc.assert(fc.property(fc.array(fc.double({ min: 0.01, max: 1, noNaN: true }), { minLength: 1, maxLength: 4 }), fc.integer(), (rates, seed) => {
+    const pick = evenPick(rates, mulberry32(seed)), n = 1000
+    rates.forEach((rate, kind) => {
+      const shown: number[] = []
+      for (let i = 0; i < n; i++) if (pick(kind, `k${kind}d${i}`)) shown.push(i)
+      expect(Math.abs(shown.length - rate * n)).toBeLessThanOrEqual(1)
+      for (let k = 1; k < shown.length; k++) expect(shown[k] - shown[k - 1]).toBeLessThanOrEqual(Math.ceil(1 / rate))
+    })
+  }))
 })
