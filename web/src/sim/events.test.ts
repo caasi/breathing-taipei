@@ -70,14 +70,18 @@ test('the shown list stays the same until the clock passes the next event', () =
   expect(shown(next)).not.toBe(shown(now))
 })
 
-test('evenPick shows each kind at its rate, with no gap longer than one step of the rate', () => {
-  fc.assert(fc.property(fc.array(fc.double({ min: 0.01, max: 1, noNaN: true }), { minLength: 1, maxLength: 4 }), fc.integer(), (rates, seed) => {
-    const pick = evenPick(rates, mulberry32(seed)), n = 1000
+test('evenPick shows each kind at its rate, with no gap longer than one step of the rate, when the kinds come mixed', () => {
+  fc.assert(fc.property(fc.array(fc.double({ min: 0.01, max: 1, noNaN: true }), { minLength: 1, maxLength: 4 }), fc.integer(), fc.integer(), (rates, seed, order) => {
+    const pick = evenPick(rates, mulberry32(seed)), next = mulberry32(order), n = rates.map(() => 0), shown: number[][] = rates.map(() => [])
+    // The worker calls the kinds in the order of the plans: each kind keeps its own sum, whatever comes between.
+    for (let i = 0; i < 1000 * rates.length; i++) {
+      const kind = Math.floor(next() * rates.length)
+      if (pick(kind)) shown[kind].push(n[kind])
+      n[kind]++
+    }
     rates.forEach((rate, kind) => {
-      const shown: number[] = []
-      for (let i = 0; i < n; i++) if (pick(kind)) shown.push(i)
-      expect(Math.abs(shown.length - rate * n)).toBeLessThanOrEqual(1)
-      for (let k = 1; k < shown.length; k++) expect(shown[k] - shown[k - 1]).toBeLessThanOrEqual(Math.ceil(1 / rate))
+      expect(Math.abs(shown[kind].length - rate * n[kind])).toBeLessThanOrEqual(1)
+      for (let k = 1; k < shown[kind].length; k++) expect(shown[kind][k] - shown[kind][k - 1]).toBeLessThanOrEqual(Math.ceil(1 / rate))
     })
   }))
 })
