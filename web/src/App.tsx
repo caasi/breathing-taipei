@@ -144,7 +144,7 @@ export function App() {
     <h2 style={H2}>模擬</h2>
     <div style={{ fontVariantNumeric: 'tabular-nums' }}>
     <p>台北市 {people(inTaipei)} 人，新北市 {people(n => !inTaipei(n))} 人，路上 {padded(road.reduce((a, b) => a + b, 0) * PER_AGENT, 6)} 人</p>
-    <p style={{ fontSize: 13 }}>{MODES.map((m, k) => <span key={m} style={{ marginRight: 10, whiteSpace: 'nowrap' }}>
+    <p style={{ fontSize: 13 }}>{MODES.map((m, k) => <span key={m} style={{ marginRight: 10, whiteSpace: 'nowrap', display: 'inline-block' }}>
       <span style={{ color: MODE_COLOURS[k] }}>●</span> {m} {padded((road[k] ?? 0) * PER_AGENT, 6)}</span>)}</p>
     {trips && <p>{padded(trips.home.length, 6)} 點{routed < trips.home.length ? `，路網計算中 ${padded(Math.floor(100 * routed / trips.home.length), 2)}%` : ''}</p>}
     <p>模擬每幀 {padded(s?.ms ?? 0, 2, 1)} ms，畫面 {padded(fps, 3)} fps</p>
@@ -160,6 +160,12 @@ export function App() {
       邊界來自 <a href={`${import.meta.env.BASE_URL}licenses/taiwan-atlas-MIT.txt`} style={{ color: '#ccc' }}>taiwan-atlas</a>（MIT，© 2020 Daniel Kao）。
       完整來源見 <a href="https://github.com/caasi/breathing-taipei/blob/main/DATA.md" style={{ color: '#ccc' }}>DATA.md</a>。</p>
   </>
+  const icons = ([['info', '專案說明與授權', <InfoIcon />], ['settings', '顯示設定與模擬狀況', <GearIcon />]] as const).map(([k, label, icon]) =>
+    <button key={k} aria-label={label} title={label} aria-expanded={open === k} aria-controls="panel" onClick={() => setOpen(open === k ? undefined : k)}
+      style={{ ...ICON_BUTTON, background: open === k ? '#db6a41' : 'rgba(33, 29, 29, 0.85)' }}>{icon}</button>)
+  const panel = open && <div id="panel" style={phone ? undefined
+    : { width: 536, maxHeight: 'calc(100vh - 180px)', overflowY: 'auto', marginBottom: 8, padding: '4px 12px', background: 'rgba(33, 29, 29, 0.85)', borderRadius: 4 }}>
+    {open === 'info' ? info : settings}</div>
   return (
     <div style={{ position: 'fixed', inset: 0, overflow: 'hidden', background: '#211d1d' }}>
       <div style={{ position: 'absolute', left: box.x, top: box.y, width: box.w, height: box.h, overflow: 'hidden' }}>
@@ -179,17 +185,14 @@ export function App() {
       </div>
       {loadError && <p role="alert" style={ALERT}>無法載入地圖資料：{loadError}</p>}
       {runError && <p role="alert" style={ALERT}>模擬無法執行：{runError}</p>}
-      {/* On a desktop the panel opens over the map, above the icons; on a phone it opens beside or below the map, never over it. */}
-      <div style={phone
-        ? { position: 'absolute', left: kind === 'landscape' ? box.w : 0, top: kind === 'portrait' ? box.h : 0, right: 0, bottom: 0, overflowY: 'auto', padding: 12 }
-        : { position: 'absolute', left: 16, bottom: 16, display: 'flex', flexDirection: 'column-reverse' }}>
-        <div>{([['info', '專案說明與授權', <InfoIcon />], ['settings', '顯示設定與模擬狀況', <GearIcon />]] as const).map(([k, label, icon]) =>
-          <button key={k} aria-label={label} title={label} aria-expanded={open === k} aria-controls="panel" onClick={() => setOpen(open === k ? undefined : k)}
-            style={{ ...ICON_BUTTON, background: open === k ? '#db6a41' : 'rgba(33, 29, 29, 0.85)' }}>{icon}</button>)}</div>
-        {open && <div id="panel" style={phone ? { marginTop: 8 }
-          : { width: 536, maxHeight: 'calc(100vh - 180px)', overflowY: 'auto', marginBottom: 8, padding: '4px 12px', background: 'rgba(33, 29, 29, 0.85)', borderRadius: 4 }}>
-          {open === 'info' ? info : settings}</div>}
-      </div>
+      {/* On a desktop the panel opens over the map, above the icons. On a phone the icons sit on the map, and the panel opens beside or below it, never over it. */}
+      {phone
+        ? <>
+          <div style={{ position: 'absolute', left: box.x + 12, top: box.y + box.h - 52 }}>{icons}</div>
+          <div style={{ position: 'absolute', left: kind === 'landscape' ? box.w : 0, top: kind === 'portrait' ? box.h : 0, right: 0, bottom: 0, overflowY: 'auto', padding: '0 12px' }}>{panel}</div>
+        </>
+        : <div style={{ position: 'absolute', left: 16, bottom: 16, display: 'flex', flexDirection: 'column-reverse' }}>
+          <div>{icons}</div>{panel}</div>}
     </div>
   )
 }
