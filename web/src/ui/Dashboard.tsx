@@ -49,7 +49,7 @@ export function Events({ events, now, dayLabel, placeOf }: { events: SimEvent[];
         {(i === 0 || dayOf(happened[i - 1]) !== dayOf(e)) && <p style={{ margin: '0 0 6px', fontSize: 12, color: '#888' }}>{dayLabel(dayOf(e))}</p>}
         <div style={{ display: 'flex', gap: 8 }}>
           <span style={{ fontVariantNumeric: 'tabular-nums', color: '#aaa' }}>{hhmm(e.t % 1440)}</span>
-          <span style={{ color: COLOUR[e.kind] }}>{e.kind === 'public' ? e.text : <><span style={{ color: '#aaa' }}>{placeOf(e.home).town}{placeOf(e.home).village}</span>的{e.name}{actionOf(e, placeOf)}</>}</span></div></li>)}
+          <span style={{ color: COLOUR[e.kind] }}>{e.kind === 'public' ? e.text : <><span style={{ color: '#aaa' }}>{placeOf(e.home).town}{placeOf(e.home).village}</span>的<span style={{ color: '#ffd9a0' }}>{e.name}</span>{actionOf(e, placeOf)}</>}</span></div></li>)}
     </ol> : <p style={{ fontSize: 14, color: '#aaa' }}>還沒有事件。</p>}
   </>
 }
