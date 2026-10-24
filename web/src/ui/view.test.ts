@@ -15,12 +15,21 @@ test('the focus (the map square on a desktop, 台北市 on a phone) sits inside 
   expect(left + k * f.w / 2).toBeCloseTo(fit.x + fit.w / 2); expect(top + k * f.h / 2).toBeCloseTo(fit.y + fit.h / 2)
 })))
 
+test('the map never shrinks to nothing or turns over: a desktop too narrow for it takes the landscape layout', () => {
+  expect(layoutFor(600, 550).kind).toBe('landscape'); expect(layoutFor(1024, 768).kind).toBe('landscape') // iPad landscape
+  fc.assert(fc.property(screens, ({ w, h }) => {
+    const { kind, fit, view } = layoutFor(w, h)
+    expect(view.k).toBeGreaterThan(0)
+    if (kind === 'desktop') expect(fit.w).toBeGreaterThanOrEqual(h * 3 / 4)
+  }))
+})
+
 test('each device gets the layout the user set', () => {
   const desktop = layoutFor(1440, 900), portrait = layoutFor(430, 932), landscape = layoutFor(932, 430)
   expect(desktop.kind).toBe('desktop'); expect(desktop.box).toEqual({ x: 0, y: 0, w: 1440, h: 900 }); expect(desktop.fit.w).toBe(1440 - DASHBOARD_WIDTH)
   expect(portrait.kind).toBe('portrait'); expect(portrait.box.w / portrait.box.h).toBeCloseTo(4 / 3); expect(portrait.box.w).toBe(430)
   expect(landscape.kind).toBe('landscape'); expect(landscape.box.w / landscape.box.h).toBeCloseTo(3 / 4); expect(landscape.box.h).toBe(430)
-  expect(layoutFor(1366, 1024).kind).toBe('desktop') // iPad landscape
+  expect(layoutFor(1280, 800).kind).toBe('desktop')
 })
 
 test('clip space puts a map point where the CSS transform puts it', () => fc.assert(fc.property(screens,

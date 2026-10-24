@@ -12,8 +12,9 @@ export const DASHBOARD_WIDTH = PANEL.events + PANEL.policies + 3 * PANEL.gap
 // A desktop fits the whole map square; a phone's box is small, so it fits 台北市 alone.
 const ZOOM = { desktop: 0.8, portrait: 1, landscape: 1 }
 const SQUARE: Rect = { x: 0, y: 0, w: MAP_SIZE, h: MAP_SIZE }
-// ponytail: phones told apart by size alone; iPhone landscape is at most 440 px high. Use a pointer media query if tablets land wrong.
-const PHONE_LANDSCAPE_HEIGHT = 500
+// ponytail: the layout follows the window shape alone. Every portrait window (also an iPad) gets the phone portrait
+// layout, and a landscape window whose map would be narrower than a 3:4 box beside the panels (an iPhone, an iPad,
+// a small desktop window) gets the landscape layout. Add a tablet layout if these look wrong on a device.
 
 /** Fits `focus` (map space) into `r` (pixels), centred. */
 export const fitIn = (focus: Rect, r: Rect, zoom: number): View => {
@@ -25,7 +26,7 @@ export const layoutFor = (w: number, h: number, taipei: Rect = SQUARE): Layout =
   const at = (kind: Layout['kind'], box: Rect, fit: Rect = { ...box, x: 0, y: 0 }) =>
     ({ kind, box, fit, view: fitIn(kind === 'desktop' ? SQUARE : taipei, fit, ZOOM[kind]) })
   if (h > w) return at('portrait', { x: 0, y: 0, w, h: w * 3 / 4 })
-  if (h < PHONE_LANDSCAPE_HEIGHT) return at('landscape', { x: 0, y: 0, w: h * 3 / 4, h })
+  if (w - DASHBOARD_WIDTH < h * 3 / 4) return at('landscape', { x: 0, y: 0, w: h * 3 / 4, h })
   return at('desktop', { x: 0, y: 0, w, h }, { x: 0, y: 0, w: w - DASHBOARD_WIDTH, h })
 }
 
