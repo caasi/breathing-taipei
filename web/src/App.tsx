@@ -5,10 +5,10 @@ import { MODES } from './sim/city.ts'
 import type { FromWorker, WorkerError, ToWorker, Level, Trips } from './sim/worker.ts'
 import { getJson } from './load.ts'
 import type { Batch } from './sim/paths.ts'
-import { useQuery, oneOf, setOf, bool, fromBool } from './query.ts'
+import { useStored, oneOf, setOf, bool, fromBool } from './query.ts'
 import { record, since, KEEP, type Entry } from './history.ts'
 import { layoutFor, PANEL } from './ui/view.ts'
-import { Events, Policies } from './ui/Dashboard.tsx'
+import { Events, Policies, usePolicies } from './ui/Dashboard.tsx'
 
 const SPEEDS = [0, 1, 2, 4, 8]
 const EVERY = [2, 5, 10, 20, 50]
@@ -49,18 +49,19 @@ export function App() {
   const [trips, setTrips] = useState<Trips>()
   const tripsRef = useRef<Trips>()
   const [s, setS] = useState<FromWorker>()
-  // Every setting below can be set in the query string, for example ?speed=4&dot=20&color=density&layers=mrt,highway
-  const [speed, setSpeed] = useQuery('speed', 1, oneOf(SPEEDS))
-  const [level, setLevel] = useQuery<Level>('level', 'village', oneOf(['district', 'village'] as const))
-  const [dot, setDot] = useQuery('dot', 50, oneOf(EVERY.map(e => e * PER_AGENT)))
+  // Display settings belong to this viewer, so they stay in this browser; the policies (usePolicies) are in the URL.
+  const policies = usePolicies()
+  const [speed, setSpeed] = useStored('speed', 1, oneOf(SPEEDS))
+  const [level, setLevel] = useStored<Level>('level', 'village', oneOf(['district', 'village'] as const))
+  const [dot, setDot] = useStored('dot', 50, oneOf(EVERY.map(e => e * PER_AGENT)))
   const every = dot / PER_AGENT
-  const [rateWindow, setRateWindow] = useQuery('window', 30, oneOf(WINDOWS))
+  const [rateWindow, setRateWindow] = useStored('window', 30, oneOf(WINDOWS))
   const [routed, setRouted] = useState(0)
   const tracks = useRef<(Track | undefined)[]>([])
   const unplaced = useRef<Batch[]>([])
-  const [dots, setDots] = useQuery('dots', true, bool, fromBool)
-  const [byMode, setByMode] = useQuery('mode', false, bool, fromBool)
-  const [colourBy, setColourBy] = useQuery<'density' | 'rate'>('color', 'rate', oneOf(['density', 'rate'] as const))
+  const [dots, setDots] = useStored('dots', true, bool, fromBool)
+  const [byMode, setByMode] = useStored('mode', false, bool, fromBool)
+  const [colourBy, setColourBy] = useStored<'density' | 'rate'>('color', 'rate', oneOf(['density', 'rate'] as const))
   const history = useRef<Entry[]>([])
   const homes = useRef(new Uint32Array(0))
   const [fps, setFps] = useState(0)
@@ -69,7 +70,7 @@ export function App() {
   const [open, setOpen] = useState<'info' | 'settings' | 'policies'>()
   const [runError, setRunError] = useState<string>()
   // Highways are for orientation only and compete with the area colours, so they start hidden.
-  const [show, setShow] = useQuery('layers', new Set(LAYERS.map(l => l[0]).filter(k => k !== 'highway')),
+  const [show, setShow] = useStored('layers', new Set(LAYERS.map(l => l[0]).filter(k => k !== 'highway')),
     setOf(LAYERS.map(l => l[0])), v => [...v].join(','))
   const worker = useRef<Worker>()
   const last = useRef({ minute: 0, at: 0, speed: 1 }) // minute since 00:00 of day 0
@@ -167,7 +168,7 @@ export function App() {
   </>
   // A desktop always shows the policies; a phone shows the events below the map and opens the policies only when asked.
   const icons = ([['info', '專案說明與授權', <InfoIcon />], ['settings', '顯示設定與模擬狀況', <GearIcon />], ...(phone ? [['policies', '政策', <SlidersIcon />]] as const : [])] as const).map(([k, label, icon]) =>
-    <button key={k} aria-label={label} title={label} aria-expanded={open === k} aria-controls={k === 'policies' ? 'policies' : open === k ? 'panel' : undefined} onClick={() => setOpen(open === k ? undefined : k)}
+    <button key={k} aria-label={label} title={label} aria-expanded={open === k} aria-controls={open !== k ? undefined : k === 'policies' ? 'policies' : 'panel'} onClick={() => setOpen(open === k ? undefined : k)}
       style={{ ...ICON_BUTTON, background: open === k ? '#db6a41' : 'rgba(33, 29, 29, 0.85)' }}>{icon}</button>)
   // On a desktop the panel stays inside the map area, so the event panel never covers it.
   const panel = (open === 'info' || open === 'settings') && <div id="panel" role="region" aria-label={open === 'info' ? '專案說明與授權' : '顯示設定與模擬狀況'} style={phone ? undefined
@@ -197,15 +198,15 @@ export function App() {
       {phone
         ? <>
           <div style={{ position: 'absolute', left: box.x + 12, top: box.y + box.h - 52 }}>{icons}</div>
-          <div style={{ position: 'absolute', left: kind === 'landscape' ? box.w : 0, top: kind === 'portrait' ? box.h : 0, right: 0, bottom: 0, overflowY: 'auto', padding: '0 12px' }}>{panel || (open !== 'policies' && <Events now={s ? s.day * 1440 + s.minute : 0} />)}
-            {/* Kept mounted while hidden, so the settings survive closing the panel. */}
-            <div id="policies" hidden={open !== 'policies'}><Policies /></div></div>
+          <div style={{ position: 'absolute', left: kind === 'landscape' ? box.w : 0, top: kind === 'portrait' ? box.h : 0, right: 0, bottom: 0, overflowY: 'auto', padding: '0 12px' }}>{panel || (open === 'policies'
+            ? <div id="policies" role="region" aria-label="政策"><Policies {...policies} /></div>
+            : <Events now={s ? s.day * 1440 + s.minute : 0} />)}</div>
         </>
         : <div style={{ position: 'absolute', left: 16, bottom: 16, display: 'flex', flexDirection: 'column-reverse' }}>
           <div>{icons}</div>{panel}</div>}
       {!phone && <>
         <aside aria-label="事件" style={{ ...SIDE_PANEL, right: 2 * PANEL.gap + PANEL.policies, width: PANEL.events }}><Events now={s ? s.day * 1440 + s.minute : 0} /></aside>
-        <aside aria-label="政策" style={{ ...SIDE_PANEL, right: PANEL.gap, width: PANEL.policies }}><Policies /></aside>
+        <aside aria-label="政策" style={{ ...SIDE_PANEL, right: PANEL.gap, width: PANEL.policies }}><Policies {...policies} /></aside>
       </>}
     </div>
   )

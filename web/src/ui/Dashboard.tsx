@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useQuery, bool, fromBool, onSteps } from '../query.ts'
 
 // ponytail: placeholder events and policies for the layout only; nothing here reaches the simulation. Replace with the event model.
 // A wide event touches an area; a personal one follows one resident. A resident is 先生 or 小姐, or, for a person outside the binary,
@@ -25,15 +25,29 @@ const EVENTS: Event[] = [
 ]
 const KIND_COLOURS: Record<string, string> = { 交通: '#9ad0ff', 天氣: '#7ec8a5', 活動: '#ffd166', 公共: '#c9a7ff', 個人: '#f5f0e8' }
 
-type Policy = { label: string } & ({ type: 'toggle' } | { type: 'range'; min: number; max: number; step: number; unit: string; start: number })
+type Policy = { id: string; label: string } & ({ type: 'toggle' } | { type: 'range'; min: number; max: number; step: number; unit: string; start: number })
 // Grouped by the HEART idea of puma.taipei, as the user set.
 const POLICIES: [string, Policy[]][] = [
-  ['空間', [{ label: '公車專用道延伸', type: 'toggle' }, { label: '人行道拓寬', type: 'toggle' }]],
-  ['機會', [{ label: '彈性上班比例', type: 'range', min: 0, max: 50, step: 5, unit: '%', start: 10 }]],
-  ['陪伴', [{ label: '社區共餐據點', type: 'toggle' }]],
-  ['韌性', [{ label: '捷運尖峰班距', type: 'range', min: 2, max: 8, step: 0.5, unit: ' 分', start: 4 }, { label: '大雨時停班停課', type: 'toggle' }]],
-  ['時間', [{ label: '錯峰上班（提早）', type: 'range', min: 0, max: 60, step: 15, unit: ' 分', start: 0 }]],
+  ['空間', [{ id: 'bus-lane', label: '公車專用道延伸', type: 'toggle' }, { id: 'sidewalk', label: '人行道拓寬', type: 'toggle' }]],
+  ['機會', [{ id: 'flex', label: '彈性上班比例', type: 'range', min: 0, max: 50, step: 5, unit: '%', start: 10 }]],
+  ['陪伴', [{ id: 'meals', label: '社區共餐據點', type: 'toggle' }]],
+  ['韌性', [{ id: 'headway', label: '捷運尖峰班距', type: 'range', min: 2, max: 8, step: 0.5, unit: ' 分', start: 4 }, { id: 'rain-off', label: '大雨時停班停課', type: 'toggle' }]],
+  ['時間', [{ id: 'stagger', label: '錯峰上班（提早）', type: 'range', min: 0, max: 60, step: 15, unit: ' 分', start: 0 }]],
 ]
+const ALL_POLICIES = POLICIES.flatMap(([, ps]) => ps)
+
+export type PolicyValues = { values: Map<string, number>; set: (id: string, value: number) => void }
+/** Policies are the scenario, so each one is a key in the query string: a link reproduces it. */
+export function usePolicies(): PolicyValues {
+  // One hook per policy, always the same list in the same order, as the rules of hooks require.
+  const settings = ALL_POLICIES.map(p => p.type === 'toggle'
+    ? useQuery<number>(p.id, 0, s => { const b = bool(s); return b === undefined ? undefined : b ? 1 : 0 }, v => fromBool(v === 1))
+    : useQuery(p.id, p.start, onSteps(p.min, p.max, p.step)))
+  return {
+    values: new Map(ALL_POLICIES.map((p, i) => [p.id, settings[i][0]])),
+    set: (id, value) => settings[ALL_POLICIES.findIndex(p => p.id === id)][1](value),
+  }
+}
 
 const hhmm = (m: number) => `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`
 const H2 = { fontSize: 14, color: '#aaa', margin: '12px 0 4px' }
@@ -66,9 +80,7 @@ export function Events({ now }: { now: number }) {
   </>
 }
 
-export function Policies() {
-  const [values, setValues] = useState(() => new Map(POLICIES.flatMap(([, ps]) => ps.map(p => [p.label, p.type === 'range' ? p.start : 0]))))
-  const set = (label: string, v: number) => setValues(m => new Map(m).set(label, v))
+export function Policies({ values, set }: PolicyValues) {
   return <>
     <h2 style={H2}>政策</h2>
     <p style={NOTE}>示意資料，調整後不會改變模擬。</p>
@@ -76,10 +88,10 @@ export function Policies() {
       <legend style={{ fontSize: 13, color: '#db6a41', padding: 0 }}>{group}</legend>
       {ps.map(p => p.type === 'toggle'
         ? <label key={p.label} style={{ display: 'block', fontSize: 14, margin: '4px 0' }}>
-          <input type="checkbox" checked={values.get(p.label) === 1} onChange={e => set(p.label, e.target.checked ? 1 : 0)} />{p.label}</label>
+          <input type="checkbox" checked={values.get(p.id) === 1} onChange={e => set(p.id, e.target.checked ? 1 : 0)} />{p.label}</label>
         : <label key={p.label} style={{ display: 'block', fontSize: 14, margin: '4px 0' }}>{p.label}
-          <span style={{ float: 'right', fontVariantNumeric: 'tabular-nums' }}>{values.get(p.label)}{p.unit}</span>
-          <input type="range" min={p.min} max={p.max} step={p.step} value={values.get(p.label)} onChange={e => set(p.label, Number(e.target.value))}
+          <span style={{ float: 'right', fontVariantNumeric: 'tabular-nums' }}>{values.get(p.id)}{p.unit}</span>
+          <input type="range" min={p.min} max={p.max} step={p.step} value={values.get(p.id)} onChange={e => set(p.id, Number(e.target.value))}
             style={{ display: 'block', width: '100%', accentColor: '#db6a41' }} /></label>)}
     </fieldset>)}
   </>

@@ -38,7 +38,7 @@ The user set this rule for the repository on 2026-10-24. It is not a "zero comme
 
    - Show the user a layout draft before building it.
 2. **Publish to gh-pages** (the target for now). `pnpm build` runs `pnpm routes` first, so the published site has the precomputed road paths. After the first publish, check that GitHub Pages sends `road-routes.bin` gzipped (`curl -sI -H 'Accept-Encoding: gzip' <url>/road-routes.bin`): it is 4.6 MB raw and 0.8 MB gzipped. Not checked yet.
-3. **Personal settings** (people per agent, dot density): to be discussed with the user, and kept apart from the policy settings. A trial of 1 agent = 100 people is on the branch `feat/scale-100` (not merged). It helped an old Intel Mac, but it made the villages too coarse: the median village has about 42 agents at 1/100.
+3. **Personal settings** (people per agent, dot density): to be discussed with the user, and kept apart from the policy settings. Since 2026-10-24 the display settings are in local storage (`useStored` in `web/src/query.ts`) and the policy settings are in the query string (`usePolicies` in `web/src/ui/Dashboard.tsx`), as the user set; a new personal setting goes with the display settings. A trial of 1 agent = 100 people is on the branch `feat/scale-100` (not merged). It helped an old Intel Mac, but it made the villages too coarse: the median village has about 42 agents at 1/100.
 4. **Later ideas, not started:** events (incidents that change an agent's plan), policy settings (the user grouped them by the HEART idea of puma.taipei: space, opportunity, company, resilience, time), and build scripts for the data files that came from one-off steps.
 5. **Small items:**
    - A quick 區/里 switch shows NaN in the district labels for a moment.
