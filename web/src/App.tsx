@@ -53,6 +53,9 @@ export function App() {
   const [cal, setCal] = useState<Calendar>()
   // Day 0 of the run is the day the page opens, in Taiwan.
   const startDay = useMemo(() => cal && indexOf(cal, todayInTaipei()), [cal])
+  // A switch of level starts a new model, on the day that the clock shows, so the date goes on.
+  const [dayOffset, setDayOffset] = useState(0)
+  const runStart = startDay === undefined ? undefined : startDay + dayOffset
   const [nodes, setNodes] = useState<string[]>([])
   const [trips, setTrips] = useState<Trips>()
   const tripsRef = useRef<Trips>()
@@ -83,6 +86,7 @@ export function App() {
   const [show, setShow] = useStored('layers', new Set(LAYERS.map(l => l[0]).filter(k => k !== 'highway')),
     setOf(LAYERS.map(l => l[0])), v => [...v].join(','))
   const worker = useRef<Worker>()
+  const started = useRef(0), shown = useRef(0) // the latest start posted, and the start of the frames on the page
   const last = useRef({ minute: 0, at: 0, speed: 1 }) // minute since 00:00 of day 0
   const toggle = (k: string) => setShow(s => { const n = new Set(s); n.has(k) ? n.delete(k) : n.add(k); return n })
   const post = (m: ToWorker) => worker.current?.postMessage(m)
@@ -94,11 +98,16 @@ export function App() {
     getJson('transit.json').then(setTransit).catch(err => setLoadError(String(err)))
     const w = new Worker(new URL('./sim/worker.ts', import.meta.url), { type: 'module' })
     w.onmessage = (e: MessageEvent<FromWorker | WorkerError>) => {
-      if ('error' in e.data) { setRunError(e.data.error); return }
+      if ('error' in e.data) { if (e.data.start === started.current) setRunError(e.data.error); return }
       const m = e.data
+      // Frames of an earlier run can still be on their way after a start (also the first frame of a run that a quick
+      // second switch replaced); their day and nodes would be read with the new start and level.
+      if (m.start !== undefined) { if (m.start !== started.current) return; shown.current = m.start }
+      else if (shown.current !== started.current) return
       if (m.nodes) setNodes(m.nodes)
       if (m.homes) homes.current = m.homes
-      if (m.coords) { tracks.current = []; history.current = []; unplaced.current = []; personal.current = [] }
+      if (m.coords) { history.current = []; personal.current = [] }
+      if (m.trips) { tracks.current = []; unplaced.current = [] }
       if (m.events?.length) personal.current = [...personal.current, ...m.events].slice(-KEEP_EVENTS)
       history.current = record(history.current, { t: m.day * 1440 + m.minute, counts: m.counts }, KEEP)
       if (m.trips) { tripsRef.current = m.trips; setTrips(m.trips) }
@@ -116,10 +125,12 @@ export function App() {
     worker.current = w
     return () => w.terminate()
   }, [])
+  // Declared before the start, so the first start draws with the stored density.
+  useEffect(() => post({ type: 'sample', every }), [every])
   useEffect(() => {
-    if (startDay === undefined) return
-    setS(undefined); setRunError(undefined); post({ type: 'init', perAgent: PER_AGENT, seed: 42, level, every, startDay })
-  }, [level, every, startDay])
+    if (runStart === undefined) return
+    setS(undefined); setRunError(undefined); post({ type: 'init', perAgent: PER_AGENT, seed: 42, level, startDay: runStart, start: ++started.current })
+  }, [level, runStart])
   useEffect(() => { last.current.speed = speed; post({ type: 'speed', hoursPerSec: speed }) }, [speed])
 
   const projection = useMemo(() => towns && projectionFor(towns), [towns])
@@ -147,8 +158,8 @@ export function App() {
   const taipei = useMemo(() => projection && taipeiIn(towns, projection), [projection])
   const { kind, box, fit, view } = useMemo(() => layoutFor(size.w, size.h, taipei), [size, taipei]), phone = kind !== 'desktop', titleSize = phone ? 20 : 28
   const road = s ? Array.from(s.road) : []
-  const date = cal && startDay !== undefined ? dateText(cal, startDay + (s?.day ?? 0)) : undefined
-  const dayLabel = useMemo(() => (day: number) => (cal && startDay !== undefined ? dateText(cal, startDay + day).roc : ''), [cal, startDay])
+  const date = cal && runStart !== undefined ? dateText(cal, runStart + (s?.day ?? 0)) : undefined
+  const dayLabel = useMemo(() => (day: number) => (cal && runStart !== undefined ? dateText(cal, runStart + day).roc : ''), [cal, runStart])
   // The worker posts about 30 times a second, and at any speed above a pause the simulated minute changes on each post.
   // The list changes only when the clock passes the time of its next event, a new event comes, or a new day starts,
   // so it is built again then and not on every post.
@@ -157,9 +168,9 @@ export function App() {
   // It is state set after the commit, not a ref set in render: a render that React drops must not move it.
   const [nextDue, setNextDue] = useState(Infinity), passed = nowMinute >= nextDue ? nextDue : -1
   const list = useMemo(() => {
-    const events = cal && startDay !== undefined && s ? withPublic(personal.current, cal, startDay, nowMinute, MAX_EVENTS) : personal.current
+    const events = cal && runStart !== undefined && s ? withPublic(personal.current, cal, runStart, nowMinute, MAX_EVENTS) : personal.current
     return { now: nowMinute, events, next: nextAfter(events, nowMinute) }
-  }, [cal, startDay, newest, !s, s?.day, passed])
+  }, [cal, runStart, newest, !s, s?.day, passed])
   useEffect(() => setNextDue(list.next), [list.next])
   const placeOf = useMemo(() => {
     const byCode = new Map<string, { town: string; village: string }>()
@@ -173,8 +184,9 @@ export function App() {
   const settings = <>
     <h2 style={H2}>顯示</h2>
     <p>{SPEEDS.map(v => <button key={v} onClick={() => setSpeed(v)} style={{ marginRight: 4, fontWeight: v === speed ? 'bold' : 'normal' }}>{v === 0 ? '暫停' : `${v}x`}</button>)}
-      <span style={{ marginLeft: 12 }}>{(['district', 'village'] as Level[]).map(l => <button key={l} onClick={() => setLevel(l)}
-        style={{ marginRight: 4, fontWeight: l === level ? 'bold' : 'normal' }}>{l === 'district' ? '區' : '里'}</button>)}</span></p>
+      <span style={{ marginLeft: 12 }}>{(['district', 'village'] as Level[]).map(l => <button key={l} onClick={() => { if (l !== level) { setDayOffset(o => o + (s?.day ?? 0)); setS(undefined); setLevel(l) } }}
+        style={{ marginRight: 4, fontWeight: l === level ? 'bold' : 'normal' }}>{l === 'district' ? '區' : '里'}</button>)}</span>
+      <br /><small>切換區、里會從當天 00:00 重新模擬。</small></p>
     <p><label><input type="checkbox" checked={dots} onChange={() => setDots(!dots)} />路上的人</label>，1 點 = {every * PER_AGENT} 人：
       {EVERY.map(v => <button key={v} onClick={() => setDot(v * PER_AGENT)} style={{ marginLeft: 4, fontWeight: v === every ? 'bold' : 'normal' }}>{v * PER_AGENT}</button>)}
       <label style={{ marginLeft: 8 }}><input type="checkbox" checked={byMode} onChange={() => setByMode(!byMode)} />依交通方式上色</label></p>
@@ -233,7 +245,7 @@ export function App() {
       </header>
       {/* A phone's map is too narrow for the clock between the title and the edge, so it moves to the right. */}
       <div style={{ position: 'absolute', top: 16, left: fit.x + (phone ? TITLE_ROOM : 16), width: fit.w - (phone ? TITLE_ROOM + 16 : 32), textAlign: phone ? 'right' : 'center', color: '#fff', pointerEvents: 'none', fontVariantNumeric: 'tabular-nums' }}>
-        <p style={{ margin: 0, fontSize: phone ? 16 : 24 }}>{date?.roc} {hhmm(s?.minute ?? 0)}</p>
+        <p style={{ margin: 0, fontSize: phone ? 16 : 24 }}>{date?.roc}{s && ` ${hhmm(s.minute)}`}</p>
         <p style={{ margin: 0, fontSize: phone ? 12 : 14, color: '#ccc' }}>{date && [date.lunar, date.term].filter(Boolean).join('　')}
           {date?.holiday && <span style={{ color: '#db6a41' }}>　{date.holiday}</span>}
           {/* Blue: commemorated, not a day off; orange: a day off. */}
