@@ -31,6 +31,7 @@ The user set this rule for the repository on 2026-10-24. It is not a "zero comme
    - Events that change plans (accidents, 請假, 加班): one function moves an agent to a new bucket; an agent must never be in two buckets. A bad event gets a colour of its own, and every one of them shows in the stream.
    - The voting trip on election day: a short trip to a polling place in the voter's own 里, between 08:00 and 16:00; some people do not vote (find the turnout of 臺北市 and 新北市 in the 中選會 database first).
    - Weekly trips across counties: people who leave on Friday evening or before a long weekend, and come back on Sunday evening or early on Monday morning. Check the 台鐵 and 高鐵 station counts first.
+   - The user (2026-10-24): what moves people is the boundary between days off and workdays, more than the kind of a single day. Some people also take leave on the workdays next to a long weekend to make it longer. Model the trips at those boundaries (the evening before the first day off, the morning after the last), and the leave days around a long weekend.
    - Who comes or leaves by 高鐵 or plane, and flights at 松山機場 from a real timetable (TDX); invent no flight numbers or times.
    - Each kind of event can carry a short explanation with its source and a link to government help, as the game 1in8b does. Check every link.
    - The city greetings come from a larger pool drawn at random, so that not every day shows the same ones.
