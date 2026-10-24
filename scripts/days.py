@@ -1,7 +1,7 @@
 """One entry per day from 2026-01-01 to 2034-12-31: the kind of day, the holiday, the lunar date and the solar term.
 
 Usage:
-  python3 scripts/calendar.py OFFICE_115 OFFICE_116 LUNAR_CSV TERMS_CSV OUT_JSON
+  python3 scripts/days.py OFFICE_115 OFFICE_116 LUNAR_CSV TERMS_CSV OUT_JSON
 
   OFFICE_115, OFFICE_116  data.gov.tw 14718 (中華民國政府行政機關辦公日曆表), the files for 2026 and 2027
   LUNAR_CSV   中央氣象署 A-A0087-001 (國農曆日期對照, data.gov.tw 157677), 2022 to 2050:
@@ -136,7 +136,7 @@ def main(office115, office116, lunar_csv, terms_csv, out):
         kind = 0 if not is_off else 1 if d.weekday() == 5 else 2
         table.append([kind, *lunar[d], terms.get(d, ""), name, observances(d, lunar, terms)])
     json.dump({"start": START.isoformat(), "kinds": ["workday", "saturday", "holiday"], "days": table},
-              open(out, "w"), ensure_ascii=False, separators=(",", ":"))
+              open(out, "w", encoding="utf-8"), ensure_ascii=False, separators=(",", ":"))
 
 if __name__ == "__main__":
     main(*sys.argv[1:])

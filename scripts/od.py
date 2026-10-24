@@ -67,7 +67,7 @@ def kinds_of(office_csv):
     return kinds
 
 def main(od_csv, exits_csv, towns_topo, office_csv, out):
-    station, districts = districts_of(exits_csv, json.load(open(towns_topo)))
+    station, districts = districts_of(exits_csv, json.load(open(towns_topo, encoding="utf-8")))
     lookup = lambda s: station.get(s.lstrip(PREFIXES).removesuffix("站"))
     kind_of = kinds_of(office_csv)
     G, ix = len(districts), {d: i for i, d in enumerate(districts)}
@@ -85,7 +85,7 @@ def main(od_csv, exits_csv, towns_topo, office_csv, out):
     result = {"districts": districts}
     for k, s in sums.items():
         result[k] = [[[round(v / len(days[k])) for v in row] for row in hour] for hour in s]
-    json.dump(result, open(out, "w"), ensure_ascii=False, separators=(",", ":"))
+    json.dump(result, open(out, "w", encoding="utf-8"), ensure_ascii=False, separators=(",", ":"))
     print({k: len(v) for k, v in days.items()}, file=sys.stderr)
 
 if __name__ == "__main__":

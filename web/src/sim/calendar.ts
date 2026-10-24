@@ -1,5 +1,5 @@
 /**
- * calendar.json from scripts/calendar.py: one entry per day from `start`, [kind of day, lunar month (below 0: leap), lunar day,
+ * calendar.json from scripts/days.py: one entry per day from `start`, [kind of day, lunar month (below 0: leap), lunar day,
  * solar term that starts that day, holiday (a day off), observances (commemorative days and festivals that are not days off)].
  */
 export type Calendar = { start: string; kinds: string[]; days: [number, number, number, string, string, string][] }
