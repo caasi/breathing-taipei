@@ -30,9 +30,19 @@ function useSetting<T>(store: Store, key: string, fallback: T, parse: (s: string
 /** A policy setting: it starts from ?key= in the URL and writes itself back, so a link reproduces the scenario. */
 export const useQuery = <T>(key: string, fallback: T, parse: (s: string) => T | undefined, format: (v: T) => string = String) =>
   useSetting(URL_STORE, key, fallback, parse, format)
-/** A display setting: it belongs to this viewer and device, so it stays in this browser and not in a shared link. */
-export const useStored = <T>(key: string, fallback: T, parse: (s: string) => T | undefined, format: (v: T) => string = String) =>
-  useSetting(LOCAL_STORE, key, fallback, parse, format)
+/**
+ * A display setting: it belongs to this viewer and device, so it stays in this browser and not in a shared link.
+ * An old link can still carry the key (display settings were in the URL before 2026-10-24); it is removed, unread.
+ */
+export function useStored<T>(key: string, fallback: T, parse: (s: string) => T | undefined, format: (v: T) => string = String) {
+  useEffect(() => {
+    const q = new URLSearchParams(location.search)
+    if (!q.has(key)) return
+    q.delete(key)
+    history.replaceState(null, '', `${location.pathname}${q.size ? `?${q}` : ''}${location.hash}`)
+  }, [key])
+  return useSetting(LOCAL_STORE, key, fallback, parse, format)
+}
 
 export const oneOf = <T extends string | number>(options: readonly T[]) => (s: string) =>
   options.find(o => String(o) === s)
