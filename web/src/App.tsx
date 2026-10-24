@@ -16,6 +16,18 @@ const PER_AGENT = 10
 // The English subtitle at this share of the title size is a little narrower than 台北鼓動; the user chose it by eye.
 const SUBTITLE_SCALE = 0.46
 const WINDOWS = [15, 30, 60, KEEP] // simulated minutes the change rate can look back; history keeps the longest
+// A node is a village code (台北市 is county 63000) or a district name.
+const inTaipei = (node: string) => node.startsWith('63000') || node.startsWith('台北市')
+const H2 = { fontSize: 14, color: '#aaa', margin: '12px 0 4px' }
+const ALERT = { position: 'absolute', top: 72, left: 16, right: 16, margin: 0, color: '#ff8b6b' } as const
+const ICON_BUTTON = { width: 40, height: 40, marginRight: 8, padding: 8, border: 0, borderRadius: 20, color: '#fff', cursor: 'pointer' }
+const InfoIcon = () => <svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true">
+  <circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" strokeWidth="2" />
+  <path d="M12 11v6" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" /><circle cx="12" cy="7.5" r="1.5" fill="currentColor" /></svg>
+// The teeth are the dashes of one thick stroke: 8 dashes on a circle of length 2πr.
+const GearIcon = () => <svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true">
+  <circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" strokeWidth="4" strokeDasharray={`${Math.PI * 9 / 8} ${Math.PI * 9 / 8}`} />
+  <circle cx="12" cy="12" r="5.5" fill="none" stroke="currentColor" strokeWidth="3" /></svg>
 const hhmm = (m: number) => `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(Math.floor(m % 60)).padStart(2, '0')}`
 
 export function App() {
@@ -44,6 +56,7 @@ export function App() {
   const [fps, setFps] = useState(0)
   // A file the page loads once stays failed until reload; a run error belongs to the current run.
   const [loadError, setLoadError] = useState<string>()
+  const [open, setOpen] = useState<'info' | 'settings'>()
   const [runError, setRunError] = useState<string>()
   // Highways are for orientation only and compete with the area colours, so they start hidden.
   const [show, setShow] = useQuery('layers', new Set(LAYERS.map(l => l[0]).filter(k => k !== 'highway')),
@@ -109,6 +122,37 @@ export function App() {
   const taipei = useMemo(() => projection && taipeiIn(towns, projection), [projection])
   const { kind, box, fit, view } = useMemo(() => layoutFor(size.w, size.h, taipei), [size, taipei]), phone = kind !== 'desktop', titleSize = phone ? 20 : 28
   const road = s ? Array.from(s.road) : []
+  const people = (pick: (node: string) => boolean) => s ? (nodes.reduce((sum, n, i) => pick(n) ? sum + s.counts[i] : sum, 0) * PER_AGENT).toLocaleString() : ''
+  const settings = <>
+    <h2 style={H2}>顯示</h2>
+    <p>{SPEEDS.map(v => <button key={v} onClick={() => setSpeed(v)} style={{ marginRight: 4, fontWeight: v === speed ? 'bold' : 'normal' }}>{v === 0 ? '暫停' : `${v}x`}</button>)}
+      <span style={{ marginLeft: 12 }}>{(['district', 'village'] as Level[]).map(l => <button key={l} onClick={() => setLevel(l)}
+        style={{ marginRight: 4, fontWeight: l === level ? 'bold' : 'normal' }}>{l === 'district' ? '區' : '里'}</button>)}</span></p>
+    <p><label><input type="checkbox" checked={dots} onChange={() => setDots(!dots)} />路上的人</label>，1 點 = {every * PER_AGENT} 人：
+      {EVERY.map(v => <button key={v} onClick={() => setDot(v * PER_AGENT)} style={{ marginLeft: 4, fontWeight: v === every ? 'bold' : 'normal' }}>{v * PER_AGENT}</button>)}
+      <label style={{ marginLeft: 8 }}><input type="checkbox" checked={byMode} onChange={() => setByMode(!byMode)} />依交通方式上色</label></p>
+    <p>顏色：{(['density', 'rate'] as const).map(c => <button key={c} onClick={() => setColourBy(c)}
+      style={{ marginRight: 4, fontWeight: c === colourBy ? 'bold' : 'normal' }}>{c === 'density' ? '人口密度' : '人口變化率'}</button>)}
+      {colourBy === 'rate' && <span style={{ marginLeft: 8 }}>變化區間：{WINDOWS.map(v => <button key={v} onClick={() => setRateWindow(v)}
+        style={{ marginRight: 4, fontWeight: v === rateWindow ? 'bold' : 'normal' }}>{v} 分</button>)}</span>}</p>
+    <p>{LAYERS.map(([k, label]) => <label key={k} style={{ marginRight: 12 }}><input type="checkbox" checked={show.has(k)} onChange={() => toggle(k)} />{label}</label>)}</p>
+    <h2 style={H2}>模擬</h2>
+    <p>台北市 {people(inTaipei)} 人，新北市 {people(n => !inTaipei(n))} 人，路上 {(road.reduce((a, b) => a + b, 0) * PER_AGENT).toLocaleString()} 人</p>
+    <p style={{ fontSize: 13 }}>{MODES.map((m, k) => <span key={m} style={{ marginRight: 10 }}>
+      <span style={{ color: MODE_COLOURS[k] }}>●</span> {m} {((road[k] ?? 0) * PER_AGENT).toLocaleString()}</span>)}</p>
+    {trips && <p>{trips.home.length} 點{routed < trips.home.length ? `，路網計算中 ${Math.floor(100 * routed / trips.home.length)}%` : ''}</p>}
+    <p>模擬每幀 {s?.ms.toFixed(1)} ms，畫面 {fps.toFixed(0)} fps</p>
+  </>
+  const info = <>
+    <p>台北鼓動模擬台北市與新北市的一個平日：早上人們湧入各里，傍晚離開。這是個人的業餘專案，起於 2026-10-24 的市政 debug 松，但沒有報名參賽。</p>
+    <p style={{ fontSize: 12, color: '#aaa' }}>人口密度：現在每平方公里的人數（對數，300 到 100,000）。人口變化率：最近 {rateWindow} 分鐘、每小時的人數變化除以居民數，橘色是流入，藍綠色是流出，滿格是 ±30%。區名下是現在的人數。新北調淡。點：路上的人。捷運沿捷運線，公車、機車、汽車沿公車路線，步行和自行車走直線。1x = 每秒 1 小時。</p>
+    <p style={{ fontSize: 12, color: '#aaa' }}>
+      {/* ODbL and the Open Government Data License both ask for credit where people see the map. */}
+      地圖資料：© <a href="https://www.openstreetmap.org/copyright" style={{ color: '#ccc' }}>OpenStreetMap contributors</a>（ODbL）；
+      臺北捷運、臺北市政府、內政部等機關的政府開放資料（政府資料開放授權條款）；
+      邊界來自 <a href={`${import.meta.env.BASE_URL}licenses/taiwan-atlas-MIT.txt`} style={{ color: '#ccc' }}>taiwan-atlas</a>（MIT，© 2020 Daniel Kao）。
+      完整來源見 <a href="https://github.com/caasi/breathing-taipei/blob/main/DATA.md" style={{ color: '#ccc' }}>DATA.md</a>。</p>
+  </>
   return (
     <div style={{ position: 'fixed', inset: 0, overflow: 'hidden', background: '#211d1d' }}>
       <div style={{ position: 'absolute', left: box.x, top: box.y, width: box.w, height: box.h, overflow: 'hidden' }}>
@@ -126,35 +170,18 @@ export function App() {
       <p style={{ position: 'absolute', top: 16, left: fit.x + 16, width: fit.w - 32, margin: 0, textAlign: phone ? 'right' : 'center', fontSize: phone ? 18 : 24, color: '#fff', pointerEvents: 'none', fontVariantNumeric: 'tabular-nums' }}>
         第 {s?.day ?? 0} 天 {hhmm(s?.minute ?? 0)}</p>
       </div>
-      {/* On a desktop the controls float over the map; on a phone they fill the rest of the page, beside or below it. */}
-      <div style={kind === 'desktop'
-        ? { position: 'absolute', left: 16, bottom: 16, maxWidth: 560, maxHeight: 'calc(100% - 120px)', overflowY: 'auto', padding: '4px 12px', background: 'rgba(33, 29, 29, 0.85)', borderRadius: 4 }
-        : { position: 'absolute', left: kind === 'landscape' ? box.w : 0, top: kind === 'portrait' ? box.h : 0, right: 0, bottom: 0, overflowY: 'auto', padding: '4px 12px' }}>
-      <p>雙北 {s ? ((Array.from(s.counts).reduce((a, b) => a + b, 0) + road.reduce((a, b) => a + b, 0)) * PER_AGENT).toLocaleString() : ''} 人</p>
-      {loadError && <p role="alert" style={{ color: '#ff8b6b' }}>無法載入地圖資料：{loadError}</p>}
-      {runError && <p role="alert" style={{ color: '#ff8b6b' }}>模擬無法執行：{runError}</p>}
-      <p>模擬每幀 {s?.ms.toFixed(1)} ms，畫面 {fps.toFixed(0)} fps</p>
-      <p>{SPEEDS.map(v => <button key={v} onClick={() => setSpeed(v)} style={{ marginRight: 4, fontWeight: v === speed ? 'bold' : 'normal' }}>{v === 0 ? '暫停' : `${v}x`}</button>)}
-        <span style={{ marginLeft: 12 }}>{(['district', 'village'] as Level[]).map(l => <button key={l} onClick={() => setLevel(l)}
-          style={{ marginRight: 4, fontWeight: l === level ? 'bold' : 'normal' }}>{l === 'district' ? '區' : '里'}</button>)}</span></p>
-      <p><label><input type="checkbox" checked={dots} onChange={() => setDots(!dots)} />路上的人</label>，1 點 = {every * PER_AGENT} 人：
-        {EVERY.map(v => <button key={v} onClick={() => setDot(v * PER_AGENT)} style={{ marginLeft: 4, fontWeight: v === every ? 'bold' : 'normal' }}>{v * PER_AGENT}</button>)}
-        <label style={{ marginLeft: 8 }}><input type="checkbox" checked={byMode} onChange={() => setByMode(!byMode)} />依交通方式上色</label>
-        {trips && <span style={{ marginLeft: 8, color: '#aaa' }}>（{trips.home.length} 點{routed < trips.home.length ? `，路網計算中 ${Math.floor(100 * routed / trips.home.length)}%` : ''}）</span>}</p>
-      <p style={{ fontSize: 13 }}>{MODES.map((m, k) => <span key={m} style={{ marginRight: 10 }}>
-        <span style={{ color: MODE_COLOURS[k] }}>●</span> {m} {((road[k] ?? 0) * PER_AGENT).toLocaleString()}</span>)}</p>
-      <p>顏色：{(['density', 'rate'] as const).map(c => <button key={c} onClick={() => setColourBy(c)}
-        style={{ marginRight: 4, fontWeight: c === colourBy ? 'bold' : 'normal' }}>{c === 'density' ? '人口密度' : '人口變化率'}</button>)}
-        {colourBy === 'rate' && <span style={{ marginLeft: 8 }}>變化區間：{WINDOWS.map(v => <button key={v} onClick={() => setRateWindow(v)}
-          style={{ marginRight: 4, fontWeight: v === rateWindow ? 'bold' : 'normal' }}>{v} 分</button>)}</span>}</p>
-      <p>{LAYERS.map(([k, label]) => <label key={k} style={{ marginRight: 12 }}><input type="checkbox" checked={show.has(k)} onChange={() => toggle(k)} />{label}</label>)}</p>
-      <p style={{ fontSize: 12, color: '#aaa' }}>
-        {/* ODbL and the Open Government Data License both ask for credit where people see the map. */}
-        地圖資料：© <a href="https://www.openstreetmap.org/copyright" style={{ color: '#ccc' }}>OpenStreetMap contributors</a>（ODbL）；
-        臺北捷運、臺北市政府、內政部等機關的政府開放資料（政府資料開放授權條款）；
-        邊界來自 <a href={`${import.meta.env.BASE_URL}licenses/taiwan-atlas-MIT.txt`} style={{ color: '#ccc' }}>taiwan-atlas</a>（MIT，© 2020 Daniel Kao）。
-        完整來源見 <a href="https://github.com/caasi/breathing-taipei/blob/main/DATA.md" style={{ color: '#ccc' }}>DATA.md</a>。</p>
-      <p style={{ fontSize: 12, color: '#aaa' }}>人口密度：現在每平方公里的人數（對數，300 到 100,000）。人口變化率：最近 {rateWindow} 分鐘、每小時的人數變化除以居民數，橘色是流入，藍綠色是流出，滿格是 ±30%。區名下是現在的人數。新北調淡。點：路上的人。捷運沿捷運線，公車、機車、汽車沿公車路線，步行和自行車走直線。1x = 每秒 1 小時。</p>
+      {loadError && <p role="alert" style={ALERT}>無法載入地圖資料：{loadError}</p>}
+      {runError && <p role="alert" style={ALERT}>模擬無法執行：{runError}</p>}
+      {/* On a desktop the panel opens over the map, above the icons; on a phone it opens beside or below the map, never over it. */}
+      <div style={phone
+        ? { position: 'absolute', left: kind === 'landscape' ? box.w : 0, top: kind === 'portrait' ? box.h : 0, right: 0, bottom: 0, overflowY: 'auto', padding: 12 }
+        : { position: 'absolute', left: 16, bottom: 16, display: 'flex', flexDirection: 'column-reverse' }}>
+        <div>{([['info', '專案說明與授權', <InfoIcon />], ['settings', '顯示設定與模擬狀況', <GearIcon />]] as const).map(([k, label, icon]) =>
+          <button key={k} aria-label={label} title={label} aria-expanded={open === k} aria-controls="panel" onClick={() => setOpen(open === k ? undefined : k)}
+            style={{ ...ICON_BUTTON, background: open === k ? '#db6a41' : 'rgba(33, 29, 29, 0.85)' }}>{icon}</button>)}</div>
+        {open && <div id="panel" style={phone ? { marginTop: 8 }
+          : { width: 536, maxHeight: 'calc(100vh - 180px)', overflowY: 'auto', marginBottom: 8, padding: '4px 12px', background: 'rgba(33, 29, 29, 0.85)', borderRadius: 4 }}>
+          {open === 'info' ? info : settings}</div>}
       </div>
     </div>
   )
