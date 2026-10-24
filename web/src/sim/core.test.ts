@@ -110,6 +110,26 @@ describe('core properties', () => {
     expect(went.size).toBe(local.length)
   })
 
+  test('a commuter home after 00:00 still makes its choice for that day off', () => {
+    // Work ends only at 23:00 and the way home takes two hours, so every commuter is home after midnight.
+    const od = Array.from({ length: 24 }, (_, h) => [[0, h === 8 || h === 23 ? 3000 : 0], [h === 23 ? 3000 : 0, 0]])
+    const city: City = { od, group: [0, 1], homes: [1000, 0], to: [1, 1], perAgent: 10, modeOf: () => 0, minutes: () => 120,
+      off: { kindOf: d => (d === 1 ? 2 : 0), od: [od, od], out: [[1, 1], [1, 1]], away: [0, 0] } }
+    const w = init(city, 9), went = new Set<number>()
+    for (let t = 0; t < 2 * MINUTES_PER_DAY; t++, advance(w, 1))
+      for (const i of w.movers) if (w.dest[i] === PLAY && Math.floor(w.dep[i] / MINUTES_PER_DAY) === 1) went.add(i)
+    expect(went.size).toBe(w.movers.length)
+  })
+
+  test('a commuter whose work and day-off place are its home node can still be away', () => {
+    const od = Array.from({ length: 24 }, () => [[3000]])
+    const city: City = { od, group: [0], homes: [100], to: [1], perAgent: 10, modeOf: () => 0, minutes: () => 10,
+      off: { kindOf: () => 2, od: [od, od], out: [[0], [0]], away: [1, 1] } }
+    const w = init(city, 1), gone = new Set<number>()
+    for (let t = 0; t < MINUTES_PER_DAY; t++, advance(w, 1)) for (const i of w.movers) if (where(w, i) === AWAY) gone.add(i)
+    expect(gone.size).toBe(100)
+  })
+
   test('same seed gives the same run', () => {
     fc.assert(fc.property(cityArb, fc.integer(), fc.integer({ min: 0, max: 2 * MINUTES_PER_DAY }), (city, seed, m) => {
       const a = run(city, seed, m), b = run(city, seed, m)

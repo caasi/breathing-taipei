@@ -126,14 +126,13 @@ const plan = (w: World, i: number, after: number): number => {
       if (today !== (off?.kindOf(dayOf(dep)) ?? 0)) continue
       return trip(w, i, WORK, dep, k, w.mode[i], minuteOf(od, EVENING, group[k], group[h], w.rng(), w.rng()))
     }
-    // One choice per day off, made at its 00:00: a commuter home again during the day stays home until the next day.
-    if (after > day * MINUTES_PER_DAY) continue
+    // One choice per day off: a commuter that already went out on this day stays home until the next one.
+    if (w.dest[i] !== STAY && dayOf(w.dep[i]) === day) continue
     const r = w.rng(), away = off!.away[today - 1], p = w.play[i], dayOd = off!.od[today - 1]
     if (r >= away + (1 - away) * off!.out[today - 1][group[h]]) return stay(w, i, day)
     // ponytail: the hours of a day away follow the trips inside the home district; there is no data on trips out of the city.
     const gone = r < away, to = gone ? h : p
     const dep = firstAtOrAfter(after, minuteOf(dayOd, DAYTIME, group[h], group[to], w.rng(), w.rng()))
-    // The hour to go home comes after the hour it left, so an outing ends on its own day.
     const leave = minuteOf(dayOd, EVENING.filter(x => x > hourOf(dep)), group[to], group[h], w.rng(), w.rng())
     return trip(w, i, gone ? GONE : PLAY, dep, to, gone ? w.mode[i] : w.playMode[i], leave)
   }
@@ -158,6 +157,7 @@ export const init = (city: City, seed: number): World => {
 
   let n = 0
   for (let v = 0; v < homes.length; v++) n += homes[v]
+  const commuter = new Uint8Array(n)
   const w: World = {
     city, minute: 0, day: 0, rng: mulberry32(seed), movers: new Uint32Array(0), stayers: new Uint32Array(homes.length),
     home: new Uint16Array(n), work: new Uint16Array(n), kind: new Uint8Array(n), mode: new Uint8Array(n),
@@ -171,6 +171,7 @@ export const init = (city: City, seed: number): World => {
     w.work[i] = v
     w.play[i] = v
     if (w.rng() < share[g]) {
+      commuter[i] = 1
       const dg = pick(morning[g], w.rng())
       w.work[i] = members[dg][pick(weights[dg], w.rng())]
       w.mode[i] = city.modeOf(v, w.work[i], w.rng())
@@ -194,7 +195,8 @@ export const init = (city: City, seed: number): World => {
     }
   }
   const movers: number[] = []
-  w.home.forEach((h, i) => (h === w.work[i] && h === w.play[i] ? w.stayers[h]++ : movers.push(i)))
+  // With days off, every commuter on the OD moves: one whose work and day-off place are its home node can still be away.
+  w.home.forEach((h, i) => (h === w.work[i] && h === w.play[i] && !(city.off && commuter[i]) ? w.stayers[h]++ : movers.push(i)))
   w.movers = Uint32Array.from(movers)
   // Plan from 00:00 of day -1 and step forward to the plan that is under way at 00:00 of day 0,
   // so a night shift starts the run at work.
@@ -210,7 +212,7 @@ export const now = (w: World) => w.day * MINUTES_PER_DAY + w.minute
 
 /** Node index, ROAD while travelling, or AWAY outside Taipei and New Taipei, at a minute since 00:00 of day 0. */
 export const where = (w: World, i: number, minute = now(w)): number => {
-  if (minute < w.dep[i] || (w.home[i] === w.work[i] && w.home[i] === w.play[i])) return w.home[i]
+  if (minute < w.dep[i]) return w.home[i]
   if (minute < w.dep[i] + w.dur1[i]) return ROAD
   if (minute < w.ret[i]) return w.dest[i] === PLAY ? w.play[i] : w.dest[i] === GONE ? AWAY : w.work[i]
   if (minute < w.ret[i] + w.dur2[i]) return ROAD
