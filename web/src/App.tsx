@@ -203,7 +203,8 @@ export function App() {
         <p style={{ margin: 0, fontSize: phone ? 16 : 24 }}>{date?.roc} {hhmm(s?.minute ?? 0)}</p>
         <p style={{ margin: 0, fontSize: phone ? 12 : 14, color: '#ccc' }}>{date && [date.lunar, date.term].filter(Boolean).join('　')}
           {date?.holiday && <span style={{ color: '#db6a41' }}>　{date.holiday}</span>}
-          {date?.observances && <span style={{ color: '#8fb8de' }}>　{date.observances}（只紀念不放假）</span>}</p>
+          {/* Blue: commemorated, not a day off; orange: a day off. */}
+          {date?.observances && <span style={{ color: '#8fb8de' }}>　{date.observances}</span>}</p>
       </div>
       </div>
       {loadError && <p role="alert" style={{ ...ALERT, width: fit.w - 32 }}>無法載入地圖資料：{loadError}</p>}
