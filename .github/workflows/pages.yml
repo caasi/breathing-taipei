@@ -1,10 +1,13 @@
 # Builds the site and publishes it to GitHub Pages on every push to main.
-# On another branch, `gh workflow run pages.yml --ref <branch>` builds and tests only: this is the check before a merge.
+# On a pull request into main, or on a branch with `gh workflow run pages.yml --ref <branch>`, it builds and tests only:
+# this is the check before a merge.
 # The Pages source of the repository must be "GitHub Actions" (Settings > Pages).
 name: Pages
 
 on:
   push:
+    branches: [main]
+  pull_request:
     branches: [main]
   workflow_dispatch:
 
@@ -14,9 +17,10 @@ permissions:
   id-token: write
 
 # One publish at a time. A deploy that has started runs to its end (as in GitHub's Pages starter workflow);
-# a newer push waits for it.
+# a newer push waits for it. Each ref has its own group: a group keeps only one pending run and cancels the
+# older one, so a run of a pull request must not share the group of main.
 concurrency:
-  group: pages
+  group: pages-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
