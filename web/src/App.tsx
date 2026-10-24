@@ -144,7 +144,7 @@ export function App() {
     <h2 style={H2}>模擬</h2>
     <div style={{ fontVariantNumeric: 'tabular-nums' }}>
     <p>台北市 {people(inTaipei)} 人，新北市 {people(n => !inTaipei(n))} 人，路上 {padded(road.reduce((a, b) => a + b, 0) * PER_AGENT, 6)} 人</p>
-    <p style={{ fontSize: 13 }}>{MODES.map((m, k) => <span key={m} style={{ marginRight: 10 }}>
+    <p style={{ fontSize: 13 }}>{MODES.map((m, k) => <span key={m} style={{ marginRight: 10, whiteSpace: 'nowrap' }}>
       <span style={{ color: MODE_COLOURS[k] }}>●</span> {m} {padded((road[k] ?? 0) * PER_AGENT, 6)}</span>)}</p>
     {trips && <p>{padded(trips.home.length, 6)} 點{routed < trips.home.length ? `，路網計算中 ${padded(Math.floor(100 * routed / trips.home.length), 2)}%` : ''}</p>}
     <p>模擬每幀 {padded(s?.ms ?? 0, 2, 1)} ms，畫面 {padded(fps, 3)} fps</p>
