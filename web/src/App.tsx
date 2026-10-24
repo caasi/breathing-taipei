@@ -19,6 +19,8 @@ const LAYERS: [string, string][] = [['mrt', '捷運'], ['lrt', '輕軌'], ['tra'
 const PER_AGENT = 10
 // Plans are made ahead of their departure, so the newest events are not all shown yet: keep more than the list shows.
 const KEEP_EVENTS = 3 * MAX_EVENTS
+// On a phone the clock sits right of the title, and a long holiday name wraps instead of running under it.
+const TITLE_ROOM = 116
 // The English subtitle at this share of the title size is a little narrower than 台北鼓動; the user chose it by eye.
 const SUBTITLE_SCALE = 0.46
 const WINDOWS = [15, 30, 60, KEEP] // simulated minutes the change rate can look back; history keeps the longest
@@ -51,7 +53,6 @@ export function App() {
   // Day 0 of the run is the day the page opens, in Taiwan.
   const startDay = useMemo(() => cal && indexOf(cal, todayInTaipei()), [cal])
   const [nodes, setNodes] = useState<string[]>([])
-  const [coords, setCoords] = useState<[number, number][]>([])
   const [trips, setTrips] = useState<Trips>()
   const tripsRef = useRef<Trips>()
   const [s, setS] = useState<FromWorker>()
@@ -94,7 +95,6 @@ export function App() {
       if ('error' in e.data) { setRunError(e.data.error); return }
       const m = e.data
       if (m.nodes) setNodes(m.nodes)
-      if (m.coords) setCoords(m.coords)
       if (m.homes) homes.current = m.homes
       if (m.coords) { tracks.current = []; history.current = []; unplaced.current = []; personal.current = [] }
       if (m.events?.length) personal.current = [...personal.current, ...m.events].slice(-KEEP_EVENTS)
@@ -183,7 +183,7 @@ export function App() {
     </div>
   </>
   const info = <>
-    <p>台北鼓動模擬台北市與新北市的一個平日：早上人們湧入各里，傍晚離開。這是個人的業餘專案，起於 2026-10-24 的市政 debug 松，但沒有報名參賽。</p>
+    <p>台北鼓動模擬台北市與新北市的日子，從你打開頁面的這一天起：平日早上人們湧入各里、傍晚離開，假日則出門走走或離開雙北。這是個人的業餘專案，起於 2026-10-24 的市政 debug 松，但沒有報名參賽。</p>
     <p style={{ fontSize: 12, color: '#aaa' }}>人口密度：現在每平方公里的人數（對數，300 到 100,000）。人口變化率：最近 {rateWindow} 分鐘、每小時的人數變化除以居民數，橘色是流入，藍綠色是流出，滿格是 ±30%。區名下是現在的人數。新北調淡。點：路上的人。捷運沿捷運線，公車、機車、汽車沿公車路線，步行和自行車走直線。1x = 每秒 1 小時。</p>
     <p style={{ fontSize: 12, color: '#aaa' }}>
       {/* ODbL and the Open Government Data License both ask for credit where people see the map. */}
@@ -215,7 +215,7 @@ export function App() {
           fontSize: titleSize * SUBTITLE_SCALE, fontVariantCaps: 'small-caps', letterSpacing: '0.05em', color: '#ccc' }}>Breathing Taipei</p>
       </header>
       {/* A phone's map is too narrow for the clock between the title and the edge, so it moves to the right. */}
-      <div style={{ position: 'absolute', top: 16, left: fit.x + 16, width: fit.w - 32, textAlign: phone ? 'right' : 'center', color: '#fff', pointerEvents: 'none', fontVariantNumeric: 'tabular-nums' }}>
+      <div style={{ position: 'absolute', top: 16, left: fit.x + (phone ? TITLE_ROOM : 16), width: fit.w - (phone ? TITLE_ROOM + 16 : 32), textAlign: phone ? 'right' : 'center', color: '#fff', pointerEvents: 'none', fontVariantNumeric: 'tabular-nums' }}>
         <p style={{ margin: 0, fontSize: phone ? 16 : 24 }}>{date?.roc} {hhmm(s?.minute ?? 0)}</p>
         <p style={{ margin: 0, fontSize: phone ? 12 : 14, color: '#ccc' }}>{date && [date.lunar, date.term].filter(Boolean).join('　')}
           {date?.holiday && <span style={{ color: '#db6a41' }}>　{date.holiday}</span>}
