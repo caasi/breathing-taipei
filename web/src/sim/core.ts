@@ -139,13 +139,15 @@ const plan = (w: World, i: number, after: number): number => {
     const leave = minuteOf(dayOd, EVENING.filter(x => x > hourOf(dep)), group[to], group[h], w.rng(), w.rng())
     const mode = gone ? w.mode[i] : w.playMode[i], end = (day + 1) * MINUTES_PER_DAY
     trip(w, i, gone ? GONE : PLAY, dep, to, mode, leave)
-    // Leave for home early enough to be in by 24:00, when the two legs leave room for it. An earlier hour can be a peak
-    // hour with a longer way home, so the way home is timed again for it; a few passes settle it.
-    for (let pass = 0; pass < 3 && w.ret[i] + w.dur2[i] > end; pass++) {
-      w.ret[i] = Math.max(dep + w.dur1[i], end - w.dur2[i])
-      w.dur2[i] = leg(w.city.minutes(to, h, mode, hourOf(w.ret[i])))
+    // Leave for home early enough to be in by 24:00, when the two legs leave room for it. An earlier hour can have a
+    // longer way home, so the way home is timed again at each move. The time to leave only moves earlier, so this ends;
+    // it stops at the arrival at the place, where the two legs alone pass midnight.
+    while (w.ret[i] + w.dur2[i] > end) {
+      const ret = Math.max(dep + w.dur1[i], end - w.dur2[i])
+      if (ret >= w.ret[i]) break
+      w.ret[i] = ret
+      w.dur2[i] = leg(w.city.minutes(to, h, mode, hourOf(ret)))
     }
-    w.ret[i] = Math.max(dep + w.dur1[i], Math.min(w.ret[i], end - w.dur2[i]))
     return w.ret[i] + w.dur2[i]
   }
 }

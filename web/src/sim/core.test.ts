@@ -164,6 +164,22 @@ describe('core properties', () => {
     }
   })
 
+  test('a way home that grows hour by hour still ends with the length of its final hour', () => {
+    // The case Codex built in review round 3: from 23:00 back to 19:00 the way home takes 120, 180, 240, 300, 360 minutes.
+    const od = Array.from({ length: 24 }, (_, h) => [[0, h === 10 ? 3000 : 0], [h === 23 ? 3000 : 0, 0]])
+    const home = [360, 300, 240, 180, 120] // hours 19 to 23
+    const minutes = (a: number, _b: number, _m: number, hour: number) => (a === 1 ? (hour >= 19 ? home[hour - 19] : 360) : 30)
+    const city: City = { od, group: [0, 1], homes: [200, 0], to: [1, 1], perAgent: 10, modeOf: () => 0, minutes,
+      off: { kindOf: () => 2, od: [od, od], out: [[1, 1], [1, 1]], away: [0, 0] } }
+    const w = init(city, 3), out = Array.from(w.movers).filter(i => w.dest[i] === PLAY)
+    expect(out.length).toBeGreaterThan(0)
+    for (const i of out) {
+      const hour = Math.floor((((w.ret[i] % 1440) + 1440) % 1440) / 60), day = Math.floor(w.dep[i] / 1440)
+      expect(w.dur2[i]).toBe(minutes(1, 0, 0, hour))
+      expect(w.ret[i] + w.dur2[i]).toBeLessThanOrEqual((day + 1) * 1440)
+    }
+  })
+
   test('same seed gives the same run', () => {
     fc.assert(fc.property(cityArb, fc.integer(), fc.integer({ min: 0, max: 2 * MINUTES_PER_DAY }), (city, seed, m) => {
       const a = run(city, seed, m), b = run(city, seed, m)
