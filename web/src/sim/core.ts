@@ -38,7 +38,7 @@ export type Kind = {
 
 export type World = {
   city: City
-  home: Uint16Array // node index; Uint8 overflowed at 457 village nodes
+  home: Uint16Array // node index
   work: Uint16Array
   kind: Uint8Array // 0: commuter on the OD, k: city.kinds[k - 1]
   mode: Uint8Array
@@ -60,8 +60,6 @@ export const ROAD = -1
 
 // ponytail: every day is a weekday; add weekend schedules when the data has them.
 const MAX_LEG = 600
-// A plan made at minute m ends before m + 24 h (dep) + 24 h (ret) + MAX_LEG (see plan), so in a ring of
-// three days a due minute never lands in the bucket of an earlier minute that is not processed yet.
 const RING = 3 * MINUTES_PER_DAY
 
 const MORNING = [5, 6, 7, 8, 9, 10, 11]
@@ -75,8 +73,7 @@ const minuteOf = (od: City['od'], hours: number[], o: number, d: number, r: numb
 const minuteFrom = (perHour: ArrayLike<number>, hours: number[], r: number, q: number) =>
   hours[pick(hours.map(h => perHour[h]), r)] * 60 + Math.floor(q * 60)
 
-// First minute at or after t with the given minute of the day.
-const next = (t: number, minuteOfDay: number) => t + (((minuteOfDay - t) % MINUTES_PER_DAY) + MINUTES_PER_DAY) % MINUTES_PER_DAY
+const firstAtOrAfter = (t: number, minuteOfDay: number) => t + (((minuteOfDay - t) % MINUTES_PER_DAY) + MINUTES_PER_DAY) % MINUTES_PER_DAY
 const hourOf = (t: number) => Math.floor((((t % MINUTES_PER_DAY) + MINUTES_PER_DAY) % MINUTES_PER_DAY) / 60)
 const leg = (m: number) => Math.min(MAX_LEG, Math.max(1, Math.round(m)))
 
@@ -85,11 +82,10 @@ const plan = (w: World, i: number, after: number) => {
   const { od, group, minutes } = w.city
   const h = w.home[i], k = w.work[i]
   const kind = w.kind[i] ? w.city.kinds![w.kind[i] - 1] : undefined
-  const dep = next(after, kind ? minuteFrom(kind.dep, HOURS, w.rng(), w.rng()) : minuteOf(od, MORNING, group[h], group[k], w.rng(), w.rng()))
+  const dep = firstAtOrAfter(after, kind ? minuteFrom(kind.dep, HOURS, w.rng(), w.rng()) : minuteOf(od, MORNING, group[h], group[k], w.rng(), w.rng()))
   const dur1 = leg(minutes(h, k, w.mode[i], hourOf(dep)))
   const leave = kind ? minuteFrom(kind.ret, HOURS, w.rng(), w.rng()) : minuteOf(od, EVENING, group[k], group[h], w.rng(), w.rng())
-  // Leave work at the first such time after leaving home, but not before arriving.
-  const ret = Math.max(next(dep, leave), dep + dur1)
+  const ret = Math.max(firstAtOrAfter(dep, leave), dep + dur1)
   const dur2 = leg(minutes(k, h, w.mode[i], hourOf(ret)))
   w.dep[i] = dep; w.dur1[i] = dur1; w.ret[i] = ret; w.dur2[i] = dur2
   return ret + dur2
@@ -105,7 +101,6 @@ export const init = (city: City, seed: number): World => {
     Array.from({ length: groups }, (_, b) => MORNING.reduce((s, h) => s + od[h][a][b], 0)))
   const residents = new Array(groups).fill(0)
   for (let v = 0; v < group.length; v++) residents[group[v]] += homes[v]
-  // Share of a group's agents that commute = its morning departures / its people, at most 1.
   const share = morning.map((row, g) =>
     residents[g] ? Math.min(1, row.reduce((a, b) => a + b, 0) / (residents[g] * perAgent)) : 0)
 
@@ -166,7 +161,8 @@ export const where = (w: World, i: number, minute = now(w)): number => {
 /**
  * Moves the clock forward. Agents get their next plan in the minute they are home again, minute by minute
  * in order, so any split of the same whole minutes gives the same plans. Fractional steps are not exact:
- * floating-point sums can stop just short of a minute and process its agents one step later. Home times spread over the day, so no frame plans everyone.
+ * floating-point sums can stop just short of a minute and process its agents one step later.
+ * Home times spread over the day, so no frame plans everyone.
  */
 export const advance = (w: World, minutes: number) => {
   w.minute += minutes
@@ -178,7 +174,6 @@ export const advance = (w: World, minutes: number) => {
   }
 }
 
-/** People per node, and the number on the road by mode. */
 export const counts = (w: World, modes: number) => {
   const c = Uint32Array.from(w.stayers)
   const road = new Uint32Array(modes)
