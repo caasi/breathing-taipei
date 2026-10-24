@@ -81,6 +81,14 @@ Note: The data.gov.tw entry for the Taipei shape file was not found. The license
 - After 2034-12-31 the table ends: a Saturday or a Sunday is a day off, there are no holidays, and the clock shows no lunar date.
 - The first simulated day is the day the page opens, in Taiwan (UTC+8).
 
+`web/src/sim/city.ts` and `web/src/sim/core.ts` use these guesses for days off (the user agreed on 2026-10-24):
+
+- The share of commuters away from Taipei and New Taipei for the day: 5% on a Saturday off, 8% on a Sunday or holiday (`AWAY`). The user said that many people go abroad or to another county; no source gives a share.
+- The share of commuters who go out on a day off is the district's trips on that kind of day over its workday trips, from the MRT data only.
+- On a day off, the trips that are not MRT trips keep the workday ratio to MRT trips for each pair of districts. Only the workday has telecom data.
+- Each commuter has one day-off place, drawn once from all trips of both kinds of day off.
+- The night-time groups (`SHIFTS`, `VISITS`) make the same trips on every day.
+
 ## Processing
 
 - `od2.json`: Built by `scripts/od.py` from source A, with the exit positions of source B, the district boundaries of source F, and the days off of source K. Each station goes to the district that holds the mean position of its exits. Each day of the month is a workday (20 days in September 2026), a Saturday off (4 days), or a Sunday or holiday (6 days: the Sundays, 中秋 on 9/25 and 教師節 on 9/28). Trips are added up per district and divided by the number of days of that kind. Until 2026-10-24 the file had only the workday, and it counted 9/25 and 9/28 as workdays (the mean of all 22 Monday-to-Friday days).
