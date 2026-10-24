@@ -39,7 +39,8 @@ export function useStored<T>(key: string, fallback: T, parse: (s: string) => T |
     const q = new URLSearchParams(location.search)
     if (!q.has(key)) return
     q.delete(key)
-    history.replaceState(null, '', `${location.pathname}${q.size ? `?${q}` : ''}${location.hash}`)
+    const rest = q.toString() // not q.size: Safari before 17 has no size, and the test would drop every key
+    history.replaceState(null, '', `${location.pathname}${rest ? `?${rest}` : ''}${location.hash}`)
   }, [key])
   return useSetting(LOCAL_STORE, key, fallback, parse, format)
 }
