@@ -143,6 +143,9 @@ The tests use Vitest and fast-check. The property tests use random cities, rando
 - Shortest paths equal brute-force shortest paths. A path follows the geometry of its edges.
 - A URL setting reads back as the value that the app wrote. An unknown value gives the default.
 - The change-rate history does not grow while the clock is paused. After the first window of a run, it spans the selected window.
+- On a day off a commuter leaves home at most once, is home by 24:00 when its two legs fit in the day, and never leaves on a workday for an outing. The share that goes out does not grow over a run of days off. A way home moved to an earlier hour is timed for that hour.
+- The map box has whole CSS pixels, and the map fits inside its area on every window shape.
+- The list of events holds the newest 100 up to the clock, also around a holiday break.
 
 An example test makes sure that the road-graph hash changes when one coordinate (by 0.000001 degree), one edge end, one geometry point, or one weight changes.
 
