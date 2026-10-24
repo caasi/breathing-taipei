@@ -26,6 +26,9 @@ const ICON_BUTTON = { width: 40, height: 40, marginRight: 8, padding: 8, border:
 const InfoIcon = () => <svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true">
   <circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" strokeWidth="2" />
   <path d="M12 11v6" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" /><circle cx="12" cy="7.5" r="1.5" fill="currentColor" /></svg>
+const SlidersIcon = () => <svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true">
+  {[[6, 15], [12, 7], [18, 12]].map(([y, x]) => <g key={y}><path d={`M3 ${y}h18`} stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+    <circle cx={x} cy={y} r="2.5" fill="#211d1d" stroke="currentColor" strokeWidth="2" /></g>)}</svg>
 // The teeth are the dashes of one thick stroke: 8 dashes on a circle of length 2πr.
 const GearIcon = () => <svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true">
   <circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" strokeWidth="4" strokeDasharray={`${Math.PI * 9 / 8} ${Math.PI * 9 / 8}`} />
@@ -63,7 +66,7 @@ export function App() {
   const [fps, setFps] = useState(0)
   // A file the page loads once stays failed until reload; a run error belongs to the current run.
   const [loadError, setLoadError] = useState<string>()
-  const [open, setOpen] = useState<'info' | 'settings'>()
+  const [open, setOpen] = useState<'info' | 'settings' | 'policies'>()
   const [runError, setRunError] = useState<string>()
   // Highways are for orientation only and compete with the area colours, so they start hidden.
   const [show, setShow] = useQuery('layers', new Set(LAYERS.map(l => l[0]).filter(k => k !== 'highway')),
@@ -162,10 +165,11 @@ export function App() {
       邊界來自 <a href={`${import.meta.env.BASE_URL}licenses/taiwan-atlas-MIT.txt`} style={{ color: '#ccc' }}>taiwan-atlas</a>（MIT，© 2020 Daniel Kao）。
       完整來源見 <a href="https://github.com/caasi/breathing-taipei/blob/main/DATA.md" style={{ color: '#ccc' }}>DATA.md</a>。</p>
   </>
-  const icons = ([['info', '專案說明與授權', <InfoIcon />], ['settings', '顯示設定與模擬狀況', <GearIcon />]] as const).map(([k, label, icon]) =>
-    <button key={k} aria-label={label} title={label} aria-expanded={open === k} aria-controls="panel" onClick={() => setOpen(open === k ? undefined : k)}
+  // A desktop always shows the policies; a phone shows the events below the map and opens the policies only when asked.
+  const icons = ([['info', '專案說明與授權', <InfoIcon />], ['settings', '顯示設定與模擬狀況', <GearIcon />], ...(phone ? [['policies', '政策', <SlidersIcon />]] as const : [])] as const).map(([k, label, icon]) =>
+    <button key={k} aria-label={label} title={label} aria-expanded={open === k} aria-controls={k === 'policies' ? 'policies' : 'panel'} onClick={() => setOpen(open === k ? undefined : k)}
       style={{ ...ICON_BUTTON, background: open === k ? '#db6a41' : 'rgba(33, 29, 29, 0.85)' }}>{icon}</button>)
-  const panel = open && <div id="panel" style={phone ? undefined
+  const panel = (open === 'info' || open === 'settings') && <div id="panel" style={phone ? undefined
     : { width: 536, maxHeight: 'calc(100vh - 180px)', overflowY: 'auto', marginBottom: 8, padding: '4px 12px', background: 'rgba(33, 29, 29, 0.85)', borderRadius: 4 }}>
     {open === 'info' ? info : settings}</div>
   return (
@@ -192,12 +196,14 @@ export function App() {
       {phone
         ? <>
           <div style={{ position: 'absolute', left: box.x + 12, top: box.y + box.h - 52 }}>{icons}</div>
-          <div style={{ position: 'absolute', left: kind === 'landscape' ? box.w : 0, top: kind === 'portrait' ? box.h : 0, right: 0, bottom: 0, overflowY: 'auto', padding: '0 12px' }}>{panel || <><Events minute={s?.minute ?? 0} /><Policies /></>}</div>
+          <div style={{ position: 'absolute', left: kind === 'landscape' ? box.w : 0, top: kind === 'portrait' ? box.h : 0, right: 0, bottom: 0, overflowY: 'auto', padding: '0 12px' }}>{panel || (open !== 'policies' && <Events now={s ? s.day * 1440 + s.minute : 0} />)}
+            {/* Kept mounted while hidden, so the settings survive closing the panel. */}
+            <div id="policies" hidden={open !== 'policies'}><Policies /></div></div>
         </>
         : <div style={{ position: 'absolute', left: 16, bottom: 16, display: 'flex', flexDirection: 'column-reverse' }}>
           <div>{icons}</div>{panel}</div>}
       {!phone && <>
-        <aside aria-label="事件" style={{ ...SIDE_PANEL, right: 2 * PANEL.gap + PANEL.policies, width: PANEL.events }}><Events minute={s?.minute ?? 0} /></aside>
+        <aside aria-label="事件" style={{ ...SIDE_PANEL, right: 2 * PANEL.gap + PANEL.policies, width: PANEL.events }}><Events now={s ? s.day * 1440 + s.minute : 0} /></aside>
         <aside aria-label="政策" style={{ ...SIDE_PANEL, right: PANEL.gap, width: PANEL.policies }}><Policies /></aside>
       </>}
     </div>
