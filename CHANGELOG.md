@@ -4,6 +4,16 @@ This file lists the changes that a user of the site can see, for each version. T
 
 ## [Unreleased]
 
+## [0.1.4] - 2026-10-24
+
+### Changed
+
+- The event stream is more even: the plans are picked by error diffusion instead of one draw for each plan (#10). A workday shows 24 personal events, and the longest time with no personal event between 06:00 and 24:00 is 1.3 to 3.7 hours.
+
+### Added
+
+- A shown trip to work or to a day-off place also shows its way home, so the stream follows one character through the day (搭捷運下班回家).
+
 ## [0.1.3] - 2026-10-24
 
 ### Changed
@@ -65,7 +75,8 @@ The first public version.
 - A placeholder policy panel. Its settings do not change the simulation yet.
 - Publishing to GitHub Pages by a workflow on each push to `main`.
 
-[Unreleased]: https://github.com/caasi/breathing-taipei/compare/v0.1.3...HEAD
+[Unreleased]: https://github.com/caasi/breathing-taipei/compare/v0.1.4...HEAD
+[0.1.4]: https://github.com/caasi/breathing-taipei/compare/v0.1.3...v0.1.4
 [0.1.3]: https://github.com/caasi/breathing-taipei/compare/v0.1.2...v0.1.3
 [0.1.2]: https://github.com/caasi/breathing-taipei/compare/v0.1.1...v0.1.2
 [0.1.1]: https://github.com/caasi/breathing-taipei/compare/v0.1.0...v0.1.1
