@@ -7,13 +7,15 @@
 The user set this workflow on 2026-10-24, during the 市政 debug 松 (an off-site personal project, not a registered entry):
 
 1. Do the work on a branch, in a git worktree on the RAM disk (`/dev/shm/<branch>`).
-2. Run the review loop (the `review-loop` skill) until two rounds in a row find nothing open, for at most 5 rounds (the user set the limit on 2026-10-24). After round 5, give the open findings to the user. The reviewers are an Opus subagent, a Sonnet subagent, and Codex (`gpt-6-astra`, or `gpt-6-sol` when Codex usage is at 50% or more).
-3. Group the commits by logical step.
-4. Merge into `main` with `--no-ff` only after the user says yes. Then bump the pointer in the omni repository.
+2. While you work, run a check when you need its result: a spike, or the tests of one file (`pnpm test <file>` in `web/`). The full suite is not required before each push. Record each check that you rely on: the command and what it showed, in the commit body or in your report.
+3. Run the review loop (the `review-loop` skill) until two rounds in a row find nothing open, for at most 5 rounds (the user set the limit on 2026-10-24). After round 5, give the open findings to the user. The reviewers are an Opus subagent, a Sonnet subagent, and Codex (`gpt-6-astra`, or `gpt-6-sol` when Codex usage is at 50% or more).
+4. Group the commits by logical step.
+5. Push the branch and run the CI on it: `gh workflow run pages.yml --ref <branch>`, then `gh run watch`. On a branch the workflow builds and tests, and does not publish. Ask the user for the merge only when the run passes.
+6. Merge into `main` with `--no-ff` only after the user says yes. Then bump the pointer in the omni repository.
 
 Codex cannot read `/dev/shm`. Give it the omni checkout (`~/GitHub/omni/breathing-taipei`, which stays on `main`) and tell it to read the branch through git (`git show <branch>:<path>`).
 
-Before you push, run `pnpm typecheck` and `pnpm test` in `web/`.
+The CI is the one full check, and it runs before each publish: a push to `main` publishes the site, and the deploy runs only when `pnpm build` (with `tsc --noEmit`) and `pnpm test` pass.
 
 ## Comments
 
@@ -28,7 +30,7 @@ The user set this rule for the repository on 2026-10-24. It is not a "zero comme
 
 The large items are GitHub issues; each one links to its issue.
 
-1. **Published on GitHub Pages** (2026-10-24): https://caasi.github.io/breathing-taipei/, version `v0.1.4` (the first public version `v0.1.0` is the tag on the merge `ad75aa5`). `CHANGELOG.md` lists the changes of each version; add an entry under `[Unreleased]` with each change that a user can see, and give it a version and a tag when you publish. `.github/workflows/pages.yml` builds, tests and deploys on each push to `main`; a commit with `[skip ci]` does not publish. The info panel shows the version from `web/package.json` and the commit of the build. GitHub Pages sends `road-routes.bin` gzipped (1,031,913 bytes from 6,173,472, checked on 2026-10-24). Note: `web/vite.config.ts` runs `git rev-parse HEAD` when `GITHUB_SHA` is not set, and `pnpm dev`, `pnpm build` and `pnpm test` all load that config, so none of them runs outside a git checkout (a ZIP from GitHub); use a clone.
+1. **Published on GitHub Pages** (2026-10-24): https://caasi.github.io/breathing-taipei/, version `v0.1.4` (the first public version `v0.1.0` is the tag on the merge `ad75aa5`). `CHANGELOG.md` lists the changes of each version; add an entry under `[Unreleased]` with each change that a user can see, and give it a version and a tag when you publish. `.github/workflows/pages.yml` builds, tests and deploys on each push to `main`, and only builds and tests when you run it on another branch (see "Workflow"); a commit with `[skip ci]` does not publish. The info panel shows the version from `web/package.json` and the commit of the build. GitHub Pages sends `road-routes.bin` gzipped (1,031,913 bytes from 6,173,472, checked on 2026-10-24). Note: `web/vite.config.ts` runs `git rev-parse HEAD` when `GITHUB_SHA` is not set, and `pnpm dev`, `pnpm build` and `pnpm test` all load that config, so none of them runs outside a git checkout (a ZIP from GitHub); use a clone.
 2. **The speed of the run** (https://github.com/caasi/breathing-taipei/issues/1): the worker advances a fixed step per timer callback, so on a slow device the run is slower than its speed setting.
 3. **Events, the next part.** `main` has the names, the event stream and the public events since v0.1.0 (see "State of the model"). Still to do, as the user asked:
    - Events that change plans (accidents, 請假, 加班; https://github.com/caasi/breathing-taipei/issues/2): one function moves an agent to a new bucket; an agent must never be in two buckets. A bad event gets a colour of its own, and every one of them shows in the stream.
