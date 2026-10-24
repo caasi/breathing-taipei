@@ -22,6 +22,7 @@ export function App() {
   const [nodes, setNodes] = useState<string[]>([])
   const [coords, setCoords] = useState<[number, number][]>([])
   const [trips, setTrips] = useState<Trips>()
+  const tripsRef = useRef<Trips>()
   const [s, setS] = useState<FromWorker>()
   // Every setting below can be set in the query string, for example ?speed=4&dot=20&color=density&layers=mrt,highway
   const [speed, setSpeed] = useQuery('speed', 1, oneOf(SPEEDS))
@@ -45,7 +46,7 @@ export function App() {
   const [show, setShow] = useQuery('layers', new Set(LAYERS.map(l => l[0]).filter(k => k !== 'highway')),
     setOf(LAYERS.map(l => l[0])), v => [...v].join(','))
   const worker = useRef<Worker>()
-  const last = useRef({ minute: 0, at: 0, speed: 1 })
+  const last = useRef({ minute: 0, at: 0, speed: 1 }) // minute since 00:00 of day 0
   const toggle = (k: string) => setShow(s => { const n = new Set(s); n.has(k) ? n.delete(k) : n.add(k); return n })
   const post = (m: ToWorker) => worker.current?.postMessage(m)
 
@@ -62,11 +63,14 @@ export function App() {
       if (m.homes) homes.current = m.homes
       if (m.coords) { tracks.current = []; history.current = []; unplaced.current = [] }
       history.current = record(history.current, { t: m.day * 1440 + m.minute, counts: m.counts }, KEEP)
-      if (m.trips) setTrips(m.trips)
+      if (m.trips) { tripsRef.current = m.trips; setTrips(m.trips) }
+      // The dots read the arrays every frame, so new plans are written into them in place.
+      const t = tripsRef.current, r = m.replans
+      if (t && r) r.k.forEach((k, j) => { t.dep[k] = r.dep[j]; t.dur1[k] = r.dur1[j]; t.ret[k] = r.ret[j]; t.dur2[k] = r.dur2[j] })
       // The worker sends each batch once; keep the ones that arrive before the map projection exists.
       if (m.paths?.length) proj.current ? addBatches(tracks.current, m.paths, proj.current) : unplaced.current.push(...m.paths)
       if (m.routed !== undefined) setRouted(m.routed)
-      last.current = { ...last.current, minute: m.minute, at: performance.now() }
+      last.current = { ...last.current, minute: m.day * 1440 + m.minute, at: performance.now() }
       setS(m)
     }
     // A throw in the worker's frame loop (routing, counting) reaches the page through onerror.

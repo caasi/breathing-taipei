@@ -15,15 +15,18 @@ const cityArb = fc.integer({ min: 1, max: 5 }).chain(g => fc.record({
   return fc.record({
     homes: fc.array(fc.nat(20), { minLength: group.length, maxLength: group.length }),
     to: fc.array(fc.nat(10), { minLength: group.length, maxLength: group.length }),
-    // Optional short trips: any rate, and a pick that may give any node, any mode, or no trip.
-    local: fc.option(fc.record({ rate: fc.double({ min: 0, max: 1, noNaN: true }), none: fc.double({ min: 0, max: 1, noNaN: true }) }), { nil: undefined }),
-  }).map(({ homes, to, local }): City => ({
+    // Optional other kinds: any rate, any hours (also overlapping and all 0), and a pick that may give any node, any mode, or no trip.
+    kinds: fc.array(fc.record({
+      rate: fc.double({ min: 0, max: 1, noNaN: true }), none: fc.double({ min: 0, max: 1, noNaN: true }),
+      dep: fc.array(fc.oneof(fc.constant(0), fc.nat(5)), { minLength: 24, maxLength: 24 }),
+      ret: fc.array(fc.oneof(fc.constant(0), fc.nat(5)), { minLength: 24, maxLength: 24 }),
+    }), { maxLength: 3 }),
+  }).map(({ homes, to, kinds }): City => ({
     od, group, homes, to, perAgent: 10,
-    local: local && {
-      rate: group.map(() => local.rate),
-      pick: (_home, r1, r2) => (r1 < local.none ? undefined : { work: Math.floor(r2 * group.length), mode: Math.floor(r1 * MODES.length) }),
-      hours: od.map(hr => hr.flat().reduce((x, y) => x + y, 0)),
-    },
+    kinds: kinds.map((k, c) => ({
+      name: `k${c}`, rate: group.map(() => k.rate), dep: k.dep, ret: k.ret,
+      pick: (_home, rng) => { const r1 = rng(), r2 = rng(); return r1 < k.none ? undefined : { work: Math.floor(r2 * group.length), mode: Math.floor(r1 * MODES.length) } },
+    })),
     modeOf: (_a, _b, r) => Math.floor(r * MODES.length),
     minutes: (a, b, m, h) => times[(a * 7 + b * 3 + m + h) % times.length],
   }))
@@ -42,14 +45,20 @@ describe('core properties', () => {
     }))
   })
 
-  test('a day plan arrives before it leaves again and ends before midnight', () => {
+  test('a plan arrives before it leaves again, leaves work within a day, and the next one starts after it', () => {
     fc.assert(fc.property(cityArb, fc.integer(), (city, seed) => {
       const w = init(city, seed)
-      w.home.forEach((h, i) => {
-        if (h === w.work[i]) return
-        expect(w.dep[i] + w.dur1[i]).toBeLessThanOrEqual(w.ret[i])
-        expect(w.ret[i] + w.dur2[i]).toBeLessThan(MINUTES_PER_DAY)
-      })
+      const bad: string[] = []
+      const end = new Map<number, number>()
+      for (let t = 0; t <= 3 * MINUTES_PER_DAY; t += 30, advance(w, 30)) for (const i of w.movers) {
+        const prev = end.get(i)
+        if (prev !== undefined && prev !== w.ret[i] + w.dur2[i] && w.dep[i] < prev) bad.push(`overlap ${i}`)
+        if (w.dep[i] + w.dur1[i] > w.ret[i]) bad.push(`leaves before arriving ${i}`)
+        if (w.ret[i] - w.dep[i] >= MINUTES_PER_DAY) bad.push(`too long ${i}`)
+        if (w.ret[i] + w.dur2[i] < t) bad.push(`no plan ${i}`)
+        end.set(i, w.ret[i] + w.dur2[i])
+      }
+      expect(bad).toEqual([])
     }))
   })
 
@@ -61,17 +70,9 @@ describe('core properties', () => {
     }))
   })
 
-  test('everyone is home at midnight (no teleport, no lost return trip)', () => {
-    fc.assert(fc.property(cityArb, fc.integer(), fc.integer({ min: 1, max: 3 }), (city, seed, days) => {
-      const c = counts(run(city, seed, days * MINUTES_PER_DAY), MODES.length)
-      expect(Array.from(c.nodes)).toEqual(Array.from(city.homes))
-      expect(Array.from(c.road).every(r => r === 0)).toBe(true)
-    }))
-  })
-
   test('a commuter only works in a group that has morning trips from home, else stays home', () => {
     fc.assert(fc.property(cityArb, fc.integer(), (city, seed) => {
-      fc.pre(!city.local) // short trips go wherever their pick says; the city builder tests those
+      fc.pre(!city.kinds?.length) // other kinds go wherever their pick says; the city builder tests those
       const w: World = init(city, seed)
       const morning = (a: number, b: number) => [5, 6, 7, 8, 9, 10, 11].reduce((s, h) => s + city.od[h][a][b], 0)
       w.home.forEach((h, i) => {
@@ -81,14 +82,12 @@ describe('core properties', () => {
   })
 })
 
-test('replanning spread over the night gives the same plans as one big step', () => {
-  fc.assert(fc.property(cityArb, fc.integer(), fc.integer({ min: 120, max: 1439 }), fc.integer({ min: 1, max: 90 }), (city, seed, at, step) => {
+test('replanning each agent when it is home gives the same plans for any step size', () => {
+  fc.assert(fc.property(cityArb, fc.integer(), fc.integer({ min: 0, max: 1439 }), fc.integer({ min: 1, max: 90 }), (city, seed, at, step) => {
     const big = init(city, seed), small = init(city, seed)
     advance(big, MINUTES_PER_DAY + at)
     for (let m = 0; m < MINUTES_PER_DAY + at; m += step) advance(small, Math.min(step, MINUTES_PER_DAY + at - m))
     expect([small.dep, small.ret, small.dur1, small.dur2]).toEqual([big.dep, big.ret, big.dur1, big.dur2])
-    // Every mover has today's plan by 02:00 (REPLAN_BY), well before the first departure at 05:00.
-    expect(small.replanned).toBe(small.movers.length)
   }))
 })
 
@@ -102,7 +101,7 @@ test('node indices above 255 survive (village level has 1,465 nodes)', () => {
 })
 
 const pub = (f: string) => JSON.parse(readFileSync(new URL(`../../public/${f}`, import.meta.url), 'utf8'))
-const data = () => ({ ...pub('od2.json'), villages: pub('villages2.json'), signal: pub('signal.json') })
+const data = () => ({ ...pub('od2.json'), villages: pub('villages2.json'), signal: pub('signal.json'), night: pub('night.json') })
 
 test('daytime district population is near the telecom target after calibration (real data)', () => {
   const d = data()
@@ -119,6 +118,7 @@ test('short trips match the walking and YouBike targets and stay short and in th
   const d = data()
   const c = cityFrom(d, 10, 'village')
   const w = init(c.city, 1)
+  const short = c.city.kinds!.findIndex(k => k.name === 'short') + 1
   // Targets from the public figures, computed here and not read back from city.ts.
   const M = [5, 6, 7, 8, 9, 10, 11]
   const taipei = d.districts.map((n: string) => n.startsWith('台北市'))
@@ -135,7 +135,7 @@ test('short trips match the walking and YouBike targets and stay short and in th
     if (h === k) return
     // Every walk and ride respects its distance cap, short trip or not.
     if (km(c.coords[h], c.coords[k]) > MAX_KM[w.mode[i]]) tooFar.push(i)
-    if (!w.isLocal[i]) return
+    if (w.kind[i] !== short) return
     if (c.city.group[k] !== c.city.group[h]) leftDistrict.push(i)
     if (w.mode[i] !== WALK && w.mode[i] !== BIKE) notShortMode.push(i)
     if (taipei[c.city.group[h]]) w.mode[i] === WALK ? walk++ : bike++
@@ -149,9 +149,39 @@ test('short trips in a district without MRT trips inside it follow the city hour
   const d = data()
   const c = cityFrom(d, 10, 'village')
   const w = init(c.city, 1)
+  const short = c.city.kinds!.findIndex(k => k.name === 'short') + 1
   const g = d.districts.indexOf('新北市樹林區')
   expect([5, 6, 7, 8, 9, 10, 11].every(h => d.od[h][g][g] === 0)).toBe(true)
   const byHour = new Array(24).fill(0)
-  w.home.forEach((h, i) => { if (w.isLocal[i] && c.city.group[h] === g) byHour[Math.floor(w.dep[i] / 60)]++ })
+  w.home.forEach((h, i) => { if (w.kind[i] === short && c.city.group[h] === g) byHour[Math.floor((((w.dep[i] % MINUTES_PER_DAY) + MINUTES_PER_DAY) % MINUTES_PER_DAY) / 60)]++ })
   expect(byHour[8]).toBeGreaterThan(10 * byHour[5])
+})
+
+test('night workers are at work at 00:00 and 02:00, as many as their businesses give (real data)', () => {
+  const d = data()
+  const c = cityFrom(d, 10, 'village')
+  const w = init(c.city, 1)
+  const night = ['overnight', 'nightlife'].map(n => c.city.kinds!.findIndex(k => k.name === n) + 1)
+  // The agreed guesses, computed here from night.json and not read back from city.ts:
+  // overnight = a third of 8 per convenience store and 15 per hotel, nightlife = 10 per place; 10 people per agent.
+  const col = (n: string) => d.night.counts.reduce((s: number, c: number[]) => s + c[d.night.kinds.indexOf(n)], 0)
+  const expected = ((8 * col('convenience') + 15 * col('hotel')) / 3 + 10 * col('nightlife')) / 10
+  const atWork = () => w.movers.reduce((s, i) => s + (night.includes(w.kind[i]) && where(w, i) === w.work[i] ? 1 : 0), 0)
+  const first = atWork()
+  advance(w, 26 * 60)
+  const second = atWork()
+  expect(Math.abs(first / expected - 1)).toBeLessThan(0.1)
+  expect(Math.abs(second / expected - 1)).toBeLessThan(0.1)
+})
+
+test('night-time groups with an hour outside the MRT and bus hours use neither (real data)', () => {
+  const c = cityFrom(data(), 10, 'village')
+  const w = init(c.city, 1)
+  const closed = ['early', 'nightlife', 'night-out'].map(n => c.city.kinds!.findIndex(k => k.name === n) + 1)
+  const bad = w.movers.filter(i => closed.includes(w.kind[i]) && (w.mode[i] === 0 || w.mode[i] === 1))
+  expect(bad.length).toBe(0)
+  // Inside the MRT hours the night-time groups do not all ride it: dinner is mostly not MRT.
+  const dinner = c.city.kinds!.findIndex(k => k.name === 'dinner') + 1
+  const all = w.movers.filter(i => w.kind[i] === dinner)
+  expect(all.filter(i => w.mode[i] === 0).length / all.length).toBeLessThan(0.5)
 })
