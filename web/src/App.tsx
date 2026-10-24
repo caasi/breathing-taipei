@@ -147,7 +147,7 @@ export function App() {
   const road = s ? Array.from(s.road) : []
   const date = cal && startDay !== undefined ? dateText(cal, startDay + (s?.day ?? 0)) : undefined
   const dayLabel = (day: number) => (cal && startDay !== undefined ? dateText(cal, startDay + day).roc : '')
-  const events = cal && startDay !== undefined && s ? withPublic(personal.current, cal, startDay, s.day, MAX_EVENTS) : personal.current
+  const events = cal && startDay !== undefined && s ? withPublic(personal.current, cal, startDay, s.day * 1440 + s.minute, MAX_EVENTS) : personal.current
   const placeOf = useMemo(() => {
     const byCode = new Map<string, { town: string; village: string }>()
     for (const g of villages?.objects.villages.geometries ?? []) byCode.set(g.properties.VILLCODE, { town: g.properties.TOWNNAME, village: g.properties.VILLNAME })

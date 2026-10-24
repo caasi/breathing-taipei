@@ -37,11 +37,15 @@ test('greetings follow the kind of day', () => {
   expect(at('2026-10-25')).toContainEqual([180, '早餐店的人陸續起床，準備備料'])
 })
 
-test('the public events passed to the list hold all of the newest 100, also around a holiday break', () => {
-  const start = indexOf(cal, '2028-01-01')
-  for (const today of [30, 45, 120]) { // 2028-01-31 is in the 春節 break, where nine days have fewer than 100 public events
-    const all = Array.from({ length: today + 1 }, (_, d) => publicEvents(cal, start, d)).flat()
-    const newest = (es: SimEvent[]) => es.filter(e => e.t <= today * 1440 + 1439).sort((a, b) => b.t - a.t).slice(0, 100).map(e => e.id)
-    expect(newest(withPublic([], cal, start, today, 100))).toEqual(newest(all))
-  }
+test('the public events passed to the list hold all of the newest 100 up to now, at any time of day and around a holiday break', () => {
+  // 2028-01-31 is in the 春節 break, where nine days have fewer than 100 public events. Personal events made ahead of
+  // now (t after now) must not count, and a sparse stream of them must not hide a day.
+  for (const iso of ['2026-10-24', '2028-01-01'])
+    for (const now of [10 * 1440, 30 * 1440, 30 * 1440 + 120, 45 * 1440, 45 * 1440 + 719, 120 * 1440 + 1439]) {
+      const start = indexOf(cal, iso), today = Math.floor(now / 1440)
+      const personal: SimEvent[] = Array.from({ length: 40 }, (_, k) => ({ id: `a${k}`, t: now - 300 * k + 600, kind: 'personal', name: '', home: 0, to: 0, dest: 0, mode: 0, group: '' }))
+      const all = [...personal, ...Array.from({ length: today + 1 }, (_, d) => publicEvents(cal, start, d)).flat()]
+      const newest = (es: SimEvent[]) => es.filter(e => e.t <= now).sort((a, b) => b.t - a.t || a.id.localeCompare(b.id)).slice(0, 100).map(e => e.id)
+      expect(newest(withPublic(personal, cal, start, now, 100))).toEqual(newest(all))
+    }
 })
