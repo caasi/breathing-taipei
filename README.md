@@ -51,16 +51,16 @@ An unknown value goes back to the default. In `layers`, unknown names are ignore
 | `level` | `village`, `district` | `village` |
 | `color` | `rate`, `density` | `rate` |
 | `window` | `15`, `30`, `60`, `120` simulated minutes for the change rate | `30` |
-| `dot` | `20`, `50`, `100`, `200`, `500` people for each dot | `50` |
+| `dot` | `100`, `200`, `500` people for each dot | `100` |
 | `dots` | `1` shows the dots, `0` hides them | `1` |
 | `mode` | `1` colors the dots by mode | `0` |
 | `layers` | Comma list of `mrt`, `lrt`, `tra`, `hsr`, `airport`, `highway` | All except `highway` |
 
-Example: `?speed=4&dot=20&color=rate&window=60&layers=mrt,highway`
+Example: `?speed=4&dot=200&color=rate&window=60&layers=mrt,highway`
 
 ## How the model works
 
-- One agent is 10 people. The model has 645,406 agents.
+- One agent is 100 people. The model has 64,558 agents. The tests use 10 people for each agent (645,406 agents), so that small districts are not too noisy.
 - Residents come from household registration data for each village (September 2026).
 - MRT commuters come from the hourly MRT origin-destination (OD) data, weekdays of September 2026.
 - The OD data is per station. The model adds it up per district.

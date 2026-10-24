@@ -6,7 +6,7 @@ const pub = (f: string) => JSON.parse(readFileSync(new URL(`../../public/${f}`, 
 const data = { ...pub('od2.json'), villages: pub('villages2.json'), signal: pub('signal.json'), night: pub('night.json') }
 const level = (process.argv[2] ?? 'village') as 'district' | 'village'
 let t = performance.now()
-const { city } = cityFrom(data, 10, level)
+const { city } = cityFrom(data, 100, level) // the app's PER_AGENT
 const w = init(city, 42)
 console.log(`${level}: ${city.homes.length} nodes, ${w.home.length} agents, init ${(performance.now() - t).toFixed(0)} ms`)
 // One frame at 16x and 30 fps: advance 32 minutes and count everyone.

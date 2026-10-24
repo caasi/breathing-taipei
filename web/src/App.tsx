@@ -9,9 +9,9 @@ import { useQuery, oneOf, setOf, bool, fromBool } from './query.ts'
 import { record, since, KEEP, type Entry } from './history.ts'
 
 const SPEEDS = [0, 1, 2, 4, 8, 16]
-const EVERY = [2, 5, 10, 20, 50]
+const EVERY = [1, 2, 5]
 const LAYERS: [string, string][] = [['mrt', '捷運'], ['lrt', '輕軌'], ['tra', '台鐵'], ['hsr', '高鐵'], ['airport', '機場'], ['highway', '國道與快速道路']]
-const PER_AGENT = 10
+const PER_AGENT = 100
 const WINDOWS = [15, 30, 60, KEEP] // simulated minutes the change rate can look back; history keeps the longest
 const hhmm = (m: number) => `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(Math.floor(m % 60)).padStart(2, '0')}`
 
@@ -24,10 +24,10 @@ export function App() {
   const [trips, setTrips] = useState<Trips>()
   const tripsRef = useRef<Trips>()
   const [s, setS] = useState<FromWorker>()
-  // Every setting below can be set in the query string, for example ?speed=4&dot=20&color=density&layers=mrt,highway
+  // Every setting below can be set in the query string, for example ?speed=4&dot=200&color=density&layers=mrt,highway
   const [speed, setSpeed] = useQuery('speed', 1, oneOf(SPEEDS))
   const [level, setLevel] = useQuery<Level>('level', 'village', oneOf(['district', 'village'] as const))
-  const [dot, setDot] = useQuery('dot', 50, oneOf(EVERY.map(e => e * PER_AGENT)))
+  const [dot, setDot] = useQuery('dot', 100, oneOf(EVERY.map(e => e * PER_AGENT)))
   const every = dot / PER_AGENT
   const [rateWindow, setRateWindow] = useQuery('window', 30, oneOf(WINDOWS))
   const [routed, setRouted] = useState(0)
