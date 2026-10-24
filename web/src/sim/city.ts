@@ -4,7 +4,7 @@ export type Village = { code: string; town: string; pop: number; arrivals: numbe
 export type Signal = Record<string, { day: number; night: number }> // weekday 07-13 activity, weekday night stay
 /** Businesses per village (villages2.json order) for each name in kinds; built by scripts/night.py. */
 export type Night = { date: string; kinds: string[]; counts: number[][] }
-/** od2.json: MRT trips [hour][from][to] on a workday (od), a Saturday off and a Sunday or holiday (scripts/od.py). */
+/** od2.json: MRT trips [hour][from][to] on a workday (od), a Saturday off with no holiday, and a Sunday or holiday (scripts/od.py). */
 export type Data = { od: number[][][]; saturday?: number[][][]; holiday?: number[][][]; districts: string[]; villages: Village[]; signal: Signal; night?: Night }
 
 export const MODES = ['捷運', '公車', '機車', '汽車', '步行', '自行車'] as const
