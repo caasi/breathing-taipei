@@ -32,6 +32,7 @@ def main(top20_csv, ranking_csv, villages_json, out):
     with open(ranking_csv, encoding="utf-8-sig") as f:
         for r in csv.DictReader(f):
             national[r["lastname"]] += int(r["人口數"])
+    del national["其他"]  # the ranking's row for people with no listed surname, not a surname
     residents = collections.Counter()
     for v in json.load(open(villages_json, encoding="utf-8")):
         residents[v["town"]] += v["pop"]
