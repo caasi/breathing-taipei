@@ -37,10 +37,14 @@ The user set this rule for the repository on 2026-10-24. It is not a "zero comme
      | iPhone landscape | Left, 4:3 | Right |
 
    - Show the user a layout draft before building it.
-2. **Publish to gh-pages** (the target for now). `pnpm build` runs `pnpm routes` first, so the published site has the precomputed road paths.
+2. **Publish to gh-pages** (the target for now). `pnpm build` runs `pnpm routes` first, so the published site has the precomputed road paths. After the first publish, check that GitHub Pages sends `road-routes.bin` gzipped (`curl -sI -H 'Accept-Encoding: gzip' <url>/road-routes.bin`): it is 4.6 MB raw and 0.8 MB gzipped. Not checked yet.
 3. **Personal settings** (people per agent, dot density): to be discussed with the user, and kept apart from the policy settings. A trial of 1 agent = 100 people is on the branch `feat/scale-100` (not merged). It helped an old Intel Mac, but it made the villages too coarse: the median village has about 42 agents at 1/100.
 4. **Later ideas, not started:** events (incidents that change an agent's plan), policy settings (the user grouped them by the HEART idea of puma.taipei: space, opportunity, company, resilience, time), and build scripts for the data files that came from one-off steps.
-5. **Small bug:** a quick 區/里 switch shows NaN in the district labels for a moment.
+5. **Small items:**
+   - A quick 區/里 switch shows NaN in the district labels for a moment.
+   - The favicon is an empty data URI (`web/index.html`); the site needs a real icon.
+   - The first paths batch still takes 187 to 313 ms in Node (measured on 2026-10-24): the nearest road node of each village is a linear search (1,465 villages x 12,930 nodes), and the first batch holds about 130,000 trips that need no road routing. The road node of each village could also be precomputed.
+   - WebGL context loss and restore on iOS was not tested on a device; headless Chromium has no GPU. Check that the map comes back after the Safari tab returns from the background.
 
 ## State of the model (2026-10-24)
 
