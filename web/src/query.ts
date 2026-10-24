@@ -34,9 +34,12 @@ function useSetting<T>(store: Store, key: string, fallback: T, parse: (s: string
   return [value, setValue] as const
 }
 
-/** A policy setting: it starts from ?key= in the URL and writes itself back, so a link reproduces the scenario. */
+/**
+ * A policy setting: it starts from ?key= in the URL and writes itself back after a change, so a link reproduces the
+ * scenario. A key that was never changed stays out of the URL, so a later release with a new default reaches an old link.
+ */
 export const useQuery = <T>(key: string, fallback: T, parse: (s: string) => T | undefined, format: (v: T) => string = String) =>
-  useSetting(URL_STORE, key, fallback, parse, format)
+  useSetting(URL_STORE, key, fallback, parse, format, true)
 /**
  * A display setting: it belongs to this viewer and device, so it stays in this browser and not in a shared link.
  * An old link can still carry the key (display settings were in the URL before 2026-10-24); it is removed, unread.

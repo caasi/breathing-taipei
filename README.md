@@ -48,7 +48,7 @@ pnpm typecheck
 There are two kinds of settings:
 
 - **Display settings** belong to one viewer and one device. The browser keeps them (local storage), so they are not in a shared link. When the browser cannot keep them (for example in a private window), they go back to the defaults when the page loads again.
-- **Policy settings** are the scenario. They are in the query string, so a link shows the same scenario. The policy panel is a placeholder for now: its settings do not change the simulation.
+- **Policy settings** are the scenario. A setting that you change goes into the query string, so a link shows the same scenario. A setting that you did not change stays out of the link. The policy panel is a placeholder for now: its settings do not change the simulation.
 
 An unknown value goes back to the default.
 
