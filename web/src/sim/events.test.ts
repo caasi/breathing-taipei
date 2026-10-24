@@ -5,7 +5,8 @@ import { indexOf, type Calendar } from './calendar.ts'
 import { GONE, PLAY, STAY, WORK } from './core.ts'
 
 const cal: Calendar = JSON.parse(readFileSync(new URL('../../public/calendar.json', import.meta.url), 'utf8'))
-const texts = (iso: string) => publicEvents(cal, indexOf(cal, iso), 0).map(e => (e.kind === 'public' ? e.text : ''))
+// The day's notices at 00:00, without the greetings of the later hours.
+const texts = (iso: string) => publicEvents(cal, indexOf(cal, iso), 0).filter(e => e.t === 0).map(e => (e.kind === 'public' ? e.text : ''))
 
 test('public events: holidays, 補假, observances, solar terms and the civic days', () => {
   expect(texts('2026-10-25')).toEqual(['今天是臺灣光復暨金門古寧頭大捷紀念日，放假一天'])
@@ -27,4 +28,11 @@ test('a personal event says where the character goes and how', () => {
   expect(actionOf(e(GONE, 0, 0), at)).toBe('今天出遠門，離開雙北')
   expect(actionOf(e(STAY, 0, 0), at)).toBe('今天在家休息')
   expect(actionOf(e(WORK, 1, 2, 'early'), at)).toBe('騎機車去早餐店上早班')
+})
+
+test('greetings follow the kind of day', () => {
+  const at = (iso: string) => publicEvents(cal, indexOf(cal, iso), 0).filter(e => e.t > 0).map(e => [e.t, e.kind === 'public' ? e.text : ''])
+  expect(at('2026-10-27')).toContainEqual([450, '上班時間快到了，路上的人越來越多']) // a Tuesday, 07:30
+  expect(at('2026-10-25').map(([, s]) => s)).not.toContain('上班時間快到了，路上的人越來越多') // a holiday
+  expect(at('2026-10-25')).toContainEqual([180, '早餐店的人陸續起床，準備備料'])
 })

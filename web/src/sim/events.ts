@@ -38,7 +38,22 @@ const CIVIC: Record<string, string> = {
   '2026-12-25': '今天新的市長上任了',
 }
 
-/** The public events of one simulated day: holidays, commemorations, solar terms, and civic days. */
+// A greeting of the city at fixed times, for the feel of the day. Most times follow the model: breakfast shops leave
+// at 04:00 to 05:00 (SHIFTS), the first buses at 05:00 and trains at 06:00, the workday peak at 08:00 (od2.json),
+// dinner at 18:00 to 19:00, nights out at 21:00 to 22:00 and overnight shifts at 22:00 (VISITS, SHIFTS), the last
+// trains at 00:00. ponytail: the wording, and 03:00 and 12:00, are by eye.
+const WORKDAY_GREETINGS: [number, string][] = [
+  [3, '早餐店的人陸續起床，準備備料'], [5, '公車首班車陸續發車'], [6, '捷運首班車發車，城市醒來了'],
+  [7.5, '上班時間快到了，路上的人越來越多'], [8, '通勤尖峰，捷運月台上滿是人'], [12, '午休時間，附近的餐廳忙了起來'],
+  [17.5, '下班時間到了'], [18, '晚餐時間，夜市和餐廳開始熱鬧'], [21, '夜生活開始了'], [22, '大夜班的人準備交接'], [24, '捷運收班，城市慢慢安靜下來'],
+]
+const DAY_OFF_GREETINGS: [number, string][] = [
+  [3, '早餐店的人陸續起床，準備備料'], [6, '捷運首班車發車，假日的早晨比平日安靜'], [10, '出門走走的人多了起來'],
+  [12, '午餐時間，熱門的店開始排隊'], [15, '午後，公園和商圈人來人往'], [18, '晚餐時間，夜市和餐廳開始熱鬧'],
+  [21, '夜生活開始了'], [22, '大夜班的人準備交接'], [24, '捷運收班，城市慢慢安靜下來'],
+]
+
+/** The public events of one simulated day: holidays, commemorations, solar terms, civic days, and greetings. */
 export const publicEvents = (cal: Calendar, startDay: number, day: number): SimEvent[] => {
   const i = startDay + day, d = cal.days[i], t = day * 24 * 60
   if (!d) return []
@@ -49,5 +64,6 @@ export const publicEvents = (cal: Calendar, startDay: number, day: number): SimE
   for (const name of d[5] ? d[5].split('、') : []) out.push({ t, kind: 'public', text: `今天是${name}` })
   if (d[3]) out.push({ t, kind: 'public', text: `今天${d[3]}` })
   if (CIVIC[iso]) out.push({ t, kind: 'public', text: CIVIC[iso] })
+  for (const [hour, text] of d[0] ? DAY_OFF_GREETINGS : WORKDAY_GREETINGS) out.push({ t: t + Math.round(hour * 60), kind: 'public', text })
   return out
 }
