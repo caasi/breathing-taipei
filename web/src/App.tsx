@@ -86,10 +86,10 @@ export function App() {
   const [show, setShow] = useStored('layers', new Set(LAYERS.map(l => l[0]).filter(k => k !== 'highway')),
     setOf(LAYERS.map(l => l[0])), v => [...v].join(','))
   const worker = useRef<Worker>()
+  const started = useRef(0), shown = useRef(0) // the latest start posted, and the start of the frames on the page
   const last = useRef({ minute: 0, at: 0, speed: 1 }) // minute since 00:00 of day 0
   const toggle = (k: string) => setShow(s => { const n = new Set(s); n.has(k) ? n.delete(k) : n.add(k); return n })
   const post = (m: ToWorker) => worker.current?.postMessage(m)
-  const starting = useRef(false)
 
   useEffect(() => {
     getJson('towns.json').then(setTowns).catch(err => setLoadError(String(err)))
@@ -100,9 +100,10 @@ export function App() {
     w.onmessage = (e: MessageEvent<FromWorker | WorkerError>) => {
       if ('error' in e.data) { setRunError(e.data.error); return }
       const m = e.data
-      // Frames of the previous run can still be on their way after a start; their day would be read from the new start.
-      if (starting.current && !m.coords) return
-      starting.current = false
+      // Frames of an earlier run can still be on their way after a start (also the first frame of a run that a quick
+      // second switch replaced); their day and nodes would be read with the new start and level.
+      if (m.start !== undefined) { if (m.start !== started.current) return; shown.current = m.start }
+      else if (shown.current !== started.current) return
       if (m.nodes) setNodes(m.nodes)
       if (m.homes) homes.current = m.homes
       if (m.coords) { history.current = []; personal.current = [] }
@@ -128,7 +129,7 @@ export function App() {
   useEffect(() => post({ type: 'sample', every }), [every])
   useEffect(() => {
     if (runStart === undefined) return
-    setS(undefined); setRunError(undefined); starting.current = true; post({ type: 'init', perAgent: PER_AGENT, seed: 42, level, startDay: runStart })
+    setS(undefined); setRunError(undefined); post({ type: 'init', perAgent: PER_AGENT, seed: 42, level, startDay: runStart, start: ++started.current })
   }, [level, runStart])
   useEffect(() => { last.current.speed = speed; post({ type: 'speed', hoursPerSec: speed }) }, [speed])
 

@@ -9,7 +9,8 @@ import { networks, readRoutes, tripPaths, type Batch, type Routes } from './path
 
 export type Level = 'district' | 'village'
 export type ToWorker =
-  | { type: 'init'; perAgent: number; seed: number; level: Level; startDay: number } // startDay: index into calendar.json of day 0
+  // startDay: index into calendar.json of day 0. start: an id that the first frame of the run gives back.
+  | { type: 'init'; perAgent: number; seed: number; level: Level; startDay: number; start: number }
   | { type: 'speed'; hoursPerSec: number }
   | { type: 'sample'; every: number } // the run goes on; only the agents drawn as dots change
 /**
@@ -22,7 +23,7 @@ export type Replans = { k: Uint32Array; dest: Uint8Array; dep: Int32Array; dur1:
 /** A failure while starting (load, city build, sampling) ends the worker's work; the page shows it instead of waiting. */
 export type WorkerError = { error: string }
 export type FromWorker = {
-  nodes?: string[]; homes?: Uint32Array; coords?: [number, number][]; trips?: Trips; replans?: Replans; paths?: Batch[]; routed?: number
+  start?: number; nodes?: string[]; homes?: Uint32Array; coords?: [number, number][]; trips?: Trips; replans?: Replans; paths?: Batch[]; routed?: number
   minute: number; day: number; counts: Uint32Array; road: Uint32Array; away: number; ms: number
   events?: SimEvent[] // personal events of plans made since the last message
 }
@@ -36,7 +37,7 @@ const SHOWN = [0.25, 1, 3, 0.05]
 let w: World | undefined
 let every = 20
 let hoursPerSec = 0
-let extra: Pick<FromWorker, 'nodes' | 'homes' | 'coords' | 'trips' | 'replans'> = {}
+let extra: Pick<FromWorker, 'start' | 'nodes' | 'homes' | 'coords' | 'trips' | 'replans'> = {}
 let pending: Generator<Batch> | undefined
 let newEvents: SimEvent[] = []
 let eventId = 0
@@ -109,21 +110,21 @@ const frame = () => {
 }
 setInterval(frame, 1000 / FPS)
 
-let run = 0 // the latest draw; a routes file that arrives after a newer draw is not applied to the old one
+let drawn = 0 // the latest draw; a routes file that arrives after a newer draw is not applied to the old one
 let coords: [number, number][] = []
 // Same sampled agents every day with fixed home, work and day-off place, so paths are built once per draw.
 // The simulation does not wait for the routes file (megabytes); the paths start when it is there.
 const draw = (world: World, graphs: Awaited<typeof net>) => {
-  const trips = sample(world), thisRun = ++run
+  const trips = sample(world), thisDraw = ++drawn
   pending = undefined
   routed = 0
-  routes.then(known => { if (thisRun === run) pending = bothPaths(trips, coords, graphs, known) }, () => {})
+  routes.then(known => { if (thisDraw === drawn) pending = bothPaths(trips, coords, graphs, known) }, () => {})
   return trips
 }
 onmessage = async (e: MessageEvent<ToWorker>) => {
   const m = e.data
   if (m.type === 'speed') { hoursPerSec = m.hoursPerSec; return }
-  if (m.type === 'sample') { every = m.every; if (w) extra = { ...extra, trips: draw(w, await net) }; return }
+  if (m.type === 'sample') { every = m.every; if (w) net.then(g => { if (w) extra = { ...extra, trips: draw(w, g) } }); return }
   // Any failure while starting (loading, building the city, sampling) goes to the page.
   // The async handler would otherwise reject without a message, and onerror does not see a rejection.
   try {
@@ -152,7 +153,7 @@ onmessage = async (e: MessageEvent<ToWorker>) => {
     // The plans under way at day 0 were made during init, which calls no onPlan: pass them through the same filter.
     for (const i of w.movers) w.onPlan(i)
     coords = c.coords
-    extra = { nodes: c.nodes, homes: Uint32Array.from(c.city.homes), coords: c.coords, trips: draw(w, graphs) }
+    extra = { start: m.start, nodes: c.nodes, homes: Uint32Array.from(c.city.homes), coords: c.coords, trips: draw(w, graphs) }
   } catch (err) {
     w = undefined
     postMessage({ error: String(err) } satisfies WorkerError)
