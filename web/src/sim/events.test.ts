@@ -1,0 +1,30 @@
+import { readFileSync } from 'node:fs'
+import { expect, test } from 'vitest'
+import { actionOf, publicEvents, type SimEvent } from './events.ts'
+import { indexOf, type Calendar } from './calendar.ts'
+import { GONE, PLAY, STAY, WORK } from './core.ts'
+
+const cal: Calendar = JSON.parse(readFileSync(new URL('../../public/calendar.json', import.meta.url), 'utf8'))
+const texts = (iso: string) => publicEvents(cal, indexOf(cal, iso), 0).map(e => (e.kind === 'public' ? e.text : ''))
+
+test('public events: holidays, 補假, observances, solar terms and the civic days', () => {
+  expect(texts('2026-10-25')).toEqual(['今天是臺灣光復暨金門古寧頭大捷紀念日，放假一天'])
+  expect(texts('2026-10-26')).toEqual(['今天補假，放假一天'])
+  expect(texts('2026-03-12')).toEqual(['今天是國父逝世紀念日', '今天是植樹節'])
+  expect(texts('2026-10-23')).toEqual(['今天霜降'])
+  expect(texts('2026-11-28')).toContain('今天是選舉日，大家記得出門投票（08:00 到 16:00）')
+  expect(texts('2026-12-25')).toEqual(['今天是行憲紀念日，放假一天', '今天新的市長上任了'])
+})
+
+test('a personal event says where the character goes and how', () => {
+  const places = [{ town: '大安區', village: '學府里' }, { town: '大安區', village: '錦安里' }, { town: '中山區', village: '朱崙里' }]
+  const e = (dest: number, to: number, mode: number, group = ''): Extract<SimEvent, { kind: 'personal' }> =>
+    ({ t: 0, kind: 'personal', name: '林先生', home: 0, to, dest, mode, group })
+  const at = (n: number) => places[n]
+  expect(actionOf(e(WORK, 2, 0), at)).toBe('搭捷運到中山區上班')
+  expect(actionOf(e(WORK, 1, 4), at)).toBe('走路到錦安里上班') // inside the home district: the village
+  expect(actionOf(e(PLAY, 2, 3), at)).toBe('開車去中山區走走')
+  expect(actionOf(e(GONE, 0, 0), at)).toBe('今天出遠門，離開雙北')
+  expect(actionOf(e(STAY, 0, 0), at)).toBe('今天在家休息')
+  expect(actionOf(e(WORK, 1, 2, 'early'), at)).toBe('騎機車去早餐店上早班')
+})
