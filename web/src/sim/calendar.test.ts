@@ -35,3 +35,9 @@ test('the date in Taiwan turns at 16:00 UTC', () => {
   expect(todayInTaipei(Date.parse('2026-10-24T15:59:59Z'))).toBe('2026-10-24')
   expect(todayInTaipei(Date.parse('2026-10-24T16:00:00Z'))).toBe('2026-10-25')
 })
+
+test('a day with a holiday name is a day off: observances that are workdays (植樹節, 母親節) must not show as holidays', () => {
+  const named = cal.days.flatMap(([kind, , , , holiday], i) => (holiday && kind === WORKDAY ? [i] : []))
+  expect(named).toEqual([])
+  expect(cal.days.some(d => /植樹|青年|母親|父親|軍人|婦女/.test(d[4]))).toBe(false)
+})
