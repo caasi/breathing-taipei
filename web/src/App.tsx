@@ -8,7 +8,8 @@ import type { Batch } from './sim/paths.ts'
 import { useStored, oneOf, setOf, bool, fromBool } from './query.ts'
 import { record, since, KEEP, type Entry } from './history.ts'
 import { layoutFor, PANEL } from './ui/view.ts'
-import { Events, Policies, usePolicies, hhmm, H2 } from './ui/Dashboard.tsx'
+import { Events, Policies, usePolicies } from './ui/Dashboard.tsx'
+import { hhmm, H2 } from './ui/format.ts'
 
 const SPEEDS = [0, 1, 2, 4, 8]
 const EVERY = [2, 5, 10, 20, 50]

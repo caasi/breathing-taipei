@@ -1,4 +1,5 @@
 import { useQuery, bool, fromBool, onSteps } from '../query.ts'
+import { hhmm, H2 } from './format.ts'
 
 // ponytail: placeholder events and policies for the layout only; nothing here reaches the simulation. Replace with the event model.
 // A wide event touches an area; a personal one follows one resident. A resident is 先生 or 小姐, or, for a person outside the binary,
@@ -49,8 +50,6 @@ export function usePolicies(): PolicyValues {
   }
 }
 
-export const hhmm = (m: number) => `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(Math.floor(m % 60)).padStart(2, '0')}`
-export const H2 = { fontSize: 14, color: '#aaa', margin: '12px 0 4px' }
 const NOTE = { fontSize: 12, color: '#888', margin: '0 0 8px' }
 
 export const MAX_EVENTS = 100
