@@ -123,6 +123,8 @@ The tests use Vitest and fast-check. The property tests use random cities, rando
 - A URL setting reads back as the value that the app wrote. An unknown value gives the default.
 - The change-rate history does not grow while the clock is paused. After the first window of a run, it spans the selected window.
 
+An example test makes sure that the road-graph hash changes when one coordinate (by 0.000001 degree), one edge end, one geometry point, or one weight changes.
+
 The tests with real data:
 
 - One runs the district model to 11:00. It makes sure that the population of each district with 50,000 people or more is within 15% of its target.
@@ -130,10 +132,13 @@ The tests with real data:
 - One makes sure that short trips in a district without MRT trips inside it follow the morning peak, not an even spread: more than 10 times as many leave at 08:00 as at 05:00.
 - One makes sure that, at 00:00 and at 02:00, the overnight and nightlife workers at work are within 10% of the number that their businesses give. The test computes that number from `night.json` and the guesses.
 - One makes sure that no early-shift, nightlife, or night-out agent uses the MRT or a bus, and that most dinner visitors do not use the MRT.
+- One routes a sample of road trips, writes and reads them in the format of `road-routes.bin`, and makes sure that every road trip then comes from the file and equals the routed path.
+- One makes sure that a routes file for another road graph, a file cut inside a record, or a file that ends in a partial record is not used.
+- Where `web/public/road-routes.bin` exists, one makes sure that it matches the road graph and holds every road trip of the app's run at both levels.
 
 ## Known gaps
 
-- `web/public/` holds the data that the app uses. Only some build steps are scripts: `scripts/graphs.py` builds the road and MRT graphs, and `scripts/night.py` builds `night.json` (their docstrings give the inputs). The other files came from one-off steps. These steps are not in the repository yet.
+- `web/public/` holds the data that the app uses. Only some build steps are scripts: `scripts/graphs.py` builds the road and MRT graphs, `scripts/night.py` builds `night.json` (their docstrings give the inputs), and `scripts/routes.ts` builds `road-routes.bin`. `pnpm dev` and `pnpm build` run `pnpm routes` first. Without the file, the page routes every road trip itself, which took about 30 s at 20 people per dot in Chromium against 2.5 to 3.6 s with it. The other files came from one-off steps. These steps are not in the repository yet.
 - There are no events and no policy settings yet.
 
 ## License

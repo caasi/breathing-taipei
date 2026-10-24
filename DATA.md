@@ -21,6 +21,7 @@ The app reads the files in `web/public/`. This file lists the source, the licens
 | `mrt-graph.json` | MRT graph built from OpenStreetMap lines and station positions | B, H | ODbL 1.0 (lines) and Open Government Data License (station positions) |
 | `transit.json` | MRT, light rail, railway, high speed rail, motorway and trunk lines, stations, and airport | H | ODbL 1.0 |
 | `night.json` | Businesses of the night-time groups in each village | J, F | Open Government Data License |
+| `road-routes.bin` (not in git, about 4.6 MB, 0.8 MB gzipped) | Road paths of the app's run, made by `pnpm routes` before dev and build | G, and A to F and J through the model | Open Government Data License (Taipei shape file of G and source D not confirmed) |
 | `towns.json`, `villages2-topo.json` | District and village boundaries (TopoJSON) | F, I | MIT (package) and Open Government Data License (boundaries) |
 
 ## Sources and attribution statements
@@ -69,7 +70,8 @@ Note: The data.gov.tw entry for the Taipei shape file was not found. The license
 - `signal.json`: The columns `DAY_WORK(0700~1300)` and `NIGHT_WORK` of source E for the 41 districts.
 - `road-graph.json` and `mrt-graph.json`: Built by `scripts/graphs.py`. Points snap to a grid of about 120 m (roads) or 10 m (MRT), and the points in one grid cell become one node. Nodes with exactly two neighbors become points inside an edge, except stations and one node of each separate loop (a component in which every node has two neighbors). The points inside each edge are simplified (Douglas-Peucker, about 20 m). Each station is a node at the mean position of its exits. It links to the nearest point of each MRT line within 350 m, at a cost of 300 m for boarding or changing lines.
 - `night.json`: Built by `scripts/night.py`. Each business of source J with an address in Taipei or New Taipei goes to a group by its industry code: early (561111 breakfast shops), food (other 5611 restaurants, 561200 food stalls, 563112, 563113, 563115 and 563199 drink shops, 563200 drink stalls), convenience (471112 to 471114), hotel (551011, 551012), and nightlife (563114 bars, 9322 karaoke, 9323 places with hostesses, 969012 saunas). It goes to a village by the 里 in its address, with 羣, 峯 and 臺 read as 群, 峰 and 台 on both sides. A business without a 里, with a 里 that source F does not have, or with a 里 written in private-use characters, is spread over the villages of its district in proportion to the businesses of its group that matched. If none of its group matched in that district, it is spread in proportion to residents (this occurs for a few small groups in some districts of New Taipei, mostly on the north coast, for example 金山區 and 萬里區, and also 五股區 and 平溪區).
-- Only `scripts/graphs.py` and `scripts/night.py` are in the repository. Their docstrings list the input files and the commands. The other files came from one-off steps that are not in the repository yet.
+- `road-routes.bin`: Built by `scripts/routes.ts` from `road-graph.json` and the model (seed 42, 10 people per agent, village and district level). It holds the road path between every pair of road nodes that a bus, scooter or car trip of that run uses and that the road graph connects.
+- Only `scripts/graphs.py`, `scripts/night.py` and `scripts/routes.ts` are in the repository. Their docstrings list the input files and the commands. The other files came from one-off steps that are not in the repository yet.
 
 ## Estimates
 
