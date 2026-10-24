@@ -127,15 +127,19 @@ const plan = (w: World, i: number, after: number): number => {
       if (today !== (off?.kindOf(dayOf(dep)) ?? 0)) continue
       return trip(w, i, WORK, dep, k, w.mode[i], minuteOf(od, EVENING, group[k], group[h], w.rng(), w.rng()))
     }
-    // One choice per day off: a commuter that already went out on this day stays home until the next one.
     if (w.dest[i] !== STAY && dayOf(w.dep[i]) === day) continue
     const r = w.rng(), away = off!.away[today - 1], p = w.play[i], dayOd = off!.od[today - 1]
     if (r >= away + (1 - away) * off!.out[today - 1][group[h]]) return stay(w, i, day)
     // ponytail: the hours of a day away follow the trips inside the home district; there is no data on trips out of the city.
     const gone = r < away, to = gone ? h : p
     const dep = firstAtOrAfter(after, minuteOf(dayOd, DAYTIME, group[h], group[to], w.rng(), w.rng()))
+    // A commuter home late from the day before can find the drawn hour gone; the departure then rolls into the next day.
+    if (dayOf(dep) !== day) continue
     const leave = minuteOf(dayOd, EVENING.filter(x => x > hourOf(dep)), group[to], group[h], w.rng(), w.rng())
-    return trip(w, i, gone ? GONE : PLAY, dep, to, gone ? w.mode[i] : w.playMode[i], leave)
+    trip(w, i, gone ? GONE : PLAY, dep, to, gone ? w.mode[i] : w.playMode[i], leave)
+    // Leave for home early enough to be in by 24:00, when the two legs leave room for it.
+    w.ret[i] = Math.max(dep + w.dur1[i], Math.min(w.ret[i], (day + 1) * MINUTES_PER_DAY - w.dur2[i]))
+    return w.ret[i] + w.dur2[i]
   }
 }
 

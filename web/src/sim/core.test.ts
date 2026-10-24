@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'vitest'
 import fc from 'fast-check'
 import { readFileSync } from 'node:fs'
-import { init, advance, counts, where, ROAD, AWAY, PLAY, MINUTES_PER_DAY, type City, type World } from './core.ts'
+import { init, advance, counts, where, ROAD, AWAY, PLAY, GONE, MINUTES_PER_DAY, type City, type World } from './core.ts'
 import { cityFrom, km, MODES, MAX_KM, WALK, BIKE } from './city.ts'
 
 // 1-5 groups with 1-4 nodes each, sparse non-negative OD, any destination weights,
@@ -79,8 +79,9 @@ describe('core properties', () => {
         const key = `${i} ${day}`
         left.set(key, (left.get(key) ?? 0) + 1)
         if (left.get(key)! > 1) bad.push(`twice ${key}`)
-        // The time to go home is on the day it left, unless the way there alone takes it past midnight.
-        if (Math.floor(w.ret[i] / MINUTES_PER_DAY) > day && w.ret[i] > w.dep[i] + w.dur1[i]) bad.push(`overnight ${key}`)
+        // Home again on the day it left, unless the two legs alone take it past midnight.
+        const end = (day + 1) * MINUTES_PER_DAY
+        if (w.ret[i] + w.dur2[i] > end && w.dep[i] + w.dur1[i] + w.dur2[i] <= end) bad.push(`overnight ${key}`)
       }
       expect(bad).toEqual([])
     }), { numRuns: 30 })
@@ -128,6 +129,24 @@ describe('core properties', () => {
     const w = init(city, 1), gone = new Set<number>()
     for (let t = 0; t < MINUTES_PER_DAY; t++, advance(w, 1)) for (const i of w.movers) if (where(w, i) === AWAY) gone.add(i)
     expect(gone.size).toBe(100)
+  })
+
+  test('an outing or a day away leaves on a day off, never on a workday', () => {
+    fc.assert(fc.property(cityArb, fc.integer(), (city, seed) => {
+      fc.pre(!!city.off)
+      const w = init(city, seed), bad: string[] = []
+      for (let t = 0; t <= 4 * MINUTES_PER_DAY; t += 10, advance(w, 10)) for (const i of w.movers)
+        if ((w.dest[i] === PLAY || w.dest[i] === GONE) && !city.off!.kindOf(Math.floor(w.dep[i] / MINUTES_PER_DAY))) bad.push(`${i} at ${w.dep[i]}`)
+      expect(bad).toEqual([])
+    }), { numRuns: 30 })
+    // The case review round 1 found: a long way home after a late return rolls the day-off departure into a workday.
+    const od = Array.from({ length: 24 }, (_, h) => [[0, h === 11 ? 3000 : 0], [h === 23 ? 3000 : 0, 0]])
+    const day = Array.from({ length: 24 }, (_, h) => [[0, h === 5 ? 3000 : 0], [h === 23 ? 3000 : 0, 0]])
+    const city: City = { od, group: [0, 1], homes: [500, 0], to: [1, 1], perAgent: 10, modeOf: () => 0, minutes: (a, b) => (a === 1 ? 600 : 30),
+      off: { kindOf: d => (d === 1 ? 2 : 0), od: [day, day], out: [[1, 1], [1, 1]], away: [0, 0] } }
+    const w = init(city, 4)
+    for (let t = 0; t < 4 * MINUTES_PER_DAY; t += 10, advance(w, 10))
+      for (const i of w.movers) if (w.dest[i] === PLAY) expect(city.off!.kindOf(Math.floor(w.dep[i] / MINUTES_PER_DAY))).toBe(2)
   })
 
   test('same seed gives the same run', () => {
