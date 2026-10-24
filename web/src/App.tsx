@@ -10,7 +10,7 @@ import { record, since, KEEP, type Entry } from './history.ts'
 import { layoutFor, PANEL } from './ui/view.ts'
 import { dateText, indexOf, todayInTaipei, type Calendar } from './sim/calendar.ts'
 import { Events, Policies, usePolicies, MAX_EVENTS } from './ui/Dashboard.tsx'
-import { withPublic, type SimEvent } from './sim/events.ts'
+import { nextAfter, withPublic, type SimEvent } from './sim/events.ts'
 import { hhmm, H2 } from './ui/format.ts'
 
 const SPEEDS = [0, 1, 2, 4, 8]
@@ -21,7 +21,6 @@ const PER_AGENT = 10
 const KEEP_EVENTS = 3 * MAX_EVENTS
 // On a phone the clock sits right of the title, and a long holiday name wraps instead of running under it.
 const TITLE_ROOM = 116
-const LIST_MS = 500
 // The English subtitle at this share of the title size is a little narrower than 台北鼓動; the user chose it by eye.
 const SUBTITLE_SCALE = 0.46
 const WINDOWS = [15, 30, 60, KEEP] // simulated minutes the change rate can look back; history keeps the longest
@@ -150,12 +149,16 @@ export function App() {
   const date = cal && startDay !== undefined ? dateText(cal, startDay + (s?.day ?? 0)) : undefined
   const dayLabel = useMemo(() => (day: number) => (cal && startDay !== undefined ? dateText(cal, startDay + day).roc : ''), [cal, startDay])
   // The worker posts about 30 times a second, and at any speed above a pause the simulated minute changes on each post.
-  // The list is built again on a beat of real time (LIST_MS), or when a new event comes, and not on every post.
-  const [beat, setBeat] = useState(0)
-  useEffect(() => { const id = setInterval(() => setBeat(b => b + 1), LIST_MS); return () => clearInterval(id) }, [])
+  // The list changes only when the clock passes the time of its next event, a new event comes, or a new day starts,
+  // so it is built again then and not on every post.
   const nowMinute = s ? s.day * 1440 + Math.floor(s.minute) : 0, newest = personal.current.at(-1)?.id
-  const list = useMemo(() => ({ now: nowMinute, events: cal && startDay !== undefined && s
-    ? withPublic(personal.current, cal, startDay, nowMinute, MAX_EVENTS) : personal.current }), [cal, startDay, beat, newest, !s])
+  // The time of the event that the clock has passed: it changes with each event passed, so a yes/no would miss the second.
+  const nextDue = useRef(Infinity), passed = nowMinute >= nextDue.current ? nextDue.current : -1
+  const list = useMemo(() => {
+    const events = cal && startDay !== undefined && s ? withPublic(personal.current, cal, startDay, nowMinute, MAX_EVENTS) : personal.current
+    nextDue.current = nextAfter(events, nowMinute)
+    return { now: nowMinute, events }
+  }, [cal, startDay, newest, !s, s?.day, passed])
   const placeOf = useMemo(() => {
     const byCode = new Map<string, { town: string; village: string }>()
     for (const g of villages?.objects.villages.geometries ?? []) byCode.set(g.properties.VILLCODE, { town: g.properties.TOWNNAME, village: g.properties.VILLNAME })

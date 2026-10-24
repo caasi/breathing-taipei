@@ -71,16 +71,18 @@ export const publicEvents = (cal: Calendar, startDay: number, day: number): SimE
 
 /**
  * The personal events and the public events of enough days back that the newest `limit` up to now are all there:
- * days are added from today back until the events from that day on reach `limit`. ponytail: at most 60 days back,
- * which a day without public events (after the calendar table ends) can reach; a list that short is then incomplete.
+ * days are added from today back until the events from that day on reach `limit`, or day 0.
  */
 export const withPublic = (personal: SimEvent[], cal: Calendar, startDay: number, now: number, limit: number) => {
   const today = Math.floor(now / 1440)
   const out = [...personal]
-  for (let day = today; day >= Math.max(0, today - 60); day--) {
+  for (let day = today; day >= 0; day--) {
     out.push(...publicEvents(cal, startDay, day))
     // Count only what the list can show: the greetings later today and the plans made ahead are after now.
     if (out.filter(e => e.t >= day * 1440 && e.t <= now).length >= limit) break
   }
   return out
 }
+
+/** The time of the first event after `now`, or Infinity: until the clock passes it, the shown list stays the same. */
+export const nextAfter = (events: SimEvent[], now: number) => events.reduce((t, e) => (e.t > now && e.t < t ? e.t : t), Infinity)

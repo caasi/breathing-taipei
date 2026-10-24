@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs'
 import { expect, test } from 'vitest'
-import { actionOf, publicEvents, withPublic, type SimEvent } from './events.ts'
+import { actionOf, nextAfter, publicEvents, withPublic, type SimEvent } from './events.ts'
 import { indexOf, type Calendar } from './calendar.ts'
 import { GONE, PLAY, STAY, WORK } from './core.ts'
 
@@ -54,4 +54,13 @@ test('past the end of the calendar table the city still greets its days, by the 
   const end = cal.days.length, at = (k: number) => publicEvents(cal, end + k, 0).map(e => (e.kind === 'public' ? e.text : ''))
   expect(at(0)).toContain('上班時間快到了，路上的人越來越多') // 2035-01-01, a Monday: no holidays past the table
   expect(at(5)).toContain('出門走走的人多了起來') // a Saturday
+})
+
+test('the shown list stays the same until the clock passes the next event', () => {
+  const start = indexOf(cal, '2026-10-27'), now = 7 * 60 // a workday, 07:00
+  const events = withPublic([], cal, start, now, 100), next = nextAfter(events, now)
+  expect(next).toBe(7 * 60 + 30) // 07:30 上班時間快到了
+  const shown = (t: number) => events.filter(e => e.t <= t).map(e => e.id).join()
+  expect(shown(next - 1)).toBe(shown(now))
+  expect(shown(next)).not.toBe(shown(now))
 })
