@@ -131,6 +131,8 @@ export function App() {
   const taipei = useMemo(() => projection && taipeiIn(towns, projection), [projection])
   const { kind, box, fit, view } = useMemo(() => layoutFor(size.w, size.h, taipei), [size, taipei]), phone = kind !== 'desktop', titleSize = phone ? 20 : 28
   const road = s ? Array.from(s.road) : []
+  // A desktop always shows the policies and has no icon to close them, so a phone's open policy panel closes when the window turns into a desktop.
+  useEffect(() => { if (!phone && open === 'policies') setOpen(undefined) }, [phone])
   const people = (pick: (node: string) => boolean) => padded(s ? nodes.reduce((sum, n, i) => pick(n) ? sum + s.counts[i] : sum, 0) * PER_AGENT : 0, 7)
   const settings = <>
     <h2 style={H2}>顯示</h2>
