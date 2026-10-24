@@ -13,6 +13,8 @@ const SPEEDS = [0, 1, 2, 4, 8]
 const EVERY = [2, 5, 10, 20, 50]
 const LAYERS: [string, string][] = [['mrt', '捷運'], ['lrt', '輕軌'], ['tra', '台鐵'], ['hsr', '高鐵'], ['airport', '機場'], ['highway', '國道與快速道路']]
 const PER_AGENT = 10
+// The English subtitle at this share of the title size is a little narrower than 台北鼓動; the user chose it by eye.
+const SUBTITLE_SCALE = 0.46
 const WINDOWS = [15, 30, 60, KEEP] // simulated minutes the change rate can look back; history keeps the longest
 const hhmm = (m: number) => `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(Math.floor(m % 60)).padStart(2, '0')}`
 
@@ -105,7 +107,7 @@ export function App() {
   const [size, setSize] = useState({ w: innerWidth, h: innerHeight })
   useEffect(() => { const on = () => setSize({ w: innerWidth, h: innerHeight }); addEventListener('resize', on); return () => removeEventListener('resize', on) }, [])
   const taipei = useMemo(() => projection && taipeiIn(towns, projection), [projection])
-  const { kind, box, fit, view } = useMemo(() => layoutFor(size.w, size.h, taipei), [size, taipei]), phone = kind !== 'desktop'
+  const { kind, box, fit, view } = useMemo(() => layoutFor(size.w, size.h, taipei), [size, taipei]), phone = kind !== 'desktop', titleSize = phone ? 20 : 28
   const road = s ? Array.from(s.road) : []
   return (
     <div style={{ position: 'fixed', inset: 0, overflow: 'hidden', background: '#211d1d' }}>
@@ -115,8 +117,10 @@ export function App() {
         {dots && trips && <Travellers tracks={tracks} trips={trips} clock={clock} onFps={setFps} byMode={byMode} view={view} />}
       </>}
       <header style={{ position: 'absolute', top: 16, left: 16, pointerEvents: 'none' }}>
-        <h1 style={{ margin: 0, fontSize: phone ? 20 : 28, fontWeight: 'bold', color: '#fff' }}>台北鼓動</h1>
-        <p style={{ margin: 0, fontSize: phone ? 12 : 14, color: '#ccc' }}>Breathing Taipei</p>
+        <h1 style={{ margin: 0, fontSize: titleSize, fontWeight: 'bold', color: '#fff' }}>台北鼓動</h1>
+        {/* Centred on the Chinese title alone: a flex row with no width of its own overflows evenly to both sides. */}
+        <p style={{ margin: 0, width: 0, minWidth: '100%', display: 'flex', justifyContent: 'center', whiteSpace: 'nowrap',
+          fontSize: titleSize * SUBTITLE_SCALE, fontVariantCaps: 'small-caps', letterSpacing: '0.05em', color: '#ccc' }}>Breathing Taipei</p>
       </header>
       {/* A phone's map is too narrow for the clock between the title and the edge, so it moves to the right. */}
       <p style={{ position: 'absolute', top: 16, left: fit.x + 16, width: fit.w - 32, margin: 0, textAlign: phone ? 'right' : 'center', fontSize: phone ? 18 : 24, color: '#fff', pointerEvents: 'none', fontVariantNumeric: 'tabular-nums' }}>
