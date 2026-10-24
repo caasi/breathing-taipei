@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'vitest'
 import fc from 'fast-check'
 import { readFileSync } from 'node:fs'
-import { init, advance, counts, where, ROAD, AWAY, MINUTES_PER_DAY, type City, type World } from './core.ts'
+import { init, advance, counts, where, ROAD, AWAY, PLAY, MINUTES_PER_DAY, type City, type World } from './core.ts'
 import { cityFrom, km, MODES, MAX_KM, WALK, BIKE } from './city.ts'
 
 // 1-5 groups with 1-4 nodes each, sparse non-negative OD, any destination weights,
@@ -66,6 +66,48 @@ describe('core properties', () => {
       }
       expect(bad).toEqual([])
     }))
+  })
+
+  test('on a day off a commuter on the OD leaves home at most once, and is home again the same day', () => {
+    fc.assert(fc.property(cityArb, fc.integer(), (city, seed) => {
+      fc.pre(!!city.off)
+      const w = init(city, seed), left = new Map<string, number>(), bad: string[] = []
+      for (let t = 0; t <= 4 * MINUTES_PER_DAY; t += 1, advance(w, 1)) for (const i of w.movers) {
+        if (w.kind[i] || !w.dur1[i] || w.dep[i] !== t) continue
+        const day = Math.floor(t / MINUTES_PER_DAY)
+        if (!city.off!.kindOf(day)) continue
+        const key = `${i} ${day}`
+        left.set(key, (left.get(key) ?? 0) + 1)
+        if (left.get(key)! > 1) bad.push(`twice ${key}`)
+        // The time to go home is on the day it left, unless the way there alone takes it past midnight.
+        if (Math.floor(w.ret[i] / MINUTES_PER_DAY) > day && w.ret[i] > w.dep[i] + w.dur1[i]) bad.push(`overnight ${key}`)
+      }
+      expect(bad).toEqual([])
+    }), { numRuns: 30 })
+  })
+
+  test('the share of commuters out on a day off does not grow over a run of days off', () => {
+    const od = Array.from({ length: 24 }, () => [[0, 3000], [3000, 0]]) // morning trips above the 20,000 residents: everyone commutes
+    const city: City = { od, group: [0, 1], homes: [2000, 0], to: [1, 1], perAgent: 10, modeOf: () => 0, minutes: () => 10,
+      off: { kindOf: d => (d >= 1 ? 2 : 0), od: [od, od], out: [[0.5, 0.5], [0.5, 0.5]], away: [0, 0] } }
+    const w = init(city, 3), out = new Set<string>()
+    for (let t = 0; t < 7 * MINUTES_PER_DAY; t++, advance(w, 1))
+      for (const i of w.movers) if (w.dest[i] === PLAY) out.add(`${i} ${Math.floor(w.dep[i] / MINUTES_PER_DAY)}`)
+    for (let day = 1; day <= 6; day++) {
+      const share = Array.from(w.movers).filter(i => out.has(`${i} ${day}`)).length / w.movers.length
+      expect(share).toBeGreaterThan(0.45); expect(share).toBeLessThan(0.55)
+    }
+  })
+
+  test('a commuter who works in its home node still goes out on a day off', () => {
+    const od = Array.from({ length: 24 }, (_, h) => [[h < 12 ? 3000 : 0, 3000], [3000, 0]])
+    const city: City = { od, group: [0, 1], homes: [2000, 0], to: [1, 1], perAgent: 10, modeOf: () => 0, minutes: () => 10,
+      off: { kindOf: d => (d % 2 === 0 ? 0 : 2), od: [od, od], out: [[1, 1], [1, 1]], away: [0, 0] } }
+    const w = init(city, 5), local = Array.from(w.movers).filter(i => w.work[i] === w.home[i] && w.play[i] !== w.home[i])
+    expect(local.length).toBeGreaterThan(0)
+    const went = new Set<number>() // day 1 is a day off, and every commuter goes out on it
+    for (let t = 0; t < 2 * MINUTES_PER_DAY; t++, advance(w, 1)) for (const i of local) if (w.dest[i] === PLAY) went.add(i)
+    expect(went.size).toBe(local.length)
   })
 
   test('same seed gives the same run', () => {

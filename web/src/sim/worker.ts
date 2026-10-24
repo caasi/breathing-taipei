@@ -46,7 +46,7 @@ const take = <T extends Uint32Array | Int32Array | Uint16Array | Uint8Array>(a: 
 
 const sample = (w: World): Trips => {
   const picked: number[] = []
-  for (let i = 0; i < w.home.length; i += every) if (w.home[i] !== w.work[i]) picked.push(i)
+  for (let i = 0; i < w.home.length; i += every) if (w.home[i] !== w.work[i] || w.home[i] !== w.play[i]) picked.push(i)
   idx = Uint32Array.from(picked)
   sentDep = take(w.dep, idx, Int32Array)
   return { home: take(w.home, idx, Uint16Array), work: take(w.work, idx, Uint16Array), mode: take(w.mode, idx, Uint8Array),

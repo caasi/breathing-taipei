@@ -62,7 +62,7 @@ export type World = {
   dur1: Uint16Array // minutes on the way to work
   ret: Int32Array // minute the agent leaves work
   dur2: Uint16Array
-  movers: Uint32Array // agents whose work node differs from home; the others never leave
+  movers: Uint32Array // agents whose work node or day-off place differs from home; the others never leave
   stayers: Uint32Array // per node, agents who never leave
   due: number[][] // due[m % RING]: agents home again at minute m, to get their next plan then
   done: number // the last minute whose agents got their next plan
@@ -104,6 +104,12 @@ const trip = (w: World, i: number, dest: number, dep: number, to: number, mode: 
   return ret + dur2
 }
 
+const stay = (w: World, i: number, day: number) => {
+  const end = (day + 1) * MINUTES_PER_DAY
+  w.dest[i] = STAY; w.dep[i] = end; w.dur1[i] = 0; w.ret[i] = end; w.dur2[i] = 0
+  return end
+}
+
 /** Gives agent i its next plan, leaving home at or after minute `after`; returns the minute it is home again. */
 const plan = (w: World, i: number, after: number): number => {
   const { od, group, off } = w.city
@@ -114,21 +120,21 @@ const plan = (w: World, i: number, after: number): number => {
   // when that day is of another kind, the plan is drawn again for it, from its 00:00.
   for (let day = dayOf(after); ; day++, after = day * MINUTES_PER_DAY) {
     const today = off?.kindOf(day) ?? 0
+    if (!today && k === h) return stay(w, i, day) // works in its home node: it only moves on a day off
     if (!today) {
       const dep = firstAtOrAfter(after, minuteOf(od, MORNING, group[h], group[k], w.rng(), w.rng()))
       if (today !== (off?.kindOf(dayOf(dep)) ?? 0)) continue
       return trip(w, i, WORK, dep, k, w.mode[i], minuteOf(od, EVENING, group[k], group[h], w.rng(), w.rng()))
     }
+    // One choice per day off, made at its 00:00: a commuter home again during the day stays home until the next day.
+    if (after > day * MINUTES_PER_DAY) continue
     const r = w.rng(), away = off!.away[today - 1], p = w.play[i], dayOd = off!.od[today - 1]
-    if (r >= away + (1 - away) * off!.out[today - 1][group[h]]) {
-      const end = (day + 1) * MINUTES_PER_DAY
-      w.dest[i] = STAY; w.dep[i] = end; w.dur1[i] = 0; w.ret[i] = end; w.dur2[i] = 0
-      return end
-    }
+    if (r >= away + (1 - away) * off!.out[today - 1][group[h]]) return stay(w, i, day)
+    // ponytail: the hours of a day away follow the trips inside the home district; there is no data on trips out of the city.
     const gone = r < away, to = gone ? h : p
     const dep = firstAtOrAfter(after, minuteOf(dayOd, DAYTIME, group[h], group[to], w.rng(), w.rng()))
-    if (today !== off!.kindOf(dayOf(dep))) continue
-    const leave = minuteOf(dayOd, EVENING, group[to], group[h], w.rng(), w.rng())
+    // The hour to go home comes after the hour it left, so an outing ends on its own day.
+    const leave = minuteOf(dayOd, EVENING.filter(x => x > hourOf(dep)), group[to], group[h], w.rng(), w.rng())
     return trip(w, i, gone ? GONE : PLAY, dep, to, gone ? w.mode[i] : w.playMode[i], leave)
   }
 }
@@ -163,11 +169,11 @@ export const init = (city: City, seed: number): World => {
     const g = group[v]
     w.home[i] = v
     w.work[i] = v
+    w.play[i] = v
     if (w.rng() < share[g]) {
       const dg = pick(morning[g], w.rng())
       w.work[i] = members[dg][pick(weights[dg], w.rng())]
       w.mode[i] = city.modeOf(v, w.work[i], w.rng())
-      w.play[i] = v
       if (playOf) {
         const pg = pick(playOf[g], w.rng())
         w.play[i] = members[pg][pick(weights[pg], w.rng())]
@@ -188,7 +194,7 @@ export const init = (city: City, seed: number): World => {
     }
   }
   const movers: number[] = []
-  w.home.forEach((h, i) => (h === w.work[i] ? w.stayers[h]++ : movers.push(i)))
+  w.home.forEach((h, i) => (h === w.work[i] && h === w.play[i] ? w.stayers[h]++ : movers.push(i)))
   w.movers = Uint32Array.from(movers)
   // Plan from 00:00 of day -1 and step forward to the plan that is under way at 00:00 of day 0,
   // so a night shift starts the run at work.
@@ -204,7 +210,7 @@ export const now = (w: World) => w.day * MINUTES_PER_DAY + w.minute
 
 /** Node index, ROAD while travelling, or AWAY outside Taipei and New Taipei, at a minute since 00:00 of day 0. */
 export const where = (w: World, i: number, minute = now(w)): number => {
-  if (minute < w.dep[i] || w.home[i] === w.work[i]) return w.home[i]
+  if (minute < w.dep[i] || (w.home[i] === w.work[i] && w.home[i] === w.play[i])) return w.home[i]
   if (minute < w.dep[i] + w.dur1[i]) return ROAD
   if (minute < w.ret[i]) return w.dest[i] === PLAY ? w.play[i] : w.dest[i] === GONE ? AWAY : w.work[i]
   if (minute < w.ret[i] + w.dur2[i]) return ROAD
