@@ -207,7 +207,7 @@ export function App() {
   const icons = <>{([['info', '專案說明與授權', <InfoIcon />], ['settings', '顯示設定與模擬狀況', <GearIcon />], ...(phone ? [['policies', '政策', <SlidersIcon />]] as const : [])] as const).map(([k, label, icon]) =>
     <button key={k} aria-label={label} title={label} aria-expanded={open === k} aria-controls={open !== k ? undefined : k === 'policies' ? 'policies' : 'panel'} onClick={() => setOpen(open === k ? undefined : k)}
       style={{ ...ICON_BUTTON, background: open === k ? '#db6a41' : 'rgba(33, 29, 29, 0.85)' }}>{icon}</button>)}
-    <a href="https://github.com/caasi/breathing-taipei" aria-label="GitHub 原始碼" title="GitHub 原始碼"
+    <a href="https://github.com/caasi/breathing-taipei" target="_blank" rel="noopener noreferrer" aria-label="GitHub 原始碼" title="GitHub 原始碼"
       style={{ ...ICON_BUTTON, display: 'inline-block', boxSizing: 'border-box', verticalAlign: 'top', background: 'rgba(33, 29, 29, 0.85)' }}><GitHubIcon /></a></>
   // On a desktop the panel stays inside the map area, so the event panel never covers it.
   const panel = (open === 'info' || open === 'settings') && <div id="panel" role="region" aria-label={open === 'info' ? '專案說明與授權' : '顯示設定與模擬狀況'} style={phone ? undefined
