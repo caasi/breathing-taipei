@@ -69,6 +69,7 @@ export type World = {
   minute: number // 0 <= minute < MINUTES_PER_DAY, may be fractional
   day: number
   rng: () => number
+  onPlan?: (i: number) => void // called with each agent that gets its next plan while the clock moves (not during init)
 }
 
 export const MINUTES_PER_DAY = 24 * 60
@@ -231,7 +232,7 @@ export const advance = (w: World, minutes: number) => {
   for (const t = Math.floor(now(w)); w.done < t;) {
     const m = ++w.done, slot = m % RING, agents = w.due[slot]
     w.due[slot] = []
-    for (const i of agents) w.due[plan(w, i, m) % RING].push(i)
+    for (const i of agents) { w.due[plan(w, i, m) % RING].push(i); w.onPlan?.(i) }
   }
 }
 

@@ -157,7 +157,7 @@ The tests with real data:
 ## Known gaps
 
 - `web/public/` holds the data that the app uses. Only some build steps are scripts: `scripts/graphs.py` builds the road and MRT graphs, `scripts/night.py` builds `night.json` (their docstrings give the inputs), and `scripts/routes.ts` builds `road-routes.bin`. `pnpm dev` and `pnpm build` run `pnpm routes` first. Without the file, the page routes every road trip itself, which took about 30 s at 20 people per dot in Chromium against 2.5 to 3.6 s with it. The other files came from one-off steps. These steps are not in the repository yet.
-- There are no events and no policy settings yet.
+- The events narrate the plans of the model and the calendar. No event changes a plan yet, and the policy settings are placeholders.
 
 ## License
 

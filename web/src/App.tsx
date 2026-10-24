@@ -9,13 +9,16 @@ import { useStored, oneOf, setOf, bool, fromBool } from './query.ts'
 import { record, since, KEEP, type Entry } from './history.ts'
 import { layoutFor, PANEL } from './ui/view.ts'
 import { dateText, indexOf, todayInTaipei, type Calendar } from './sim/calendar.ts'
-import { Events, Policies, usePolicies } from './ui/Dashboard.tsx'
+import { Events, Policies, usePolicies, MAX_EVENTS } from './ui/Dashboard.tsx'
+import { withPublic, type SimEvent } from './sim/events.ts'
 import { hhmm, H2 } from './ui/format.ts'
 
 const SPEEDS = [0, 1, 2, 4, 8]
 const EVERY = [2, 5, 10, 20, 50]
 const LAYERS: [string, string][] = [['mrt', '捷運'], ['lrt', '輕軌'], ['tra', '台鐵'], ['hsr', '高鐵'], ['airport', '機場'], ['highway', '國道與快速道路']]
 const PER_AGENT = 10
+// Plans are made ahead of their departure, so the newest events are not all shown yet: keep more than the list shows.
+const KEEP_EVENTS = 3 * MAX_EVENTS
 // The English subtitle at this share of the title size is a little narrower than 台北鼓動; the user chose it by eye.
 const SUBTITLE_SCALE = 0.46
 const WINDOWS = [15, 30, 60, KEEP] // simulated minutes the change rate can look back; history keeps the longest
@@ -66,6 +69,7 @@ export function App() {
   const [byMode, setByMode] = useStored('mode', false, bool, fromBool)
   const [colourBy, setColourBy] = useStored<'density' | 'rate'>('color', 'rate', oneOf(['density', 'rate'] as const))
   const history = useRef<Entry[]>([])
+  const personal = useRef<SimEvent[]>([]) // the personal events from the worker; the newest KEEP_EVENTS stay
   const homes = useRef(new Uint32Array(0))
   const [fps, setFps] = useState(0)
   // A file the page loads once stays failed until reload; a run error belongs to the current run.
@@ -92,7 +96,8 @@ export function App() {
       if (m.nodes) setNodes(m.nodes)
       if (m.coords) setCoords(m.coords)
       if (m.homes) homes.current = m.homes
-      if (m.coords) { tracks.current = []; history.current = []; unplaced.current = [] }
+      if (m.coords) { tracks.current = []; history.current = []; unplaced.current = []; personal.current = [] }
+      if (m.events?.length) personal.current = [...personal.current, ...m.events].slice(-KEEP_EVENTS)
       history.current = record(history.current, { t: m.day * 1440 + m.minute, counts: m.counts }, KEEP)
       if (m.trips) { tripsRef.current = m.trips; setTrips(m.trips) }
       // The dots read the arrays every frame, so new plans are written into them in place.
@@ -142,6 +147,13 @@ export function App() {
   const road = s ? Array.from(s.road) : []
   const date = cal && startDay !== undefined ? dateText(cal, startDay + (s?.day ?? 0)) : undefined
   const dayLabel = (day: number) => (cal && startDay !== undefined ? dateText(cal, startDay + day).roc : '')
+  const events = cal && startDay !== undefined && s ? withPublic(personal.current, cal, startDay, s.day * 1440 + s.minute, MAX_EVENTS) : personal.current
+  const placeOf = useMemo(() => {
+    const byCode = new Map<string, { town: string; village: string }>()
+    for (const g of villages?.objects.villages.geometries ?? []) byCode.set(g.properties.VILLCODE, { town: g.properties.TOWNNAME, village: g.properties.VILLNAME })
+    // At district level a node is named 台北市大安區; at village level it is a code, shown blank until the villages load.
+    return (node: number) => byCode.get(nodes[node]) ?? { town: /^(台北|新北)市/.test(nodes[node] ?? '') ? nodes[node].slice(3) : '', village: '' }
+  }, [villages, nodes])
   // A desktop always shows the policies and has no icon to close them, so a phone's open policy panel closes when the window turns into a desktop.
   useEffect(() => { if (!phone && open === 'policies') setOpen(undefined) }, [phone])
   const people = (pick: (node: string) => boolean) => padded(s ? nodes.reduce((sum, n, i) => pick(n) ? sum + s.counts[i] : sum, 0) * PER_AGENT : 0, 7)
@@ -216,12 +228,12 @@ export function App() {
           <div style={{ position: 'absolute', left: box.x + 12, top: box.y + box.h - 52 }}>{icons}</div>
           <div style={{ position: 'absolute', left: kind === 'landscape' ? box.w : 0, top: kind === 'portrait' ? box.h : 0, right: 0, bottom: 0, overflowY: 'auto', padding: '0 12px' }}>{panel || (open === 'policies'
             ? <div id="policies" role="region" aria-label="政策"><Policies {...policies} /></div>
-            : <section aria-label="事件"><Events now={s ? s.day * 1440 + s.minute : 0} dayLabel={dayLabel} /></section>)}</div>
+            : <section aria-label="事件"><Events events={events} now={s ? s.day * 1440 + s.minute : 0} dayLabel={dayLabel} placeOf={placeOf} /></section>)}</div>
         </>
         : <div style={{ position: 'absolute', left: 16, bottom: 16, display: 'flex', flexDirection: 'column-reverse' }}>
           <div>{icons}</div>{panel}</div>}
       {!phone && <>
-        <aside aria-label="事件" style={{ ...SIDE_PANEL, right: 2 * PANEL.gap + PANEL.policies, width: PANEL.events }}><Events now={s ? s.day * 1440 + s.minute : 0} dayLabel={dayLabel} /></aside>
+        <aside aria-label="事件" style={{ ...SIDE_PANEL, right: 2 * PANEL.gap + PANEL.policies, width: PANEL.events }}><Events events={events} now={s ? s.day * 1440 + s.minute : 0} dayLabel={dayLabel} placeOf={placeOf} /></aside>
         <aside aria-label="政策" style={{ ...SIDE_PANEL, right: PANEL.gap, width: PANEL.policies }}><Policies {...policies} /></aside>
       </>}
     </div>

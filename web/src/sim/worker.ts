@@ -1,6 +1,9 @@
 import { getJson, getOptional } from '../load.ts'
-import { init, advance, counts, type World } from './core.ts'
+import { init, advance, counts, PLAY, STAY, type World } from './core.ts'
 import { kindAt, type Calendar } from './calendar.ts'
+import { drawNames, nameOf, type People } from './people.ts'
+import type { SimEvent } from './events.ts'
+import { mulberry32 } from './rng.ts'
 import { cityFrom, MODES } from './city.ts'
 import { networks, readRoutes, tripPaths, type Batch, type Routes } from './paths.ts'
 
@@ -20,18 +23,26 @@ export type WorkerError = { error: string }
 export type FromWorker = {
   nodes?: string[]; homes?: Uint32Array; coords?: [number, number][]; trips?: Trips; replans?: Replans; paths?: Batch[]; routed?: number
   minute: number; day: number; counts: Uint32Array; road: Uint32Array; away: number; ms: number
+  events?: SimEvent[] // personal events of plans made since the last message
 }
 
 const FPS = 30
+const EVENTS_PER_DAY = 48
+// Every plan is simulated; the stream shows a few of the everyday ones (to work, home all day) and more of the rarer
+// ones (out on a day off, away from the two cities), as the user asked. Indexed by dest (WORK, PLAY, GONE, STAY).
+// ponytail: weights by eye; an accident, when it comes, is shown every time.
+const SHOWN = [0.05, 1, 3, 0.05]
 let w: World | undefined
 let every = 20
 let hoursPerSec = 0
 let extra: Pick<FromWorker, 'nodes' | 'homes' | 'coords' | 'trips' | 'replans'> = {}
 let pending: Generator<Batch> | undefined
+let newEvents: SimEvent[] = []
+let eventId = 0
 let routed = 0
 let idx = new Uint32Array(0) // agent of each sampled trip
 let sentDep = new Int32Array(0) // departure last sent for each sampled trip; a new plan always changes it
-const data = Promise.all(['od2.json', 'villages2.json', 'signal.json', 'road-graph.json', 'mrt-graph.json', 'night.json', 'calendar.json'].map(getJson))
+const data = Promise.all(['od2.json', 'villages2.json', 'signal.json', 'road-graph.json', 'mrt-graph.json', 'night.json', 'calendar.json', 'people.json'].map(getJson))
 const net = data.then(([, , , road, mrt]) => networks(road, mrt))
 // Made by `pnpm routes` before dev and build; without it (or for another road graph) the worker routes every road trip itself.
 const routes = Promise.all([net, getOptional('road-routes.bin').catch(() => undefined)])
@@ -90,7 +101,8 @@ const frame = () => {
     if (b.done) { pending = undefined; break }
     paths.push(b.value); routed += b.value.ks.length
   }
-  const msg: FromWorker = { ...extra, paths, routed, minute: w.minute, day: w.day, counts: c.nodes, road: c.road, away: c.away, ms }
+  const msg: FromWorker = { ...extra, paths, routed, minute: w.minute, day: w.day, counts: c.nodes, road: c.road, away: c.away, ms, events: newEvents }
+  newEvents = []
   postMessage(msg)
   extra = {}
 }
@@ -104,10 +116,29 @@ onmessage = async (e: MessageEvent<ToWorker>) => {
   // The async handler would otherwise reject without a message, and onerror does not see a rejection.
   const thisRun = ++run
   try {
-    const [[od2, villages, signal, , , night, cal], graphs] = await Promise.all([data, net])
+    const [[od2, villages, signal, , , night, cal, people], graphs] = await Promise.all([data, net])
     const c = cityFrom({ ...od2, villages, signal, night }, m.perAgent, m.level, day => kindAt(cal as Calendar, m.startDay + day))
     every = m.every
     w = init(c.city, m.seed)
+    const world = w, districtOf = Array.from(w.home, h => (m.level === 'village' ? villages[h].town : c.nodes[h]))
+    const ids = drawNames(people as People, districtOf, m.seed + 1), pickRng = mulberry32(m.seed + 2)
+    // ponytail: EVENTS_PER_DAY is the base rate before the SHOWN weights (each agent makes about one plan a day): measured 2 to 5
+    // personal events on a workday and 15 to 18 on a day off. Tune it when the stream feels too fast or too slow.
+    const keep = EVENTS_PER_DAY / Math.max(1, w.movers.length)
+    newEvents = []
+    eventId = 0
+    w.onPlan = i => {
+      const dest = world.dest[i]
+      if (pickRng() >= keep * SHOWN[dest]) return
+      const play = dest === PLAY, group = world.kind[i] ? c.city.kinds![world.kind[i] - 1].name : ''
+      // A day at home has no departure; it shows in the morning of that day.
+      const t = dest === STAY ? world.dep[i] - 15 * 60 : world.dep[i]
+      if (t < 0) return // a night shift that left on day -1
+      newEvents.push({ id: `a${++eventId}`, t, kind: 'personal', name: nameOf(ids, i), home: world.home[i], to: play ? world.play[i] : world.work[i],
+        dest, mode: play ? world.playMode[i] : world.mode[i], group })
+    }
+    // The plans under way at day 0 were made during init, which calls no onPlan: pass them through the same filter.
+    for (const i of w.movers) w.onPlan(i)
     const trips = sample(w)
     extra = { nodes: c.nodes, homes: Uint32Array.from(c.city.homes), coords: c.coords, trips }
     // Same sampled agents every day with fixed home, work and day-off place, so paths are built once per init.

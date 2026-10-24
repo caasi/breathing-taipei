@@ -21,8 +21,9 @@ The app reads the files in `web/public/`. This file lists the source, the licens
 | `mrt-graph.json` | MRT graph built from OpenStreetMap lines and station positions | B, H | ODbL 1.0 (lines) and Open Government Data License (station positions) |
 | `transit.json` | MRT, light rail, railway, high speed rail, motorway and trunk lines, stations, and airport | H | ODbL 1.0 |
 | `night.json` | Businesses of the night-time groups in each village | J, F | Open Government Data License |
-| `road-routes.bin` (not in git, about 4.6 MB, 0.8 MB gzipped) | Road paths of the app's run, made by `pnpm routes` before dev and build | G, and A to F and J through the model | Open Government Data License (Taipei shape file of G and source D not confirmed) |
+| `road-routes.bin` (not in git, about 6.2 MB, 0.97 MB with `gzip -6`) | Road paths of the app's run, made by `pnpm routes` before dev and build | G, and A to F and J through the model | Open Government Data License (Taipei shape file of G and source D not confirmed) |
 | `calendar.json` | Each day from 2026-01-01 to 2034-12-31: workday, Saturday off or other day off, holiday name, lunar date, the solar term that starts that day, and the commemorative days and festivals that are not days off | K, L, M | Open Government Data License |
+| `people.json` | The top 20 surnames of each district by sex, and the 300 most common surnames of Taiwan | N, O, C, D | Open Government Data License |
 | `towns.json`, `villages2-topo.json` | District and village boundaries (TopoJSON) | F, I | MIT (package) and Open Government Data License (boundaries) |
 
 ## Sources and attribution statements
@@ -63,6 +64,12 @@ Note: The data.gov.tw entry for the Taipei shape file was not found. The license
 
 **M.** 紀念日及節日實施條例 (全國法規資料庫, pcode D0020095, 民國114年5月28日公布), §3 to §6 and §8: the commemorative days and festivals, which of them are days off, and the 補假 rule. A law is not under copyright in Taiwan (著作權法 §9).
 
+**N.** 內政部戶政司, 全國各鄉鎮市區前二十大姓人口數按性別分 (data.gov.tw 42518), 112年6月.
+此開放資料依政府資料開放授權條款 (Open Government Data License) 進行公眾釋出，使用者於遵守本條款各項規定之前提下，得利用之。
+
+**O.** 內政部戶政司, 姓氏排名與人數按三階段年齡分 (data.gov.tw 126774), 112年.
+此開放資料依政府資料開放授權條款 (Open Government Data License) 進行公眾釋出，使用者於遵守本條款各項規定之前提下，得利用之。
+
 ## Figures in the code
 
 `web/src/sim/city.ts` also uses these figures:
@@ -72,9 +79,18 @@ Note: The data.gov.tw entry for the Taipei shape file was not found. The license
 - MRT service hours, 06:00 to 24:00: on a workday `od2.json` has 43 trips in hour 05, 36,483 in hour 06, and 10,471 in hour 00 (the last trains). The model counts hour 00 as closed.
 - YouBike rentals in Taipei, 234,000 a day on average in the first half of 2026 (市區公共自行車 平均每日租借 23.4 萬次): 臺北市政府主計處 市政統計週報, 2026-07-29, from data of 臺北市政府交通局.
 
-`web/src/ui/Dashboard.tsx` uses this figure:
+`web/src/sim/people.ts` uses this figure and these guesses:
 
 - Share of residents named by a nickname with no title (a person outside the binary), 1.6%: Pew Research Center, 2022-06-07, "About 5% of young adults in the U.S. say their gender is different from their sex assigned at birth". 1.6% of U.S. adults are transgender or nonbinary. The report does not give the share of nonbinary adults alone for all ages (it gives 3.0% for adults younger than 30), so 1.6% is an upper bound. It is a U.S. figure: no figure for Taiwan was found (searched on 2026-10-24). The user chose it as a placeholder.
+- The nickname patterns (阿 or 小 with one character, a doubled character, a food or a thing, an English name) are a guess. A search on 2026-10-24 found no commonly used Chinese names or titles for non-binary people.
+- The sex split of a district's residents is that of its top 20 surnames (source N); `villages2.json` has no split by sex.
+
+`web/src/sim/events.ts` and `web/src/sim/worker.ts` use these figures and guesses for the events:
+
+- The 2026 local election is on 115年11月28日 (Saturday), voting from 08:00 to 16:00: 中央社, 2026-08-20, on the notice of 中央選舉委員會 (https://cna.com.tw/news/aipl/202608200078.aspx).
+- The new mayors take office on 12月25日: 蔣萬安 on 2022-12-25 (Taiwan News, https://www.taiwannews.com.tw/ch/news/4761550) and 柯文哲 on 2018-12-25 (公視, https://news.pts.org.tw/article/417381). 2026-12-25 is a guess from those two elections; 2014 was not confirmed.
+- About 48 personal events a day as the base (`EVENTS_PER_DAY`), with the weights `SHOWN`: 0.05 for a plan to work or a day at home, 1 for an outing on a day off, 3 for a day away. The user chose the weights by eye. Measured at village level, seed 42, from 2026-10-24 (a one-off script that runs the filter of `worker.ts` on the model for 7 days): 16, 15 and 18 personal events on the three days off, then 5, 2, 3 and 2 on the workdays.
+- The greetings of the city: most of their times follow the model (the breakfast shifts, the first buses and trains, the workday peak, dinner, nights out, the overnight shift, the last trains). Their wording, and the 03:00 and 12:00 greetings, are by eye.
 
 `scripts/days.py` and `web/src/sim/calendar.ts` use these guesses for the days that no source covers:
 
@@ -100,8 +116,9 @@ Note: The data.gov.tw entry for the Taipei shape file was not found. The license
 - `road-graph.json` and `mrt-graph.json`: Built by `scripts/graphs.py`. Points snap to a grid of about 120 m (roads) or 10 m (MRT), and the points in one grid cell become one node. Nodes with exactly two neighbors become points inside an edge, except stations and one node of each separate loop (a component in which every node has two neighbors). The points inside each edge are simplified (Douglas-Peucker, about 20 m). Each station is a node at the mean position of its exits. It links to the nearest point of each MRT line within 350 m, at a cost of 300 m for boarding or changing lines.
 - `night.json`: Built by `scripts/night.py`. Each business of source J with an address in Taipei or New Taipei goes to a group by its industry code: early (561111 breakfast shops), food (other 5611 restaurants, 561200 food stalls, 563112, 563113, 563115 and 563199 drink shops, 563200 drink stalls), convenience (471112 to 471114), hotel (551011, 551012), and nightlife (563114 bars, 9322 karaoke, 9323 places with hostesses, 969012 saunas). It goes to a village by the 里 in its address, with 羣, 峯 and 臺 read as 群, 峰 and 台 on both sides. A business without a 里, with a 里 that source F does not have, or with a 里 written in private-use characters, is spread over the villages of its district in proportion to the businesses of its group that matched. If none of its group matched in that district, it is spread in proportion to residents (this occurs for a few small groups in some districts of New Taipei, mostly on the north coast, for example 金山區 and 萬里區, and also 五股區 and 平溪區).
 - `road-routes.bin`: Built by `scripts/routes.ts` from `road-graph.json` and the model (seed 42, 10 people per agent, village and district level). It holds the road path between every pair of road nodes that a bus, scooter or car trip of that run uses and that the road graph connects.
+- `people.json`: Built by `scripts/people.py` from sources N and O, with the residents of `villages2.json`. A district's people outside its top 20 take the national ranking without those 20. The 300 most common surnames hold 99.6% of the people of Taiwan.
 - `calendar.json`: Built by `scripts/days.py` from sources K and L. Its docstring lists the input files and their addresses.
-- Only `scripts/days.py`, `scripts/graphs.py`, `scripts/night.py`, `scripts/od.py` and `scripts/routes.ts` are in the repository. Their docstrings list the input files and the commands. The other files came from one-off steps that are not in the repository yet.
+- Only `scripts/days.py`, `scripts/graphs.py`, `scripts/night.py`, `scripts/od.py`, `scripts/people.py` and `scripts/routes.ts` are in the repository. Their docstrings list the input files and the commands. The other files came from one-off steps that are not in the repository yet.
 
 ## Estimates
 
