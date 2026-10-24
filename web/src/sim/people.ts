@@ -23,10 +23,6 @@ const NICKNAMES = [
 /** Each agent's name: sex[i] is MALE, FEMALE or NICKNAME; name[i] indexes `names`. */
 export type Identity = { sex: Uint8Array; name: Uint16Array; names: string[] }
 
-/**
- * Draws a name for every agent from the surnames of its home district. A surname outside the district's top 20
- * comes from the national ranking without those 20. Its own random numbers, so the names do not change the run.
- */
 const cumulative = (weights: number[]) => { let s = 0; return Float64Array.from(weights, w => (s += w)) }
 /** Index drawn in proportion to the weights behind a cumulative array, by binary search. */
 const drawFrom = (cum: Float64Array, r: number) => {

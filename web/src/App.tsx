@@ -147,13 +147,15 @@ export function App() {
   const road = s ? Array.from(s.road) : []
   const date = cal && startDay !== undefined ? dateText(cal, startDay + (s?.day ?? 0)) : undefined
   const dayLabel = (day: number) => (cal && startDay !== undefined ? dateText(cal, startDay + day).roc : '')
-  // The public events of the last two days are enough: the list shows the newest MAX_EVENTS.
+  // A day has about ten public events, so ten days of them always reach past the newest MAX_EVENTS of the list.
   const events = cal && startDay !== undefined && s
-    ? [...personal.current, ...[s.day - 1, s.day].filter(d => d >= 0).flatMap(d => publicEvents(cal, startDay, d))] : personal.current
+    ? [...personal.current, ...Array.from({ length: 10 }, (_, k) => s.day - k).filter(d => d >= 0).flatMap(d => publicEvents(cal, startDay, d))]
+    : personal.current
   const placeOf = useMemo(() => {
     const byCode = new Map<string, { town: string; village: string }>()
     for (const g of villages?.objects.villages.geometries ?? []) byCode.set(g.properties.VILLCODE, { town: g.properties.TOWNNAME, village: g.properties.VILLNAME })
-    return (node: number) => byCode.get(nodes[node]) ?? { town: (nodes[node] ?? '').slice(3), village: '' }
+    // At district level a node is named 台北市大安區; at village level it is a code, shown blank until the villages load.
+    return (node: number) => byCode.get(nodes[node]) ?? { town: /^(台北|新北)市/.test(nodes[node] ?? '') ? nodes[node].slice(3) : '', village: '' }
   }, [villages, nodes])
   // A desktop always shows the policies and has no icon to close them, so a phone's open policy panel closes when the window turns into a desktop.
   useEffect(() => { if (!phone && open === 'policies') setOpen(undefined) }, [phone])

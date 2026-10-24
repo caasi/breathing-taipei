@@ -17,14 +17,16 @@ test('names follow the surnames of the district and the sex split, with nickname
   expect(share(male.map(i => id.names[id.name[i]] === '陳'))).toBeCloseTo(chenMen / men, 2)
 })
 
-test('a surname outside the district top 20 is never one of them, and a name reads as surname and title', () => {
+test('the national rest gives surnames outside the district top 20, and a name reads as surname and title', () => {
   const d = '新北市板橋區', id = drawNames(people, new Array(50_000).fill(d), 2), t = people.districts[d]
   const top = new Set([...t.male, ...t.female].map(([s]) => s)), names = new Set<string>()
   for (let i = 0; i < 50_000; i++) if (id.sex[i] !== NICKNAME) names.add(id.names[id.name[i]])
   expect([...names].filter(s => !top.has(s)).length).toBeGreaterThan(20)
-  const first = Array.from({ length: 50 }, (_, i) => nameOf(id, i))
-  expect(first.every(s => /^.+(先生|小姐)$/.test(s) || !/(先生|小姐)$/.test(s))).toBe(true)
-  expect(first.some(s => s.endsWith('先生')) && first.some(s => s.endsWith('小姐'))).toBe(true)
+  for (let i = 0; i < 2000; i++) {
+    const s = nameOf(id, i)
+    if (id.sex[i] === NICKNAME) expect(/(先生|小姐)$/.test(s)).toBe(false)
+    else expect(s).toBe(id.names[id.name[i]] + (id.sex[i] === MALE ? '先生' : '小姐'))
+  }
 })
 
 test('the same seed gives the same names', () => {

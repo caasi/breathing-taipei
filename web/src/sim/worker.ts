@@ -1,10 +1,9 @@
 import { getJson, getOptional } from '../load.ts'
-import { init, advance, counts, type World } from './core.ts'
+import { init, advance, counts, PLAY, STAY, type World } from './core.ts'
 import { kindAt, type Calendar } from './calendar.ts'
 import { drawNames, nameOf, type People } from './people.ts'
 import type { SimEvent } from './events.ts'
 import { mulberry32 } from './rng.ts'
-import { PLAY, STAY } from './core.ts'
 import { cityFrom, MODES } from './city.ts'
 import { networks, readRoutes, tripPaths, type Batch, type Routes } from './paths.ts'
 
@@ -122,7 +121,8 @@ onmessage = async (e: MessageEvent<ToWorker>) => {
     w = init(c.city, m.seed)
     const world = w, districtOf = Array.from(w.home, h => (m.level === 'village' ? villages[h].town : c.nodes[h]))
     const ids = drawNames(people as People, districtOf, m.seed + 1), pickRng = mulberry32(m.seed + 2)
-    // ponytail: about EVENTS_PER_DAY personal events a day, each agent about one plan a day; tune when the stream feels too fast or too slow.
+    // ponytail: EVENTS_PER_DAY is the base rate before the SHOWN weights (each agent makes about one plan a day): measured 2 to 5
+    // personal events on a workday and 15 to 18 on a day off. Tune it when the stream feels too fast or too slow.
     const keep = EVENTS_PER_DAY / Math.max(1, w.movers.length)
     newEvents = []
     w.onPlan = i => {
