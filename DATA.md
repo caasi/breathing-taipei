@@ -85,7 +85,7 @@ Note: The data.gov.tw entry for the Taipei shape file was not found. The license
 
 `web/src/sim/city.ts` and `web/src/sim/core.ts` use these guesses for days off (the user agreed on 2026-10-24):
 
-- The share of commuters away from Taipei and New Taipei for the day: 5% on a Saturday off, 8% on a Sunday or holiday (`AWAY`). The user said that many people go abroad or to another county; no source gives a share.
+- The share of commuters away from Taipei and New Taipei for the day: 5% on a Saturday off, 8% on a Sunday or holiday (`AWAY_SHARE`). The user said that many people go abroad or to another county; no source gives a share.
 - The share of commuters who go out on a day off is the district's trips on that kind of day over its workday trips, from the MRT data only.
 - On a day off, the trips that are not MRT trips keep the workday ratio to MRT trips for each pair of districts. Only the workday has telecom data.
 - Each commuter has one day-off place, drawn once from all trips of both kinds of day off.

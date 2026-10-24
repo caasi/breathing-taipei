@@ -26,7 +26,7 @@ const PEAK = new Set([7, 8, 9, 17, 18, 19])
 const MORNING = [5, 6, 7, 8, 9, 10, 11], EVENING = [12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23]
 // ponytail: guessed on 2026-10-24 (the user: many people go abroad or to another county on a day off); the share
 // of commuters away from Taipei and New Taipei for the day, on a Saturday off and on a Sunday or holiday.
-const AWAY = [0.05, 0.08]
+const AWAY_SHARE = [0.05, 0.08]
 
 // ponytail: guessed on 2026-10-24 (no public source gives people per business, shift shares or visitors);
 // replace with survey figures when found. Real people per business, the share of them on this shift,
@@ -105,7 +105,7 @@ const daysOff = (mrt: number[][][], days: number[][][][], od: number[][][], kind
     kindOf,
     od: days.map(m => m.map(hour => hour.map((row, a) => row.map((v, b) => v * ratio[a][b])))),
     out: days.map(m => od[0].map((_, a) => { const w = from(mrt, a); return w ? Math.min(1, from(m, a) / w) : 0 })),
-    away: AWAY,
+    away: AWAY_SHARE,
   }
 }
 
