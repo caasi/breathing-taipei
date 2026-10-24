@@ -142,7 +142,7 @@ describe('core properties', () => {
     // The case review round 1 found: a long way home after a late return rolls the day-off departure into a workday.
     const od = Array.from({ length: 24 }, (_, h) => [[0, h === 11 ? 3000 : 0], [h === 23 ? 3000 : 0, 0]])
     const day = Array.from({ length: 24 }, (_, h) => [[0, h === 5 ? 3000 : 0], [h === 23 ? 3000 : 0, 0]])
-    const city: City = { od, group: [0, 1], homes: [500, 0], to: [1, 1], perAgent: 10, modeOf: () => 0, minutes: (a, b) => (a === 1 ? 600 : 30),
+    const city: City = { od, group: [0, 1], homes: [500, 0], to: [1, 1], perAgent: 10, modeOf: () => 0, minutes: a => (a === 1 ? 600 : 30),
       off: { kindOf: d => (d === 1 ? 2 : 0), od: [day, day], out: [[1, 1], [1, 1]], away: [0, 0] } }
     const w = init(city, 4)
     for (let t = 0; t < 4 * MINUTES_PER_DAY; t += 10, advance(w, 10))

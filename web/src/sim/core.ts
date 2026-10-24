@@ -57,7 +57,7 @@ export type World = {
   mode: Uint8Array
   play: Uint16Array // day-off place of a commuter, drawn once from the day-off OD (its home if none)
   playMode: Uint8Array
-  dest: Uint8Array // where the current plan goes: WORK, PLAY, AWAY, or STAY (no trip: dep = ret, no legs)
+  dest: Uint8Array // where the current plan goes: WORK, PLAY, GONE (where() gives AWAY), or STAY (no trip: dep = ret, no legs)
   dep: Int32Array // minute (since 00:00 of day 0) the agent leaves home; before 0 for a night shift that started on day -1
   dur1: Uint16Array // minutes on the way to work
   ret: Int32Array // minute the agent leaves work
@@ -235,8 +235,8 @@ export const where = (w: World, i: number, minute = now(w)): number => {
 
 /**
  * Moves the clock forward. Agents get their next plan in the minute they are home again, minute by minute
- * in order, so any split of the same whole minutes gives the same plans. Fractional steps are not exact:
- * floating-point sums can stop just short of a minute and process its agents one step later.
+ * in order. Fractional steps are not exact: floating-point sums can stop just short of a minute and process
+ * its agents one step later.
  * Home times spread over the day, so no frame plans everyone.
  */
 export const advance = (w: World, minutes: number) => {

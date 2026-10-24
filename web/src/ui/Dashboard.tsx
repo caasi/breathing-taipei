@@ -4,11 +4,11 @@ import { hhmm, H2 } from './format.ts'
 
 import { actionOf, type PlaceOf, type SimEvent } from '../sim/events.ts'
 
-// ponytail: placeholder policies for the layout only; nothing here reaches the simulation yet.
 // The kind of an event shows by the colour of its text, not by a label; a bad event (an accident) gets its own colour when it comes.
 const COLOUR = { personal: '#eee', public: '#c9a7ff' } as const
 
 type Policy = { id: string; label: string } & ({ type: 'toggle' } | { type: 'range'; min: number; max: number; step: number; unit: string; start: number })
+// ponytail: placeholder policies for the layout only; nothing here reaches the simulation yet.
 // Grouped by the HEART idea of puma.taipei, as the user set.
 const POLICIES: [string, Policy[]][] = [
   ['空間', [{ id: 'bus-lane', label: '公車專用道延伸', type: 'toggle' }, { id: 'sidewalk', label: '人行道拓寬', type: 'toggle' }]],
