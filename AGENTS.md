@@ -26,15 +26,21 @@ The user set this rule for the repository on 2026-10-24. It is not a "zero comme
 
 ## Next steps, in this order
 
-1. **Try 1 agent = 100 people** (now 10). Change `PER_AGENT` in `web/src/App.tsx`, and change `EVERY` so that the dot choices are 100, 200 and 500 people. Measured in Node on 2026-10-24: 64,558 agents, init 233 ms, and a frame (16x) of 0.9 ms median and 2.3 ms maximum. At 1/10 these were 645,406 agents, 808 ms, 9.6 ms and 35 ms. Every village still has agents at 1/100. On the iPhone the drawing, not the simulation, sets the frame rate, so also measure with fewer dots.
-2. **Later ideas, not started:** events (incidents that change an agent's plan), policy settings (the user grouped them by the HEART idea of puma.taipei: space, opportunity, company, resilience, time), WebGL drawing, and build scripts for the data files that came from one-off steps.
+1. **Personal settings** (people per agent, dot density): to be discussed with the user, and kept apart from the policy settings. A trial of 1 agent = 100 people is on the branch `feat/scale-100` (not merged). It helped an old Intel Mac, but it made the villages too coarse: the median village has about 42 agents at 1/100.
+2. **Later ideas, not started:** events (incidents that change an agent's plan), policy settings (the user grouped them by the HEART idea of puma.taipei: space, opportunity, company, resilience, time), and build scripts for the data files that came from one-off steps.
 
 ## State of the model (2026-10-24)
 
 - `main` has the night-time model (merge `7b291a0`). Each agent has one plan at a time. The agent gets its next plan in the minute it is home again, from a ring of per-minute buckets in `core.ts`. For events, add a function that moves an agent to a new bucket. An agent must never be in two buckets.
 - `City.kinds` holds every group that does not commute on the OD: short walk and bike trips, four night shifts, and two kinds of night-time visitors. To add a group, add a kind. Do not add a branch in `plan()`.
 - The people per business, the shift shares, the hours and the visitors per worker in `city.ts` (`SHIFTS`, `VISITS`) are guesses that the user agreed to. Do not present them as data.
-- Performance: on the user's iPhone 16 Pro Max, 16x with 20 people per dot runs at 20 to 25 fps. On an Intel Mac with OBS open it was about 10 fps. In headless Chromium with the CPU slowed 4 times, `main` before the night model and after it gave the same fps.
+- Drawing has three layers, as the user set on 2026-10-24:
+  - What changes every frame is WebGL: the cell fills (`web/src/ui/Fills.tsx`, triangles on the GPU once, one colour per cell each frame) and the dots (`web/src/ui/Travellers.tsx`, the CPU finds the positions, one draw call).
+  - What changes little is SVG: cell edges, district borders, lines and stations in one SVG that changes only when a layer, the level or the map data changes, and the district labels in a second SVG (their counts change, so they must not share the static SVG).
+  - The controls on top are HTML from React.
+  - Both WebGL layers use `useWebGL2` in `web/src/ui/gl.ts`. The cleanup of each run deletes GL objects and does not lose the context, because the next run gets the same context from the same canvas. An unmount loses the context, to free one of the about 16 contexts that a browser allows. So the canvas must not be mounted again after an unmount: React StrictMode would leave the layers blank, and `web/src/main.tsx` does not use it. Vite fast refresh does the same when you edit `gl.ts`, `Fills.tsx` or `Travellers.tsx`: reload the page after such an edit. (Measured on 2026-10-24: an edit of `Fills.tsx` lost the fills context; an edit of `HeatMap.tsx` lost none.) The page needs WebGL2: without it, or when setup throws, the fills and dots stay empty.
+  - Why: with SVG fills, a CPU profile in Chromium showed 75% of the main thread in browser style and paint work. A static SVG is expected to cost about the same as a canvas bitmap when it is composited, and to be expensive only when its content changes; this follows from how browsers composite and was not measured.
+- Performance, 16x with 20 people per dot (16x was removed afterwards), measured by the user after 8 simulated days, before the dots moved to WebGL: with the WebGL fills, 30 to 50 fps on the iPhone 16 Pro Max and 60 fps on the Mac. With SVG fills, the iPhone ran at 20 to 25 fps. On an Intel Mac with OBS open it was about 10 fps. In headless Chromium with the CPU slowed 4 times, `main` before the night model and after it gave the same fps.
 
 ## Data that is only on this machine
 
