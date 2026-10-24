@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'vitest'
 import fc from 'fast-check'
 import { readFileSync } from 'node:fs'
-import { init, advance, counts, where, ROAD, AWAY, PLAY, MINUTES_PER_DAY, type City, type World } from './core.ts'
+import { init, advance, counts, where, ROAD, AWAY, PLAY, GONE, MINUTES_PER_DAY, type City, type World } from './core.ts'
 import { cityFrom, km, MODES, MAX_KM, WALK, BIKE } from './city.ts'
 
 // 1-5 groups with 1-4 nodes each, sparse non-negative OD, any destination weights,
@@ -79,8 +79,9 @@ describe('core properties', () => {
         const key = `${i} ${day}`
         left.set(key, (left.get(key) ?? 0) + 1)
         if (left.get(key)! > 1) bad.push(`twice ${key}`)
-        // The time to go home is on the day it left, unless the way there alone takes it past midnight.
-        if (Math.floor(w.ret[i] / MINUTES_PER_DAY) > day && w.ret[i] > w.dep[i] + w.dur1[i]) bad.push(`overnight ${key}`)
+        // Home again on the day it left, unless the two legs alone take it past midnight.
+        const end = (day + 1) * MINUTES_PER_DAY
+        if (w.ret[i] + w.dur2[i] > end && w.dep[i] + w.dur1[i] + w.dur2[i] <= end) bad.push(`overnight ${key}`)
       }
       expect(bad).toEqual([])
     }), { numRuns: 30 })
@@ -128,6 +129,55 @@ describe('core properties', () => {
     const w = init(city, 1), gone = new Set<number>()
     for (let t = 0; t < MINUTES_PER_DAY; t++, advance(w, 1)) for (const i of w.movers) if (where(w, i) === AWAY) gone.add(i)
     expect(gone.size).toBe(100)
+  })
+
+  test('an outing or a day away leaves on a day off, never on a workday', () => {
+    fc.assert(fc.property(cityArb, fc.integer(), (city, seed) => {
+      fc.pre(!!city.off)
+      const w = init(city, seed), bad: string[] = []
+      for (let t = 0; t <= 4 * MINUTES_PER_DAY; t += 10, advance(w, 10)) for (const i of w.movers)
+        if ((w.dest[i] === PLAY || w.dest[i] === GONE) && !city.off!.kindOf(Math.floor(w.dep[i] / MINUTES_PER_DAY))) bad.push(`${i} at ${w.dep[i]}`)
+      expect(bad).toEqual([])
+    }), { numRuns: 30 })
+    // The case review round 1 found: a long way home after a late return rolls the day-off departure into a workday.
+    const od = Array.from({ length: 24 }, (_, h) => [[0, h === 11 ? 3000 : 0], [h === 23 ? 3000 : 0, 0]])
+    const day = Array.from({ length: 24 }, (_, h) => [[0, h === 5 ? 3000 : 0], [h === 23 ? 3000 : 0, 0]])
+    const city: City = { od, group: [0, 1], homes: [500, 0], to: [1, 1], perAgent: 10, modeOf: () => 0, minutes: a => (a === 1 ? 600 : 30),
+      off: { kindOf: d => (d === 1 ? 2 : 0), od: [day, day], out: [[1, 1], [1, 1]], away: [0, 0] } }
+    const w = init(city, 4)
+    for (let t = 0; t < 4 * MINUTES_PER_DAY; t += 10, advance(w, 10))
+      for (const i of w.movers) if (w.dest[i] === PLAY) expect(city.off!.kindOf(Math.floor(w.dep[i] / MINUTES_PER_DAY))).toBe(2)
+  })
+
+  test('a way home moved to an earlier hour is timed for that hour', () => {
+    // An outing that would go home at 23:00 with a 5-hour way home must leave by 19:00, a peak hour where it takes 6 hours.
+    const od = Array.from({ length: 24 }, (_, h) => [[0, h === 10 ? 3000 : 0], [h === 23 ? 3000 : 0, 0]])
+    const minutes = (a: number, _b: number, _m: number, hour: number) => (a === 1 ? (hour >= 17 && hour < 20 ? 360 : 300) : 30)
+    const city: City = { od, group: [0, 1], homes: [200, 0], to: [1, 1], perAgent: 10, modeOf: () => 0, minutes,
+      off: { kindOf: () => 2, od: [od, od], out: [[1, 1], [1, 1]], away: [0, 0] } }
+    const w = init(city, 2), out = Array.from(w.movers).filter(i => w.dest[i] === PLAY)
+    expect(out.length).toBeGreaterThan(0)
+    for (const i of out) {
+      // The plans after init can be on day -1, at negative minutes.
+      expect(w.dur2[i]).toBe(minutes(1, 0, 0, Math.floor((((w.ret[i] % 1440) + 1440) % 1440) / 60)))
+      expect(w.ret[i] + w.dur2[i]).toBeLessThanOrEqual((Math.floor(w.dep[i] / 1440) + 1) * 1440)
+    }
+  })
+
+  test('a way home that grows hour by hour still ends with the length of its final hour', () => {
+    // The case Codex built in review round 3: from 23:00 back to 19:00 the way home takes 120, 180, 240, 300, 360 minutes.
+    const od = Array.from({ length: 24 }, (_, h) => [[0, h === 10 ? 3000 : 0], [h === 23 ? 3000 : 0, 0]])
+    const home = [360, 300, 240, 180, 120] // hours 19 to 23
+    const minutes = (a: number, _b: number, _m: number, hour: number) => (a === 1 ? (hour >= 19 ? home[hour - 19] : 360) : 30)
+    const city: City = { od, group: [0, 1], homes: [200, 0], to: [1, 1], perAgent: 10, modeOf: () => 0, minutes,
+      off: { kindOf: () => 2, od: [od, od], out: [[1, 1], [1, 1]], away: [0, 0] } }
+    const w = init(city, 3), out = Array.from(w.movers).filter(i => w.dest[i] === PLAY)
+    expect(out.length).toBeGreaterThan(0)
+    for (const i of out) {
+      const hour = Math.floor((((w.ret[i] % 1440) + 1440) % 1440) / 60), day = Math.floor(w.dep[i] / 1440)
+      expect(w.dur2[i]).toBe(minutes(1, 0, 0, hour))
+      expect(w.ret[i] + w.dur2[i]).toBeLessThanOrEqual((day + 1) * 1440)
+    }
   })
 
   test('same seed gives the same run', () => {
@@ -273,4 +323,17 @@ test('a day off has no morning peak, fewer people out, and some away (real data)
   expect(holiday.out).toBeLessThan(workday.out)
   expect(workday.away).toBe(0)
   expect(holiday.away).toBeGreaterThan(0)
+})
+
+test('on a day off, a district with no MRT data still goes out and gets visitors (real data)', () => {
+  const c = cityFrom(data(), 100, 'district', () => 2), names = c.nodes, xizhi = names.indexOf('新北市汐止區')
+  expect(c.city.off!.out[1][xizhi]).toBeGreaterThan(0.3)
+  const w = init(c.city, 11)
+  let out = 0, visitors = 0
+  for (const i of w.movers) {
+    if (w.home[i] === xizhi && w.play[i] !== xizhi) out++
+    if (w.play[i] === xizhi && w.home[i] !== xizhi) visitors++
+  }
+  expect(out).toBeGreaterThan(0)
+  expect(visitors).toBeGreaterThan(0)
 })

@@ -19,11 +19,14 @@ The author did not register for the event, so this is not an entry.
   - MRT riders move on the MRT lines.
   - Bus, scooter, and car commuters move on the bus routes.
   - People who walk or ride a bicycle move in a straight line.
-- **The panel.** It shows the time, the frame time of the simulation, the frame rate, and the number of people on the road for each mode.
+- **The clock.** It shows the 民國 date and the time, then the lunar date, the solar term, a holiday (orange) and the days that are commemorated but not off (blue).
+- **The event panel.** It shows the newest 100 events: a few of the characters' plans, and the public events of each day. On a phone it is below or beside the map.
+- **The policy panel.** It holds placeholder policy settings; they do not change the simulation yet. On a phone it opens from the third icon.
+- **The info and settings panels.** The ⓘ icon opens the project text, the credits and the version. The gear opens the display settings and the figures of the run: the people of each city, on the road and away, and the frame time and frame rate.
 
 ## Run it
 
-You need Node.js 24 and pnpm.
+You need Node.js 24, pnpm and a git clone: the build reads the commit with `git rev-parse HEAD`, so `pnpm dev`, `pnpm build` and `pnpm test` do not run in a ZIP from GitHub.
 
 ```sh
 cd web
@@ -45,7 +48,7 @@ pnpm typecheck
 There are two kinds of settings:
 
 - **Display settings** belong to one viewer and one device. The browser keeps them (local storage), so they are not in a shared link. When the browser cannot keep them (for example in a private window), they go back to the defaults when the page loads again.
-- **Policy settings** are the scenario. They are in the query string, so a link shows the same scenario. The policy panel is a placeholder for now: its settings do not change the simulation.
+- **Policy settings** are the scenario. A setting that you change goes into the query string, so a link shows the same scenario. A setting that you did not change stays out of the link. The policy panel is a placeholder for now: its settings do not change the simulation.
 
 An unknown value goes back to the default.
 
@@ -140,6 +143,9 @@ The tests use Vitest and fast-check. The property tests use random cities, rando
 - Shortest paths equal brute-force shortest paths. A path follows the geometry of its edges.
 - A URL setting reads back as the value that the app wrote. An unknown value gives the default.
 - The change-rate history does not grow while the clock is paused. After the first window of a run, it spans the selected window.
+- On a day off a commuter leaves home at most once, is home by 24:00 when its two legs fit in the day, and never leaves on a workday for an outing. The share that goes out does not grow over a run of days off. A way home moved to an earlier hour is timed for that hour.
+- The map box has whole CSS pixels, and the map fits inside its area on every window shape.
+- The list of events holds the newest 100 up to the clock, also around a holiday break.
 
 An example test makes sure that the road-graph hash changes when one coordinate (by 0.000001 degree), one edge end, one geometry point, or one weight changes.
 
@@ -156,7 +162,7 @@ The tests with real data:
 
 ## Known gaps
 
-- `web/public/` holds the data that the app uses. Only some build steps are scripts: `scripts/graphs.py` builds the road and MRT graphs, `scripts/night.py` builds `night.json` (their docstrings give the inputs), and `scripts/routes.ts` builds `road-routes.bin`. `pnpm dev` and `pnpm build` run `pnpm routes` first. Without the file, the page routes every road trip itself, which took about 30 s at 20 people per dot in Chromium against 2.5 to 3.6 s with it. The other files came from one-off steps. These steps are not in the repository yet.
+- `web/public/` holds the data that the app uses. These build steps are scripts: `scripts/graphs.py` builds the road and MRT graphs, `scripts/night.py` builds `night.json`, `scripts/od.py` builds `od2.json`, `scripts/days.py` builds `calendar.json`, `scripts/people.py` builds `people.json` (their docstrings give the inputs), and `scripts/routes.ts` builds `road-routes.bin`. `pnpm dev` and `pnpm build` run `pnpm routes` first. Without the file, the page routes every road trip itself, which took about 30 s at 20 people per dot in Chromium against 2.5 to 3.6 s with it. The other files came from one-off steps. These steps are not in the repository yet.
 - The events narrate the plans of the model and the calendar. No event changes a plan yet, and the policy settings are placeholders.
 
 ## License

@@ -1,13 +1,14 @@
+import { memo } from 'react'
 import { useQuery, bool, fromBool, onSteps } from '../query.ts'
 import { hhmm, H2 } from './format.ts'
 
 import { actionOf, type PlaceOf, type SimEvent } from '../sim/events.ts'
 
-// ponytail: placeholder policies for the layout only; nothing here reaches the simulation yet.
 // The kind of an event shows by the colour of its text, not by a label; a bad event (an accident) gets its own colour when it comes.
 const COLOUR = { personal: '#eee', public: '#c9a7ff' } as const
 
 type Policy = { id: string; label: string } & ({ type: 'toggle' } | { type: 'range'; min: number; max: number; step: number; unit: string; start: number })
+// ponytail: placeholder policies for the layout only; nothing here reaches the simulation yet.
 // Grouped by the HEART idea of puma.taipei, as the user set.
 const POLICIES: [string, Policy[]][] = [
   ['空間', [{ id: 'bus-lane', label: '公車專用道延伸', type: 'toggle' }, { id: 'sidewalk', label: '人行道拓寬', type: 'toggle' }]],
@@ -39,7 +40,10 @@ export const MAX_EVENTS = 100
 export const recent = (events: SimEvent[], now: number, limit = MAX_EVENTS) =>
   events.filter(e => e.t <= now).sort((a, b) => b.t - a.t).slice(0, limit)
 
-export function Events({ events, now, dayLabel, placeOf }: { events: SimEvent[]; now: number; dayLabel: (day: number) => string; placeOf: PlaceOf }) {
+type EventsProps = { events: SimEvent[]; now: number; dayLabel: (day: number) => string; placeOf: PlaceOf }
+
+// Memoized: the page renders about 30 times a second, and the list changes at most once a simulated minute.
+export const Events = memo(function Events({ events, now, dayLabel, placeOf }: EventsProps) {
   const happened = recent(events, now), dayOf = (e: SimEvent) => Math.floor(e.t / 1440)
   return <>
     <h2 style={H2}>事件</h2>
@@ -52,7 +56,7 @@ export function Events({ events, now, dayLabel, placeOf }: { events: SimEvent[];
           <span style={{ color: COLOUR[e.kind] }}>{e.kind === 'public' ? e.text : <><span style={{ color: '#aaa' }}>{placeOf(e.home).town}{placeOf(e.home).village}</span>的<span style={{ color: '#ffd9a0' }}>{e.name}</span>{actionOf(e, placeOf)}</>}</span></div></li>)}
     </ol> : <p style={{ fontSize: 14, color: '#aaa' }}>還沒有事件。</p>}
   </>
-}
+})
 
 export function Policies({ values, set }: PolicyValues) {
   return <>

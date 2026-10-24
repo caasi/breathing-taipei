@@ -57,7 +57,7 @@ export type World = {
   mode: Uint8Array
   play: Uint16Array // day-off place of a commuter, drawn once from the day-off OD (its home if none)
   playMode: Uint8Array
-  dest: Uint8Array // where the current plan goes: WORK, PLAY, AWAY, or STAY (no trip: dep = ret, no legs)
+  dest: Uint8Array // where the current plan goes: WORK, PLAY, GONE (where() gives AWAY), or STAY (no trip: dep = ret, no legs)
   dep: Int32Array // minute (since 00:00 of day 0) the agent leaves home; before 0 for a night shift that started on day -1
   dur1: Uint16Array // minutes on the way to work
   ret: Int32Array // minute the agent leaves work
@@ -81,7 +81,8 @@ const RING = 3 * MINUTES_PER_DAY
 
 const MORNING = [5, 6, 7, 8, 9, 10, 11]
 const EVENING = [12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23]
-const DAYTIME = [5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17] // leaving home on a day off: no morning peak
+// ponytail: a day-off departure falls between 05:00 and 17:00, weighted by that day's OD (so no morning peak); the window is a guess.
+const DAYTIME = [5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17]
 const HOURS = Array.from({ length: 24 }, (_, h) => h)
 
 // The hour comes from OD; the minute inside it is uniform (OD has no finer grain).
@@ -127,15 +128,27 @@ const plan = (w: World, i: number, after: number): number => {
       if (today !== (off?.kindOf(dayOf(dep)) ?? 0)) continue
       return trip(w, i, WORK, dep, k, w.mode[i], minuteOf(od, EVENING, group[k], group[h], w.rng(), w.rng()))
     }
-    // One choice per day off: a commuter that already went out on this day stays home until the next one.
     if (w.dest[i] !== STAY && dayOf(w.dep[i]) === day) continue
     const r = w.rng(), away = off!.away[today - 1], p = w.play[i], dayOd = off!.od[today - 1]
     if (r >= away + (1 - away) * off!.out[today - 1][group[h]]) return stay(w, i, day)
     // ponytail: the hours of a day away follow the trips inside the home district; there is no data on trips out of the city.
     const gone = r < away, to = gone ? h : p
     const dep = firstAtOrAfter(after, minuteOf(dayOd, DAYTIME, group[h], group[to], w.rng(), w.rng()))
+    // A commuter home late from the day before can find the drawn hour gone; the departure then rolls into the next day.
+    if (dayOf(dep) !== day) continue
     const leave = minuteOf(dayOd, EVENING.filter(x => x > hourOf(dep)), group[to], group[h], w.rng(), w.rng())
-    return trip(w, i, gone ? GONE : PLAY, dep, to, gone ? w.mode[i] : w.playMode[i], leave)
+    const mode = gone ? w.mode[i] : w.playMode[i], end = (day + 1) * MINUTES_PER_DAY
+    trip(w, i, gone ? GONE : PLAY, dep, to, mode, leave)
+    // Leave for home early enough to be in by 24:00, when the two legs leave room for it. An earlier hour can have a
+    // longer way home, so the way home is timed again at each move. The time to leave only moves earlier, so this ends;
+    // it stops at the arrival at the place, where the two legs alone pass midnight.
+    while (w.ret[i] + w.dur2[i] > end) {
+      const ret = Math.max(dep + w.dur1[i], end - w.dur2[i])
+      if (ret >= w.ret[i]) break
+      w.ret[i] = ret
+      w.dur2[i] = leg(w.city.minutes(to, h, mode, hourOf(ret)))
+    }
+    return w.ret[i] + w.dur2[i]
   }
 }
 
@@ -222,8 +235,8 @@ export const where = (w: World, i: number, minute = now(w)): number => {
 
 /**
  * Moves the clock forward. Agents get their next plan in the minute they are home again, minute by minute
- * in order, so any split of the same whole minutes gives the same plans. Fractional steps are not exact:
- * floating-point sums can stop just short of a minute and process its agents one step later.
+ * in order. Fractional steps are not exact: floating-point sums can stop just short of a minute and process
+ * its agents one step later.
  * Home times spread over the day, so no frame plans everyone.
  */
 export const advance = (w: World, minutes: number) => {

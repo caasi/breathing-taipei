@@ -18,7 +18,7 @@ test('known days: the office calendar, the 中央氣象署 lunar table and its s
   expect(at('2026-10-25')).toMatchObject({ holiday: '臺灣光復暨金門古寧頭大捷紀念日', kind: HOLIDAY })
   expect(at('2026-10-26')).toMatchObject({ holiday: '補假', kind: HOLIDAY })
   expect(at('2026-10-27')).toMatchObject({ kind: WORKDAY })
-  expect(at('2027-02-06')).toMatchObject({ lunar: '農曆正月初一', holiday: '春節' }) // ICU's Chinese calendar gives 臘月30
+  expect(at('2027-02-06')).toMatchObject({ lunar: '農曆正月初一', holiday: '春節', kind: HOLIDAY }) // ICU's Chinese calendar gives 臘月30; a Saturday, but a holiday
   expect(at('2027-02-04').term).toBe('立春')
 })
 

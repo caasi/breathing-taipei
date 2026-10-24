@@ -1,5 +1,5 @@
 import { GONE, PLAY, STAY } from './core.ts'
-import type { Calendar } from './calendar.ts'
+import { isoAt, kindAt, type Calendar } from './calendar.ts'
 
 /**
  * One event: t in minutes since 00:00 of day 0. A personal event follows one agent (a character: 10 people at the
@@ -56,32 +56,33 @@ const DAY_OFF_GREETINGS: [number, string][] = [
 
 /** The public events of one simulated day: holidays, commemorations, solar terms, civic days, and greetings. */
 export const publicEvents = (cal: Calendar, startDay: number, day: number): SimEvent[] => {
-  const i = startDay + day, d = cal.days[i], t = day * 24 * 60
-  if (!d) return []
-  const iso = new Date(Date.parse(`${cal.start}T00:00:00Z`) + i * 864e5).toISOString().slice(0, 10)
+  const i = startDay + day, d = cal.days[i], t = day * 24 * 60, iso = isoAt(cal, i)
   const out: { t: number; text: string }[] = []
-  if (d[4] && d[4] !== '補假') out.push({ t, text: `今天是${d[4]}，放假一天` })
-  if (d[4] === '補假') out.push({ t, text: '今天補假，放假一天' })
-  for (const name of d[5] ? d[5].split('、') : []) out.push({ t, text: `今天是${name}` })
-  if (d[3]) out.push({ t, text: `今天${d[3]}` })
+  // Past the end of the table there are no holidays or terms, but the city still greets its days.
+  if (d && d[4] && d[4] !== '補假') out.push({ t, text: `今天是${d[4]}，放假一天` })
+  if (d && d[4] === '補假') out.push({ t, text: '今天補假，放假一天' })
+  for (const name of d?.[5] ? d[5].split('、') : []) out.push({ t, text: `今天是${name}` })
+  if (d?.[3]) out.push({ t, text: `今天${d[3]}` })
   if (CIVIC[iso]) out.push({ t, text: CIVIC[iso] })
-  for (const [hour, text] of d[0] ? DAY_OFF_GREETINGS : WORKDAY_GREETINGS) out.push({ t: t + Math.round(hour * 60), text })
+  for (const [hour, text] of kindAt(cal, i) ? DAY_OFF_GREETINGS : WORKDAY_GREETINGS) out.push({ t: t + Math.round(hour * 60), text })
   // The same day gives the same ids, so a list that is built again keeps its rows.
   return out.map((e, k): SimEvent => ({ ...e, kind: 'public', id: `d${day}-${k}` }))
 }
 
 /**
  * The personal events and the public events of enough days back that the newest `limit` up to now are all there:
- * days are added from today back until the events from that day on reach `limit`. ponytail: at most 60 days back,
- * which a day without public events (after the calendar table ends) can reach; a list that short is then incomplete.
+ * days are added from today back until the events from that day on reach `limit`, or day 0.
  */
 export const withPublic = (personal: SimEvent[], cal: Calendar, startDay: number, now: number, limit: number) => {
   const today = Math.floor(now / 1440)
   const out = [...personal]
-  for (let day = today; day >= Math.max(0, today - 60); day--) {
+  for (let day = today; day >= 0; day--) {
     out.push(...publicEvents(cal, startDay, day))
     // Count only what the list can show: the greetings later today and the plans made ahead are after now.
     if (out.filter(e => e.t >= day * 1440 && e.t <= now).length >= limit) break
   }
   return out
 }
+
+/** The time of the first event after `now`, or Infinity: until the clock passes it, the shown list stays the same. */
+export const nextAfter = (events: SimEvent[], now: number) => events.reduce((t, e) => (e.t > now && e.t < t ? e.t : t), Infinity)

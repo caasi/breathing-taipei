@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 
 type Store = { get: (key: string) => string | null; set: (key: string, value: string) => void }
 
@@ -17,19 +17,29 @@ const LOCAL_STORE: Store = {
   set: (key, value) => { try { localStorage.setItem(`breathing-taipei.${key}`, value) } catch { /* the page keeps the value */ } },
 }
 
-/** The stored text is outside input: a value that does not parse falls back to the default. */
-function useSetting<T>(store: Store, key: string, fallback: T, parse: (s: string) => T | undefined, format: (v: T) => string) {
+/**
+ * The stored text is outside input: a value that does not parse falls back to the default. With `onlyChanges`, the
+ * value is stored only after the viewer changes it, so a later release with a new default reaches a returning viewer.
+ */
+function useSetting<T>(store: Store, key: string, fallback: T, parse: (s: string) => T | undefined, format: (v: T) => string, onlyChanges = false) {
   const [value, setValue] = useState<T>(() => {
     const raw = store.get(key)
     return raw === null ? fallback : parse(raw) ?? fallback
   })
-  useEffect(() => store.set(key, format(value)), [key, value])
+  const first = useRef(true)
+  useEffect(() => {
+    if (!(onlyChanges && first.current)) store.set(key, format(value))
+    first.current = false
+  }, [key, value])
   return [value, setValue] as const
 }
 
-/** A policy setting: it starts from ?key= in the URL and writes itself back, so a link reproduces the scenario. */
+/**
+ * A policy setting: it starts from ?key= in the URL and writes itself back after a change, so a link reproduces the
+ * scenario. A key that was never changed stays out of the URL, so a later release with a new default reaches an old link.
+ */
 export const useQuery = <T>(key: string, fallback: T, parse: (s: string) => T | undefined, format: (v: T) => string = String) =>
-  useSetting(URL_STORE, key, fallback, parse, format)
+  useSetting(URL_STORE, key, fallback, parse, format, true)
 /**
  * A display setting: it belongs to this viewer and device, so it stays in this browser and not in a shared link.
  * An old link can still carry the key (display settings were in the URL before 2026-10-24); it is removed, unread.
@@ -42,7 +52,7 @@ export function useStored<T>(key: string, fallback: T, parse: (s: string) => T |
     const rest = q.toString() // not q.size: Safari before 17 has no size, and the test would drop every key
     history.replaceState(null, '', `${location.pathname}${rest ? `?${rest}` : ''}${location.hash}`)
   }, [key])
-  return useSetting(LOCAL_STORE, key, fallback, parse, format)
+  return useSetting(LOCAL_STORE, key, fallback, parse, format, true)
 }
 
 export const oneOf = <T extends string | number>(options: readonly T[]) => (s: string) =>

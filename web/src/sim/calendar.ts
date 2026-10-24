@@ -13,6 +13,9 @@ const isoOf = (ms: number) => new Date(ms).toISOString().slice(0, 10)
 /** Today in Taiwan (UTC+8, no daylight saving time), as YYYY-MM-DD. */
 export const todayInTaipei = (ms = Date.now()) => isoOf(ms + 8 * 3600e3)
 
+/** The date (YYYY-MM-DD) at an index of cal.days, also outside the table. */
+export const isoAt = (cal: Calendar, i: number) => isoOf(utc(cal.start) + i * DAY_MS)
+
 /** Index into cal.days of a date; out of range when the date is outside the table. */
 export const indexOf = (cal: Calendar, iso: string) => Math.round((utc(iso) - utc(cal.start)) / DAY_MS)
 

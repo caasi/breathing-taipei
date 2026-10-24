@@ -10,7 +10,7 @@ import { record, since, KEEP, type Entry } from './history.ts'
 import { layoutFor, PANEL } from './ui/view.ts'
 import { dateText, indexOf, todayInTaipei, type Calendar } from './sim/calendar.ts'
 import { Events, Policies, usePolicies, MAX_EVENTS } from './ui/Dashboard.tsx'
-import { withPublic, type SimEvent } from './sim/events.ts'
+import { nextAfter, withPublic, type SimEvent } from './sim/events.ts'
 import { hhmm, H2 } from './ui/format.ts'
 
 const SPEEDS = [0, 1, 2, 4, 8]
@@ -19,6 +19,8 @@ const LAYERS: [string, string][] = [['mrt', '捷運'], ['lrt', '輕軌'], ['tra'
 const PER_AGENT = 10
 // Plans are made ahead of their departure, so the newest events are not all shown yet: keep more than the list shows.
 const KEEP_EVENTS = 3 * MAX_EVENTS
+// On a phone the clock sits right of the title, and a long holiday name wraps instead of running under it.
+const TITLE_ROOM = 116
 // The English subtitle at this share of the title size is a little narrower than 台北鼓動; the user chose it by eye.
 const SUBTITLE_SCALE = 0.46
 const WINDOWS = [15, 30, 60, KEEP] // simulated minutes the change rate can look back; history keeps the longest
@@ -51,13 +53,13 @@ export function App() {
   // Day 0 of the run is the day the page opens, in Taiwan.
   const startDay = useMemo(() => cal && indexOf(cal, todayInTaipei()), [cal])
   const [nodes, setNodes] = useState<string[]>([])
-  const [coords, setCoords] = useState<[number, number][]>([])
   const [trips, setTrips] = useState<Trips>()
   const tripsRef = useRef<Trips>()
   const [s, setS] = useState<FromWorker>()
   // Display settings belong to this viewer, so they stay in this browser; the policies (usePolicies) are in the URL.
   const policies = usePolicies()
-  const [speed, setSpeed] = useStored('speed', 1, oneOf(SPEEDS))
+  // A pause is not restored: a viewer who comes back to a stopped page at 00:00 sees nothing move.
+  const [speed, setSpeed] = useStored('speed', 1, s => (s === '0' ? undefined : oneOf(SPEEDS)(s)))
   const [level, setLevel] = useStored<Level>('level', 'village', oneOf(['district', 'village'] as const))
   const [dot, setDot] = useStored('dot', 50, oneOf(EVERY.map(e => e * PER_AGENT)))
   const every = dot / PER_AGENT
@@ -94,7 +96,6 @@ export function App() {
       if ('error' in e.data) { setRunError(e.data.error); return }
       const m = e.data
       if (m.nodes) setNodes(m.nodes)
-      if (m.coords) setCoords(m.coords)
       if (m.homes) homes.current = m.homes
       if (m.coords) { tracks.current = []; history.current = []; unplaced.current = []; personal.current = [] }
       if (m.events?.length) personal.current = [...personal.current, ...m.events].slice(-KEEP_EVENTS)
@@ -146,8 +147,19 @@ export function App() {
   const { kind, box, fit, view } = useMemo(() => layoutFor(size.w, size.h, taipei), [size, taipei]), phone = kind !== 'desktop', titleSize = phone ? 20 : 28
   const road = s ? Array.from(s.road) : []
   const date = cal && startDay !== undefined ? dateText(cal, startDay + (s?.day ?? 0)) : undefined
-  const dayLabel = (day: number) => (cal && startDay !== undefined ? dateText(cal, startDay + day).roc : '')
-  const events = cal && startDay !== undefined && s ? withPublic(personal.current, cal, startDay, s.day * 1440 + s.minute, MAX_EVENTS) : personal.current
+  const dayLabel = useMemo(() => (day: number) => (cal && startDay !== undefined ? dateText(cal, startDay + day).roc : ''), [cal, startDay])
+  // The worker posts about 30 times a second, and at any speed above a pause the simulated minute changes on each post.
+  // The list changes only when the clock passes the time of its next event, a new event comes, or a new day starts,
+  // so it is built again then and not on every post.
+  const nowMinute = s ? s.day * 1440 + Math.floor(s.minute) : 0, newest = personal.current.at(-1)?.id
+  // The time of the event that the clock has passed: it changes with each event passed, so a yes/no would miss the second.
+  // It is state set after the commit, not a ref set in render: a render that React drops must not move it.
+  const [nextDue, setNextDue] = useState(Infinity), passed = nowMinute >= nextDue ? nextDue : -1
+  const list = useMemo(() => {
+    const events = cal && startDay !== undefined && s ? withPublic(personal.current, cal, startDay, nowMinute, MAX_EVENTS) : personal.current
+    return { now: nowMinute, events, next: nextAfter(events, nowMinute) }
+  }, [cal, startDay, newest, !s, s?.day, passed])
+  useEffect(() => setNextDue(list.next), [list.next])
   const placeOf = useMemo(() => {
     const byCode = new Map<string, { town: string; village: string }>()
     for (const g of villages?.objects.villages.geometries ?? []) byCode.set(g.properties.VILLCODE, { town: g.properties.TOWNNAME, village: g.properties.VILLNAME })
@@ -180,7 +192,7 @@ export function App() {
     </div>
   </>
   const info = <>
-    <p>台北鼓動模擬台北市與新北市的一個平日：早上人們湧入各里，傍晚離開。這是個人的業餘專案，起於 2026-10-24 的市政 debug 松，但沒有報名參賽。</p>
+    <p>台北鼓動模擬台北市與新北市的日子，從你打開頁面的這一天起：平日早上人們湧入各里、傍晚離開，假日則出門走走或離開雙北。這是個人的業餘專案，起於 2026-10-24 的市政 debug 松，但沒有報名參賽。</p>
     <p style={{ fontSize: 12, color: '#aaa' }}>人口密度：現在每平方公里的人數（對數，300 到 100,000）。人口變化率：最近 {rateWindow} 分鐘、每小時的人數變化除以居民數，橘色是流入，藍綠色是流出，滿格是 ±30%。區名下是現在的人數。新北調淡。點：路上的人。捷運沿捷運線，公車、機車、汽車沿公車路線，步行和自行車走直線。1x = 每秒 1 小時。</p>
     <p style={{ fontSize: 12, color: '#aaa' }}>
       {/* ODbL and the Open Government Data License both ask for credit where people see the map. */}
@@ -212,7 +224,7 @@ export function App() {
           fontSize: titleSize * SUBTITLE_SCALE, fontVariantCaps: 'small-caps', letterSpacing: '0.05em', color: '#ccc' }}>Breathing Taipei</p>
       </header>
       {/* A phone's map is too narrow for the clock between the title and the edge, so it moves to the right. */}
-      <div style={{ position: 'absolute', top: 16, left: fit.x + 16, width: fit.w - 32, textAlign: phone ? 'right' : 'center', color: '#fff', pointerEvents: 'none', fontVariantNumeric: 'tabular-nums' }}>
+      <div style={{ position: 'absolute', top: 16, left: fit.x + (phone ? TITLE_ROOM : 16), width: fit.w - (phone ? TITLE_ROOM + 16 : 32), textAlign: phone ? 'right' : 'center', color: '#fff', pointerEvents: 'none', fontVariantNumeric: 'tabular-nums' }}>
         <p style={{ margin: 0, fontSize: phone ? 16 : 24 }}>{date?.roc} {hhmm(s?.minute ?? 0)}</p>
         <p style={{ margin: 0, fontSize: phone ? 12 : 14, color: '#ccc' }}>{date && [date.lunar, date.term].filter(Boolean).join('　')}
           {date?.holiday && <span style={{ color: '#db6a41' }}>　{date.holiday}</span>}
@@ -229,12 +241,12 @@ export function App() {
           <div style={{ position: 'absolute', left: box.x + 12, top: box.y + box.h - 52 }}>{icons}</div>
           <div style={{ position: 'absolute', left: kind === 'landscape' ? box.w : 0, top: kind === 'portrait' ? box.h : 0, right: 0, bottom: 0, overflowY: 'auto', padding: '0 12px' }}>{panel || (open === 'policies'
             ? <div id="policies" role="region" aria-label="政策"><Policies {...policies} /></div>
-            : <section aria-label="事件"><Events events={events} now={s ? s.day * 1440 + s.minute : 0} dayLabel={dayLabel} placeOf={placeOf} /></section>)}</div>
+            : <section aria-label="事件"><Events events={list.events} now={list.now} dayLabel={dayLabel} placeOf={placeOf} /></section>)}</div>
         </>
         : <div style={{ position: 'absolute', left: 16, bottom: 16, display: 'flex', flexDirection: 'column-reverse' }}>
           <div>{icons}</div>{panel}</div>}
       {!phone && <>
-        <aside aria-label="事件" style={{ ...SIDE_PANEL, right: 2 * PANEL.gap + PANEL.policies, width: PANEL.events }}><Events events={events} now={s ? s.day * 1440 + s.minute : 0} dayLabel={dayLabel} placeOf={placeOf} /></aside>
+        <aside aria-label="事件" style={{ ...SIDE_PANEL, right: 2 * PANEL.gap + PANEL.policies, width: PANEL.events }}><Events events={list.events} now={list.now} dayLabel={dayLabel} placeOf={placeOf} /></aside>
         <aside aria-label="政策" style={{ ...SIDE_PANEL, right: PANEL.gap, width: PANEL.policies }}><Policies {...policies} /></aside>
       </>}
     </div>

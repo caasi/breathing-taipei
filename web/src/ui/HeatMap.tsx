@@ -109,10 +109,11 @@ export function HeatMap({ towns, villages, level, nodes, counts, perAgent, proj,
   </>, [geo, show])
 
   const byTown = new Map<string, number>()
-  geo.cells.forEach(c => byTown.set(c.town, (byTown.get(c.town) ?? 0) + counts[c.node]))
+  // Between a switch of 區 and 里 and the worker's new run, a cell can miss its node (-1): it counts as empty.
+  geo.cells.forEach(c => byTown.set(c.town, (byTown.get(c.town) ?? 0) + (counts[c.node] ?? 0)))
   const colours = new Uint8Array(geo.cells.length * 3)
   geo.cells.forEach((c, k) => {
-    const rgb = rate ? rateColour(rate[c.node]) : color(counts[c.node] * perAgent / c.km2), a = c.taipei ? 1 : NEW_TAIPEI_OPACITY
+    const rgb = rate ? rateColour(rate[c.node] ?? 0) : color((counts[c.node] ?? 0) * perAgent / c.km2), a = c.taipei ? 1 : NEW_TAIPEI_OPACITY
     for (let i = 0; i < 3; i++) colours[3 * k + i] = Math.round(BACKGROUND[i] + (rgb[i] - BACKGROUND[i]) * a)
   })
   return (

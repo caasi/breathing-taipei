@@ -10,7 +10,8 @@ Usage:
               https://opendata.cwa.gov.tw/fileapi/v1/opendataapi/A-A0087-003?Authorization=rdec-key-123-45678-011121314&format=CSV
   OUT_JSON    writes calendar.json: {"start": "2026-01-01", "kinds": [...], "days": [[kind, lunar month, lunar day, term, holiday, observances], ...]}
 
-The kind of day is 0 (a workday), 1 (a Saturday off) or 2 (another day off: a Sunday or a holiday).
+The kind of day is 0 (a workday), 1 (a Saturday off with no holiday) or 2 (another day off: a Sunday, a holiday, or a
+Saturday that is a holiday or 補假). scripts/od.py sorts the days of its month by the same rule.
 A lunar month below 0 is a leap month. term is the solar term that starts that day, or "". observances names the
 commemorative days and festivals of that day that are not days off for everyone (紀念日及節日實施條例, §3, §5, §6).
 
@@ -133,7 +134,7 @@ def main(office115, office116, lunar_csv, terms_csv, out):
     table = []
     for d in days(START, END):
         is_off, name = office.get(d) or guessed[d]
-        kind = 0 if not is_off else 1 if d.weekday() == 5 else 2
+        kind = 0 if not is_off else 1 if d.weekday() == 5 and not name else 2
         table.append([kind, *lunar[d], terms.get(d, ""), name, observances(d, lunar, terms)])
     json.dump({"start": START.isoformat(), "kinds": ["workday", "saturday", "holiday"], "days": table},
               open(out, "w", encoding="utf-8"), ensure_ascii=False, separators=(",", ":"))

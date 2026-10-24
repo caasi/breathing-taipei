@@ -10,7 +10,8 @@ Usage:
   OUT_JSON    writes od2.json: {"districts": [...], "od": workday, "saturday": ..., "holiday": ...}, each [hour][from][to]
 
 A station goes to the district that holds the mean position of its exits. The kinds of day are those of
-web/src/sim/calendar.ts: a workday, a Saturday off, and any other day off (a Sunday or a holiday).
+scripts/days.py: a workday, a Saturday off with no holiday, and any other day off (a Sunday, a holiday, or a Saturday
+that is a holiday).
 Each value is the mean over the days of that kind, rounded to a whole trip."""
 import csv, json, sys, collections
 
@@ -61,9 +62,9 @@ def kinds_of(office_csv):
     kinds = {}
     with open(office_csv, encoding="utf-8-sig") as f:
         r = csv.reader(f); next(r)
-        for day, weekday, off, _ in r:
+        for day, weekday, off, note in r:
             date = f"{day[:4]}-{day[4:6]}-{day[6:]}"
-            kinds[date] = "od" if off == "0" else "saturday" if weekday == "六" else "holiday"
+            kinds[date] = "od" if off == "0" else "saturday" if weekday == "六" and not note.strip() else "holiday"
     return kinds
 
 def main(od_csv, exits_csv, towns_topo, office_csv, out):
