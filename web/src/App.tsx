@@ -200,7 +200,7 @@ export function App() {
           <div style={{ position: 'absolute', left: box.x + 12, top: box.y + box.h - 52 }}>{icons}</div>
           <div style={{ position: 'absolute', left: kind === 'landscape' ? box.w : 0, top: kind === 'portrait' ? box.h : 0, right: 0, bottom: 0, overflowY: 'auto', padding: '0 12px' }}>{panel || (open === 'policies'
             ? <div id="policies" role="region" aria-label="政策"><Policies {...policies} /></div>
-            : <Events now={s ? s.day * 1440 + s.minute : 0} />)}</div>
+            : <section aria-label="事件"><Events now={s ? s.day * 1440 + s.minute : 0} /></section>)}</div>
         </>
         : <div style={{ position: 'absolute', left: 16, bottom: 16, display: 'flex', flexDirection: 'column-reverse' }}>
           <div>{icons}</div>{panel}</div>}
