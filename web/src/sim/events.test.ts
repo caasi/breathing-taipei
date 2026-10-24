@@ -70,20 +70,12 @@ test('the shown list stays the same until the clock passes the next event', () =
   expect(shown(next)).not.toBe(shown(now))
 })
 
-test('evenPick shows a plan from none of the last 3 shown districts', () => {
-  fc.assert(fc.property(fc.double({ min: 0.01, max: 1, noNaN: true }), fc.integer(), fc.integer({ min: 2, max: 40 }), (rate, seed, places) => {
-    const pick = evenPick([rate], mulberry32(seed)), shown: number[] = []
-    for (let i = 0; i < 2000; i++) if (pick(0, `d${i % places}`)) shown.push(i % places)
-    for (let k = 1; k < shown.length; k++) expect(shown.slice(Math.max(0, k - 3), k)).not.toContain(shown[k])
-  }))
-})
-
-test('evenPick with distinct places shows each kind at its rate, with no gap longer than one step of the rate', () => {
+test('evenPick shows each kind at its rate, with no gap longer than one step of the rate', () => {
   fc.assert(fc.property(fc.array(fc.double({ min: 0.01, max: 1, noNaN: true }), { minLength: 1, maxLength: 4 }), fc.integer(), (rates, seed) => {
     const pick = evenPick(rates, mulberry32(seed)), n = 1000
     rates.forEach((rate, kind) => {
       const shown: number[] = []
-      for (let i = 0; i < n; i++) if (pick(kind, `k${kind}d${i}`)) shown.push(i)
+      for (let i = 0; i < n; i++) if (pick(kind)) shown.push(i)
       expect(Math.abs(shown.length - rate * n)).toBeLessThanOrEqual(1)
       for (let k = 1; k < shown.length; k++) expect(shown[k] - shown[k - 1]).toBeLessThanOrEqual(Math.ceil(1 / rate))
     })

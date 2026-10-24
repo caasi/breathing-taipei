@@ -147,7 +147,7 @@ onmessage = async (e: MessageEvent<ToWorker>) => {
       // A day at home has no departure. ponytail: it shows at 09:00 of that day, a time chosen by eye.
       const t = dest === STAY ? world.dep[i] - 15 * 60 : world.dep[i]
       if (t < 0) return // a night shift that left on day -1
-      if (!pick(dest, districtOf[i])) return
+      if (!pick(dest)) return
       const e = { t, kind: 'personal' as const, name: nameOf(ids, i), home: world.home[i], to: play ? world.play[i] : world.work[i],
         dest, mode: play ? world.playMode[i] : world.mode[i], group }
       newEvents.push({ ...e, id: `a${++eventId}` })

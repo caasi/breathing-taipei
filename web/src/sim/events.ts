@@ -91,19 +91,14 @@ export const nextAfter = (events: SimEvent[], now: number) => events.reduce((t, 
 
 /**
  * Picks the plans that the stream shows: about rates[kind] of the plans of each kind, but by error diffusion instead of
- * one draw for each plan, so a viewer sees fewer groups and long gaps (#10). A plan from a district that one of the
- * last `recent` shown events used is not shown, and the next plan of that kind takes its place.
- * ponytail: 3 recent districts is a guess by eye; DATA.md lists it.
+ * one draw for each plan, so a viewer sees fewer groups and long gaps (#10).
  */
-export const evenPick = (rates: number[], rand: () => number, recent = 3) => {
-  const sums = rates.map(() => rand()), last: string[] = []
-  return (kind: number, place: string) => {
+export const evenPick = (rates: number[], rand: () => number) => {
+  const sums = rates.map(() => rand())
+  return (kind: number) => {
     sums[kind] += rates[kind]
     if (sums[kind] < 1) return false
-    if (last.includes(place)) { sums[kind] = 1; return false }
     sums[kind] -= 1
-    last.push(place)
-    if (last.length > recent) last.shift()
     return true
   }
 }
