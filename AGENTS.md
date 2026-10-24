@@ -26,8 +26,21 @@ The user set this rule for the repository on 2026-10-24. It is not a "zero comme
 
 ## Next steps, in this order
 
-1. **Personal settings** (people per agent, dot density): to be discussed with the user, and kept apart from the policy settings. A trial of 1 agent = 100 people is on the branch `feat/scale-100` (not merged). It helped an old Intel Mac, but it made the villages too coarse: the median village has about 42 agents at 1/100.
-2. **Later ideas, not started:** events (incidents that change an agent's plan), policy settings (the user grouped them by the HEART idea of puma.taipei: space, opportunity, company, resilience, time), and build scripts for the data files that came from one-off steps.
+1. **UI**, as the user planned on 2026-10-24:
+   - A map-to-screen matrix for both WebGL layers and the SVG layers, in place of the fixed `/ 320.0` and 640 (zoom and pan later only change the matrix). The dots' tracks are projected on the main thread today (`addBatches`); they can move to the worker with the same matrix work.
+   - The map as a full-page background, with the event and policy UI on top:
+
+     | Device | Map | Event and policy UI |
+     |---|---|---|
+     | Desktop, iPad landscape | Full page, centre to the left | Right, over the map |
+     | iPhone portrait | Top, 4:3 | Below |
+     | iPhone landscape | Left, 4:3 | Right |
+
+   - Show the user a layout draft before building it.
+2. **Publish to gh-pages** (the target for now). `pnpm build` runs `pnpm routes` first, so the published site has the precomputed road paths.
+3. **Personal settings** (people per agent, dot density): to be discussed with the user, and kept apart from the policy settings. A trial of 1 agent = 100 people is on the branch `feat/scale-100` (not merged). It helped an old Intel Mac, but it made the villages too coarse: the median village has about 42 agents at 1/100.
+4. **Later ideas, not started:** events (incidents that change an agent's plan), policy settings (the user grouped them by the HEART idea of puma.taipei: space, opportunity, company, resilience, time), and build scripts for the data files that came from one-off steps.
+5. **Small bug:** a quick 區/里 switch shows NaN in the district labels for a moment.
 
 ## State of the model (2026-10-24)
 

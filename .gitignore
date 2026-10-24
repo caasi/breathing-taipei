@@ -4,3 +4,5 @@ dist/
 # Raw downloads (the MRT OD file alone is about 300 MB). DATA.md lists the sources.
 data/
 __pycache__/
+# Made by `pnpm routes` (scripts/routes.ts) before dev and build.
+web/public/road-routes.bin

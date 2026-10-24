@@ -1,7 +1,7 @@
-import { getJson } from '../load.ts'
+import { getJson, getOptional } from '../load.ts'
 import { init, advance, counts, type World } from './core.ts'
 import { cityFrom, MODES } from './city.ts'
-import { networks, tripPaths, type Batch } from './paths.ts'
+import { networks, readRoutes, tripPaths, type Batch } from './paths.ts'
 
 export type Level = 'district' | 'village'
 export type ToWorker =
@@ -29,9 +29,12 @@ let idx = new Uint32Array(0) // agent of each sampled trip
 let sentDep = new Int32Array(0) // departure last sent for each sampled trip; a new plan always changes it
 const data = Promise.all(['od2.json', 'villages2.json', 'signal.json', 'road-graph.json', 'mrt-graph.json', 'night.json'].map(getJson))
 const net = data.then(([, , , road, mrt]) => networks(road, mrt))
-// Both are awaited in the start handler, which reports a failure; mark them handled so a failure
-// that settles before the first start does not also log an unhandled rejection.
-data.catch(() => {}); net.catch(() => {})
+// Made by `pnpm routes` before dev and build; without it (or for another road graph) the worker routes every road trip itself.
+const routes = Promise.all([net, getOptional('road-routes.bin').catch(() => undefined)])
+  .then(([n, file]) => (file ? readRoutes(file, n.road) : undefined))
+// The start handler awaits data and net and reports their failure; routes only feeds the paths. Mark all three
+// handled, so a failure that settles before the first start does not also log an unhandled rejection.
+data.catch(() => {}); net.catch(() => {}); routes.catch(() => {})
 
 const take = <T extends Uint32Array | Int32Array | Uint16Array | Uint8Array>(a: T, at: ArrayLike<number>, ctor: new (n: number) => T) => {
   const out = new ctor(at.length); for (let k = 0; k < at.length; k++) out[k] = a[at[k]]; return out
@@ -76,11 +79,13 @@ const frame = () => {
 }
 setInterval(frame, 1000 / FPS)
 
+let run = 0 // the latest start; a routes file that arrives after a newer start is not applied to the old one
 onmessage = async (e: MessageEvent<ToWorker>) => {
   const m = e.data
   if (m.type === 'speed') { hoursPerSec = m.hoursPerSec; return }
   // Any failure while starting (loading, building the city, sampling) goes to the page.
   // The async handler would otherwise reject without a message, and onerror does not see a rejection.
+  const thisRun = ++run
   try {
     const [[od2, villages, signal, , , night], graphs] = await Promise.all([data, net])
     const c = cityFrom({ ...od2, villages, signal, night }, m.perAgent, m.level)
@@ -89,8 +94,10 @@ onmessage = async (e: MessageEvent<ToWorker>) => {
     const trips = sample(w)
     extra = { nodes: c.nodes, homes: Uint32Array.from(c.city.homes), coords: c.coords, trips }
     // Same sampled agents every day with fixed home and work, so paths are built once per init.
-    pending = tripPaths(trips, c.coords, graphs)
+    // The simulation does not wait for the routes file (4.6 MB); the paths start when it is there.
+    pending = undefined
     routed = 0
+    routes.then(known => { if (thisRun === run) pending = tripPaths(trips, c.coords, graphs, known) }, () => {})
   } catch (err) {
     w = undefined
     postMessage({ error: String(err) } satisfies WorkerError)
