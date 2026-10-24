@@ -93,8 +93,8 @@ export function HeatMap({ towns, villages, level, nodes, counts, perAgent, proj,
     return { cells, borders, labels, lines, points }
   }, [cells, towns, proj, transit])
 
-  // Cell edges, borders, lines and stations never change during a run, so they are one SVG that is not redrawn.
-  const fixed = useMemo(() => <svg style={SVG}><g transform={svgTransform(view)}>
+  // Cell edges, borders, lines and stations never change during a run, so they are one SVG whose paths are built once.
+  const fixed = useMemo(() => <>
       {geo.cells.map((c, k) => <path key={'c' + k} d={c.d} fill="none" stroke="#fff" strokeOpacity={0.1} strokeWidth={0.4} />)}
       {geo.borders.map((b, k) => <path key={'b' + k} d={b.d} fill="none" stroke="#fff" strokeOpacity={0.2} strokeWidth={b.taipei ? 1.8 : 1} />)}
       {geo.lines.filter(l => show.has(l.kind)).map((l, k) =>
@@ -106,7 +106,7 @@ export function HeatMap({ towns, villages, level, nodes, counts, perAgent, proj,
           <circle cx={p.xy[0]} cy={p.xy[1]} r={has('airport') ? 7 : 5} fill={has('hsr') ? '#f47321' : has('airport') ? '#fff' : '#ccc'} stroke="#000" />
           <text x={p.xy[0] + 8} y={p.xy[1] - 6} fontSize={11} fill="#fff" stroke="#000" strokeWidth={3} paintOrder="stroke">{has('airport') ? '✈ ' : ''}{p.name}</text></g>
       })}
-  </g></svg>, [geo, show, view])
+  </>, [geo, show])
 
   const byTown = new Map<string, number>()
   geo.cells.forEach(c => byTown.set(c.town, (byTown.get(c.town) ?? 0) + counts[c.node]))
@@ -118,7 +118,8 @@ export function HeatMap({ towns, villages, level, nodes, counts, perAgent, proj,
   return (
     <div style={{ position: 'absolute', inset: 0 }}>
       <Fills cells={geo.cells} proj={proj} colours={colours} fadeSeconds={fadeSeconds} view={view} />
-      {fixed}
+      {/* The view is outside the memo, so a zoom or pan step changes one attribute and leaves the paths alone. */}
+      <svg style={SVG}><g transform={svgTransform(view)}>{fixed}</g></svg>
       <svg style={SVG}><g transform={svgTransform(view)}>
         {geo.labels.map(l => <text key={l.town} x={l.xy[0]} y={l.xy[1]} textAnchor="middle" fontSize={12} fill="#fff" stroke="#211d1d" strokeWidth={3} paintOrder="stroke">
           {l.name}<tspan x={l.xy[0]} dy={14}>{((byTown.get(l.town) ?? 0) * perAgent).toLocaleString()}</tspan></text>)}
