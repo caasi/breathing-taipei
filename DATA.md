@@ -90,6 +90,8 @@ Note: The data.gov.tw entry for the Taipei shape file was not found. The license
 - The 2026 local election is on 115年11月28日 (Saturday), voting from 08:00 to 16:00: 中央社, 2026-08-20, on the notice of 中央選舉委員會 (https://cna.com.tw/news/aipl/202608200078.aspx).
 - The new mayors take office on 12月25日: 蔣萬安 on 2022-12-25 (Taiwan News, https://www.taiwannews.com.tw/ch/news/4761550) and 柯文哲 on 2018-12-25 (公視, https://news.pts.org.tw/article/417381). 2026-12-25 is a guess from those two elections; 2014 was not confirmed.
 - About 48 personal events a day as the base (`EVENTS_PER_DAY`), with the weights `SHOWN`: 0.05 for a plan to work or a day at home, 1 for an outing on a day off, 3 for a day away. The user chose the weights by eye. Measured at village level, seed 42, from 2026-10-24 (a one-off script that runs the filter of `worker.ts` on the model for 7 days): 16, 15 and 18 personal events on the three days off, then 5, 2, 3 and 2 on the workdays.
+- A day-off departure falls between 05:00 and 17:00 (`DAYTIME` in `core.ts`), weighted by that day's OD. The window is a guess.
+- A day at home shows as an event at 09:00 of that day. The hour is by eye.
 - The greetings of the city: most of their times follow the model (the breakfast shifts, the first buses and trains, the workday peak, dinner, nights out, the overnight shift, the last trains). Their wording, and the 03:00 and 12:00 greetings, are by eye.
 
 `scripts/days.py` and `web/src/sim/calendar.ts` use these guesses for the days that no source covers:

@@ -81,7 +81,8 @@ const RING = 3 * MINUTES_PER_DAY
 
 const MORNING = [5, 6, 7, 8, 9, 10, 11]
 const EVENING = [12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23]
-const DAYTIME = [5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17] // leaving home on a day off: no morning peak
+// ponytail: a day-off departure falls between 05:00 and 17:00, weighted by that day's OD (so no morning peak); the window is a guess.
+const DAYTIME = [5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17]
 const HOURS = Array.from({ length: 24 }, (_, h) => h)
 
 // The hour comes from OD; the minute inside it is uniform (OD has no finer grain).

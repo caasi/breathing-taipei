@@ -19,7 +19,10 @@ The author did not register for the event, so this is not an entry.
   - MRT riders move on the MRT lines.
   - Bus, scooter, and car commuters move on the bus routes.
   - People who walk or ride a bicycle move in a straight line.
-- **The panel.** It shows the time, the frame time of the simulation, the frame rate, and the number of people on the road for each mode.
+- **The clock.** It shows the 民國 date and the time, then the lunar date, the solar term, a holiday (orange) and the days that are commemorated but not off (blue).
+- **The event panel.** It shows the newest 100 events: a few of the characters' plans, and the public events of each day. On a phone it is below or beside the map.
+- **The policy panel.** It holds placeholder policy settings; they do not change the simulation yet. On a phone it opens from the third icon.
+- **The info and settings panels.** The ⓘ icon opens the project text, the credits and the version. The gear opens the display settings and the figures of the run: the people of each city, on the road and away, and the frame time and frame rate.
 
 ## Run it
 
@@ -156,7 +159,7 @@ The tests with real data:
 
 ## Known gaps
 
-- `web/public/` holds the data that the app uses. Only some build steps are scripts: `scripts/graphs.py` builds the road and MRT graphs, `scripts/night.py` builds `night.json` (their docstrings give the inputs), and `scripts/routes.ts` builds `road-routes.bin`. `pnpm dev` and `pnpm build` run `pnpm routes` first. Without the file, the page routes every road trip itself, which took about 30 s at 20 people per dot in Chromium against 2.5 to 3.6 s with it. The other files came from one-off steps. These steps are not in the repository yet.
+- `web/public/` holds the data that the app uses. These build steps are scripts: `scripts/graphs.py` builds the road and MRT graphs, `scripts/night.py` builds `night.json`, `scripts/od.py` builds `od2.json`, `scripts/days.py` builds `calendar.json`, `scripts/people.py` builds `people.json` (their docstrings give the inputs), and `scripts/routes.ts` builds `road-routes.bin`. `pnpm dev` and `pnpm build` run `pnpm routes` first. Without the file, the page routes every road trip itself, which took about 30 s at 20 people per dot in Chromium against 2.5 to 3.6 s with it. The other files came from one-off steps. These steps are not in the repository yet.
 - The events narrate the plans of the model and the calendar. No event changes a plan yet, and the policy settings are placeholders.
 
 ## License

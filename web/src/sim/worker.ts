@@ -133,7 +133,7 @@ onmessage = async (e: MessageEvent<ToWorker>) => {
       // A STAY on a workday is a commuter who works in its home node (at district level: its own district), not a day of rest.
       if (dest === STAY && !kindAt(cal as Calendar, m.startDay + Math.floor(world.dep[i] / 1440) - 1)) return
       const play = dest === PLAY, group = world.kind[i] ? c.city.kinds![world.kind[i] - 1].name : ''
-      // A day at home has no departure; it shows in the morning of that day.
+      // A day at home has no departure. ponytail: it shows at 09:00 of that day, a time chosen by eye.
       const t = dest === STAY ? world.dep[i] - 15 * 60 : world.dep[i]
       if (t < 0) return // a night shift that left on day -1
       newEvents.push({ id: `a${++eventId}`, t, kind: 'personal', name: nameOf(ids, i), home: world.home[i], to: play ? world.play[i] : world.work[i],
@@ -144,7 +144,7 @@ onmessage = async (e: MessageEvent<ToWorker>) => {
     const trips = sample(w)
     extra = { nodes: c.nodes, homes: Uint32Array.from(c.city.homes), coords: c.coords, trips }
     // Same sampled agents every day with fixed home, work and day-off place, so paths are built once per init.
-    // The simulation does not wait for the routes file (4.6 MB); the paths start when it is there.
+    // The simulation does not wait for the routes file (megabytes); the paths start when it is there.
     pending = undefined
     routed = 0
     routes.then(known => { if (thisRun === run) pending = bothPaths(trips, c.coords, graphs, known) }, () => {})
