@@ -7,7 +7,7 @@ import { getJson } from './load.ts'
 import type { Batch } from './sim/paths.ts'
 import { useQuery, oneOf, setOf, bool, fromBool } from './query.ts'
 import { record, since, KEEP, type Entry } from './history.ts'
-import { viewFor, DASHBOARD_WIDTH } from './ui/view.ts'
+import { layoutFor } from './ui/view.ts'
 
 const SPEEDS = [0, 1, 2, 4, 8]
 const EVERY = [2, 5, 10, 20, 50]
@@ -104,21 +104,27 @@ export function App() {
   const ready = projection && villages && s && nodes.length === s.counts.length
   const [size, setSize] = useState({ w: innerWidth, h: innerHeight })
   useEffect(() => { const on = () => setSize({ w: innerWidth, h: innerHeight }); addEventListener('resize', on); return () => removeEventListener('resize', on) }, [])
-  const view = useMemo(() => viewFor(size.w, size.h), [size])
+  const { kind, box, fit, view } = useMemo(() => layoutFor(size.w, size.h), [size]), phone = kind !== 'desktop'
   const road = s ? Array.from(s.road) : []
   return (
     <div style={{ position: 'fixed', inset: 0, overflow: 'hidden', background: '#211d1d' }}>
+      <div style={{ position: 'absolute', left: box.x, top: box.y, width: box.w, height: box.h, overflow: 'hidden' }}>
       {ready && <>
         <HeatMap towns={towns} villages={villages} level={level} nodes={nodes} counts={s.counts} perAgent={PER_AGENT} proj={projection} transit={transit} show={show} rate={rate} speed={speed} view={view} />
         {dots && trips && <Travellers tracks={tracks} trips={trips} clock={clock} onFps={setFps} byMode={byMode} view={view} />}
       </>}
       <header style={{ position: 'absolute', top: 16, left: 16, pointerEvents: 'none' }}>
-        <h1 style={{ margin: 0, fontSize: 28, fontWeight: 'bold', color: '#fff' }}>台北鼓動</h1>
-        <p style={{ margin: 0, fontSize: 14, color: '#ccc' }}>Breathing Taipei</p>
+        <h1 style={{ margin: 0, fontSize: phone ? 20 : 28, fontWeight: 'bold', color: '#fff' }}>台北鼓動</h1>
+        <p style={{ margin: 0, fontSize: phone ? 12 : 14, color: '#ccc' }}>Breathing Taipei</p>
       </header>
-      <p style={{ position: 'absolute', top: 16, left: 0, right: DASHBOARD_WIDTH, margin: 0, textAlign: 'center', fontSize: 24, color: '#fff', pointerEvents: 'none', fontVariantNumeric: 'tabular-nums' }}>
+      {/* A phone's map is too narrow for the clock between the title and the edge, so it moves to the right. */}
+      <p style={{ position: 'absolute', top: 16, left: fit.x + 16, width: fit.w - 32, margin: 0, textAlign: phone ? 'right' : 'center', fontSize: phone ? 18 : 24, color: '#fff', pointerEvents: 'none', fontVariantNumeric: 'tabular-nums' }}>
         第 {s?.day ?? 0} 天 {hhmm(s?.minute ?? 0)}</p>
-      <div style={{ position: 'absolute', left: 16, bottom: 16, maxWidth: 560, maxHeight: 'calc(100% - 120px)', overflowY: 'auto', padding: '4px 12px', background: 'rgba(33, 29, 29, 0.85)', borderRadius: 4 }}>
+      </div>
+      {/* On a desktop the controls float over the map; on a phone they fill the rest of the page, beside or below it. */}
+      <div style={kind === 'desktop'
+        ? { position: 'absolute', left: 16, bottom: 16, maxWidth: 560, maxHeight: 'calc(100% - 120px)', overflowY: 'auto', padding: '4px 12px', background: 'rgba(33, 29, 29, 0.85)', borderRadius: 4 }
+        : { position: 'absolute', left: kind === 'landscape' ? box.w : 0, top: kind === 'portrait' ? box.h : 0, right: 0, bottom: 0, overflowY: 'auto', padding: '4px 12px' }}>
       <p>雙北 {s ? ((Array.from(s.counts).reduce((a, b) => a + b, 0) + road.reduce((a, b) => a + b, 0)) * PER_AGENT).toLocaleString() : ''} 人</p>
       {loadError && <p role="alert" style={{ color: '#ff8b6b' }}>無法載入地圖資料：{loadError}</p>}
       {runError && <p role="alert" style={{ color: '#ff8b6b' }}>模擬無法執行：{runError}</p>}
