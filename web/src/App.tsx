@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { HeatMap, projectionFor, taipeiIn, type Transit } from './ui/HeatMap.tsx'
 import { Travellers, MODE_COLOURS, addBatches, type Track } from './ui/Travellers.tsx'
 import { MODES } from './sim/city.ts'
@@ -204,11 +204,16 @@ export function App() {
     <p style={{ fontSize: 12, color: '#888' }}>v{__VERSION__} <a href={`https://github.com/caasi/breathing-taipei/commit/${__COMMIT__}`} style={{ color: '#aaa' }}>{__COMMIT__.slice(0, 7)}</a></p>
   </>
   // A desktop always shows the policies; a phone shows the events below the map and opens the policies only when asked.
-  const icons = <>{([['info', '專案說明與授權', <InfoIcon />], ['settings', '顯示設定與模擬狀況', <GearIcon />], ...(phone ? [['policies', '政策', <SlidersIcon />]] as const : [])] as const).map(([k, label, icon]) =>
-    <button key={k} aria-label={label} title={label} aria-expanded={open === k} aria-controls={open !== k ? undefined : k === 'policies' ? 'policies' : 'panel'} onClick={() => setOpen(open === k ? undefined : k)}
-      style={{ ...ICON_BUTTON, background: open === k ? '#db6a41' : 'rgba(33, 29, 29, 0.85)' }}>{icon}</button>)}
+  const button = (k: NonNullable<typeof open>, label: string, icon: ReactNode) =>
+    <button aria-label={label} title={label} aria-expanded={open === k} aria-controls={open !== k ? undefined : k === 'policies' ? 'policies' : 'panel'} onClick={() => setOpen(open === k ? undefined : k)}
+      style={{ ...ICON_BUTTON, background: open === k ? '#db6a41' : 'rgba(33, 29, 29, 0.85)' }}>{icon}</button>
+  const icons = <>
+    {button('info', '專案說明與授權', <InfoIcon />)}
     <a href="https://github.com/caasi/breathing-taipei" target="_blank" rel="noopener noreferrer" aria-label="GitHub 原始碼" title="GitHub 原始碼"
-      style={{ ...ICON_BUTTON, display: 'inline-block', boxSizing: 'border-box', verticalAlign: 'top', background: 'rgba(33, 29, 29, 0.85)' }}><GitHubIcon /></a></>
+      style={{ ...ICON_BUTTON, display: 'inline-block', boxSizing: 'border-box', verticalAlign: 'top', background: 'rgba(33, 29, 29, 0.85)' }}><GitHubIcon /></a>
+    {button('settings', '顯示設定與模擬狀況', <GearIcon />)}
+    {phone && button('policies', '政策', <SlidersIcon />)}
+  </>
   // On a desktop the panel stays inside the map area, so the event panel never covers it.
   const panel = (open === 'info' || open === 'settings') && <div id="panel" role="region" aria-label={open === 'info' ? '專案說明與授權' : '顯示設定與模擬狀況'} style={phone ? undefined
     : { width: Math.min(536, fit.w - 32), maxHeight: 'calc(100vh - 180px)', overflowY: 'auto', marginBottom: 8, padding: '4px 12px', background: 'rgba(33, 29, 29, 0.85)', borderRadius: 4 }}>
