@@ -65,7 +65,14 @@ export function HeatMap({ towns, villages, level, nodes, counts, perAgent, proj,
     const borders = allTowns.map(f => ({ d: path(f) ?? '', taipei: f.properties.COUNTYNAME === '台北市' }))
     const labels = allTowns.filter(f => f.properties.COUNTYNAME === '台北市').map(f => ({ xy: path.centroid(f), name: f.properties.TOWNNAME, town: f.properties.COUNTYNAME + f.properties.TOWNNAME }))
     const lines = transit?.lines.map(l => ({ ...l, d: path({ type: 'LineString', coordinates: l.coords }) ?? '' })) ?? []
-    const points = transit?.points.map(p => ({ ...p, xy: proj([p.lon, p.lat])! })) ?? []
+    // A railway and a high speed rail station in one building (臺北, 南港) are one marker with both kinds:
+    // two half-transparent markers on top of each other looked darker and printed the name twice.
+    const points: { kinds: string[]; name: string; xy: [number, number] }[] = []
+    for (const p of transit?.points ?? []) {
+      const xy = proj([p.lon, p.lat])!, near = points.find(q => Math.hypot(q.xy[0] - xy[0], q.xy[1] - xy[1]) < 3)
+      if (near) near.kinds.push(p.kind)
+      else points.push({ kinds: [p.kind], name: p.name, xy })
+    }
     return { cells, borders, labels, lines, points }
   }, [towns, villages, level, nodes, proj, transit])
 
@@ -75,9 +82,12 @@ export function HeatMap({ towns, villages, level, nodes, counts, perAgent, proj,
       {geo.lines.filter(l => show.has(l.kind)).map((l, k) =>
         <path key={'l' + k} d={l.d} fill="none" stroke={l.colour} strokeWidth={l.kind === 'mrt' ? 1.8 : l.kind === 'highway' ? 1 : 1.5}
           strokeDasharray={l.kind === 'tra' ? '6 3' : undefined} opacity={l.kind === 'highway' ? LINE_OPACITY.highway : LINE_OPACITY.rail} />)}
-      {geo.points.filter(p => show.has(p.kind)).map(p => <g key={p.kind + p.name} opacity={STATION_OPACITY}>
-        <circle cx={p.xy[0]} cy={p.xy[1]} r={p.kind === 'airport' ? 7 : 5} fill={p.kind === 'hsr' ? '#f47321' : p.kind === 'airport' ? '#fff' : '#ccc'} stroke="#000" />
-        <text x={p.xy[0] + 8} y={p.xy[1] - 6} fontSize={11} fill="#fff" stroke="#000" strokeWidth={3} paintOrder="stroke">{p.kind === 'airport' ? '✈ ' : ''}{p.name}</text></g>)}
+      {geo.points.filter(p => p.kinds.some(k => show.has(k))).map(p => {
+        const has = (k: string) => p.kinds.includes(k) && show.has(k)
+        return <g key={p.kinds.join() + p.name} opacity={STATION_OPACITY}>
+          <circle cx={p.xy[0]} cy={p.xy[1]} r={has('airport') ? 7 : 5} fill={has('hsr') ? '#f47321' : has('airport') ? '#fff' : '#ccc'} stroke="#000" />
+          <text x={p.xy[0] + 8} y={p.xy[1] - 6} fontSize={11} fill="#fff" stroke="#000" strokeWidth={3} paintOrder="stroke">{has('airport') ? '✈ ' : ''}{p.name}</text></g>
+      })}
   </>, [geo, show])
 
   const byTown = new Map<string, number>()
