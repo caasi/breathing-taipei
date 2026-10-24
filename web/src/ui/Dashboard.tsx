@@ -49,8 +49,8 @@ export function usePolicies(): PolicyValues {
   }
 }
 
-const hhmm = (m: number) => `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`
-const H2 = { fontSize: 14, color: '#aaa', margin: '12px 0 4px' }
+export const hhmm = (m: number) => `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(Math.floor(m % 60)).padStart(2, '0')}`
+export const H2 = { fontSize: 14, color: '#aaa', margin: '12px 0 4px' }
 const NOTE = { fontSize: 12, color: '#888', margin: '0 0 8px' }
 
 export const MAX_EVENTS = 100

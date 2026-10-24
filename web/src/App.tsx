@@ -8,7 +8,7 @@ import type { Batch } from './sim/paths.ts'
 import { useStored, oneOf, setOf, bool, fromBool } from './query.ts'
 import { record, since, KEEP, type Entry } from './history.ts'
 import { layoutFor, PANEL } from './ui/view.ts'
-import { Events, Policies, usePolicies } from './ui/Dashboard.tsx'
+import { Events, Policies, usePolicies, hhmm, H2 } from './ui/Dashboard.tsx'
 
 const SPEEDS = [0, 1, 2, 4, 8]
 const EVERY = [2, 5, 10, 20, 50]
@@ -19,7 +19,6 @@ const SUBTITLE_SCALE = 0.46
 const WINDOWS = [15, 30, 60, KEEP] // simulated minutes the change rate can look back; history keeps the longest
 // A node is a village code (台北市 is county 63000) or a district name.
 const inTaipei = (node: string) => node.startsWith('63000') || node.startsWith('台北市')
-const H2 = { fontSize: 14, color: '#aaa', margin: '12px 0 4px' }
 const ALERT = { position: 'absolute', top: 72, left: 16, margin: 0, color: '#ff8b6b' } as const
 const SIDE_PANEL = { position: 'absolute', top: 16, bottom: 16, overflowY: 'auto', padding: '0 12px', boxSizing: 'border-box', background: 'rgba(33, 29, 29, 0.85)', borderRadius: 4 } as const
 const ICON_BUTTON = { width: 40, height: 40, marginRight: 8, padding: 8, border: 0, borderRadius: 20, color: '#fff', cursor: 'pointer' }
@@ -38,7 +37,6 @@ const padded = (n: number, digits: number, decimals = 0) => {
   const [whole, part] = Math.max(0, n).toFixed(decimals).split('.')
   return whole.padStart(digits, '0').replace(/\B(?=(\d{3})+$)/g, ',') + (part ? '.' + part : '')
 }
-const hhmm = (m: number) => `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(Math.floor(m % 60)).padStart(2, '0')}`
 
 export function App() {
   const [towns, setTowns] = useState<any>()
