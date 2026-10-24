@@ -11,6 +11,9 @@ importers:
       d3-geo:
         specifier: 3.1.1
         version: 3.1.1
+      earcut:
+        specifier: 3.2.4
+        version: 3.2.4
       react:
         specifier: 18.3.1
         version: 18.3.1
@@ -259,6 +262,9 @@ packages:
   detect-libc@2.1.2:
     resolution: {integrity: sha512-Btj2BOOO83o3WyH59e8MgXsxEQVcarkUOpEYrubB0urwnN10yQ364rsiByU11nZlqWYZm05i/of7io4mzihBtQ==}
     engines: {node: '>=8'}
+
+  earcut@3.2.4:
+    resolution: {integrity: sha512-FHc6yNpnTORB0tM5kmZ03iD2mDuNakDE2lvf4Hw1XkfxtEHIGVi01B/GqUSwx+NcC1WGjidAfpTXzeALtPtfpg==}
 
   es-module-lexer@2.3.2:
     resolution: {integrity: sha512-poHGpORABojJJucnV9KbOavETW8lBVnphkW77ER5/BQ5Fz7oXSoCNek7IH3vR5nRjdsEz926ibFYX8KtLQmdyw==}
@@ -668,6 +674,8 @@ snapshots:
       d3-array: 3.2.4
 
   detect-libc@2.1.2: {}
+
+  earcut@3.2.4: {}
 
   es-module-lexer@2.3.2: {}
 

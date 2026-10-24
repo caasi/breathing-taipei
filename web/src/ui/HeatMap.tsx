@@ -2,6 +2,7 @@ import { useMemo } from 'react'
 import { geoArea, geoMercator, geoPath, type GeoProjection } from 'd3-geo'
 import { feature } from 'topojson-client'
 import type { FeatureCollection, Geometry } from 'geojson'
+import { Fills } from './Fills.tsx'
 
 export type Transit = {
   lines: { kind: string; name: string; colour: string; coords: [number, number][] }[]
@@ -14,9 +15,9 @@ const STOPS: [number, number[]][] = [[0, [0x2b, 0x23, 0x21]], [0.5, [0x7a, 0x3a,
 const color = (perKm2: number) => {
   const t = Math.max(0, Math.min(1, Math.log10(Math.max(perKm2, 1) / 300) / Math.log10(100_000 / 300)))
   const k = STOPS.findIndex(([s]) => s >= t)
-  if (k <= 0) return `rgb(${STOPS[0][1].join(',')})`
+  if (k <= 0) return STOPS[0][1]
   const [t0, a] = STOPS[k - 1], [t1, b] = STOPS[k], f = (t - t0) / (t1 - t0)
-  return `rgb(${a.map((v, i) => Math.round(v + (b[i] - v) * f)).join(',')})`
+  return a.map((v, i) => v + (b[i] - v) * f)
 }
 
 // Change per hour as a share of residents, from -0.3 to +0.3: no change is the background,
@@ -24,8 +25,11 @@ const color = (perKm2: number) => {
 const BASE = [0x2b, 0x23, 0x21], IN = [0xff, 0x8b, 0x41], OUT = [0x3f, 0xc1, 0xb0]
 const rateColour = (perHour: number) => {
   const t = Math.max(-1, Math.min(1, perHour / 0.3)), to = t > 0 ? IN : OUT, f = Math.sqrt(Math.abs(t))
-  return `rgb(${BASE.map((v, i) => Math.round(v + (to[i] - v) * f)).join(',')})`
+  return BASE.map((v, i) => v + (to[i] - v) * f)
 }
+const BACKGROUND = [0x21, 0x1d, 0x1d]
+// 新北 is drawn faded so the eye stays on Taipei.
+const NEW_TAIPEI_OPACITY = 0.45
 
 // Lines and stations are for orientation; kept faint so the eye follows the area colours.
 const LINE_OPACITY = { rail: 0.35, highway: 0.3 }
@@ -51,17 +55,21 @@ type Props = {
 
 export function HeatMap({ towns, villages, level, nodes, counts, perAgent, proj, transit, show, rate, speed }: Props) {
   // The fade runs in real time; scale it so it always spans about 30 simulated minutes, or it shows a past hour.
-  const fade = `fill ${0.5 / Math.max(1, speed)}s linear`
-  // Geometry is fixed per level; only the fill changes each frame.
-  const geo = useMemo(() => {
+  const fadeSeconds = 0.5 / Math.max(1, speed)
+  // Geometry is fixed per level; only the fills and the label counts change each frame.
+  // The cells do not depend on transit, so a late transit.json does not rebuild the WebGL fills.
+  const cells = useMemo(() => {
     const path = geoPath(proj)
-    const allTowns = cityTowns(towns)
-    const fs = level === 'village' ? features(villages, 'villages') : allTowns
-    const cells = fs.map(f => ({
-      d: path(f) ?? '', km2: geoArea(f) * EARTH_KM2, taipei: f.properties.COUNTYNAME === '台北市',
+    const fs = level === 'village' ? features(villages, 'villages') : cityTowns(towns)
+    return fs.map(f => ({
+      d: path(f) ?? '', geometry: f.geometry, km2: geoArea(f) * EARTH_KM2, taipei: f.properties.COUNTYNAME === '台北市',
       town: f.properties.COUNTYNAME + f.properties.TOWNNAME,
       node: nodes.indexOf(level === 'village' ? f.properties.VILLCODE : f.properties.COUNTYNAME + f.properties.TOWNNAME),
     }))
+  }, [towns, villages, level, nodes, proj])
+  const geo = useMemo(() => {
+    const path = geoPath(proj)
+    const allTowns = cityTowns(towns)
     const borders = allTowns.map(f => ({ d: path(f) ?? '', taipei: f.properties.COUNTYNAME === '台北市' }))
     const labels = allTowns.filter(f => f.properties.COUNTYNAME === '台北市').map(f => ({ xy: path.centroid(f), name: f.properties.TOWNNAME, town: f.properties.COUNTYNAME + f.properties.TOWNNAME }))
     const lines = transit?.lines.map(l => ({ ...l, d: path({ type: 'LineString', coordinates: l.coords }) ?? '' })) ?? []
@@ -74,11 +82,12 @@ export function HeatMap({ towns, villages, level, nodes, counts, perAgent, proj,
       else points.push({ kinds: [p.kind], name: p.name, xy })
     }
     return { cells, borders, labels, lines, points }
-  }, [towns, villages, level, nodes, proj, transit])
+  }, [cells, towns, proj, transit])
 
-  // Borders, lines and stations never change during a run; building them once keeps each frame to the fills and labels.
-  const fixed = useMemo(() => <>
-      {geo.borders.map((b, k) => <path key={'b' + k} d={b.d} fill="none" stroke="#0d0a09" strokeWidth={b.taipei ? 1.8 : 1} />)}
+  // Cell edges, borders, lines and stations never change during a run, so they are one SVG that is not redrawn.
+  const fixed = useMemo(() => <svg viewBox="0 0 640 640" style={{ position: 'absolute', inset: 0, width: '100%' }}>
+      {geo.cells.map((c, k) => <path key={'c' + k} d={c.d} fill="none" stroke="#fff" strokeOpacity={0.1} strokeWidth={0.4} />)}
+      {geo.borders.map((b, k) => <path key={'b' + k} d={b.d} fill="none" stroke="#fff" strokeOpacity={0.2} strokeWidth={b.taipei ? 1.8 : 1} />)}
       {geo.lines.filter(l => show.has(l.kind)).map((l, k) =>
         <path key={'l' + k} d={l.d} fill="none" stroke={l.colour} strokeWidth={l.kind === 'mrt' ? 1.8 : l.kind === 'highway' ? 1 : 1.5}
           strokeDasharray={l.kind === 'tra' ? '6 3' : undefined} opacity={l.kind === 'highway' ? LINE_OPACITY.highway : LINE_OPACITY.rail} />)}
@@ -88,19 +97,23 @@ export function HeatMap({ towns, villages, level, nodes, counts, perAgent, proj,
           <circle cx={p.xy[0]} cy={p.xy[1]} r={has('airport') ? 7 : 5} fill={has('hsr') ? '#f47321' : has('airport') ? '#fff' : '#ccc'} stroke="#000" />
           <text x={p.xy[0] + 8} y={p.xy[1] - 6} fontSize={11} fill="#fff" stroke="#000" strokeWidth={3} paintOrder="stroke">{has('airport') ? '✈ ' : ''}{p.name}</text></g>
       })}
-  </>, [geo, show])
+  </svg>, [geo, show])
 
   const byTown = new Map<string, number>()
   geo.cells.forEach(c => byTown.set(c.town, (byTown.get(c.town) ?? 0) + counts[c.node]))
+  const colours = new Uint8Array(geo.cells.length * 3)
+  geo.cells.forEach((c, k) => {
+    const rgb = rate ? rateColour(rate[c.node]) : color(counts[c.node] * perAgent / c.km2), a = c.taipei ? 1 : NEW_TAIPEI_OPACITY
+    for (let i = 0; i < 3; i++) colours[3 * k + i] = Math.round(BACKGROUND[i] + (rgb[i] - BACKGROUND[i]) * a)
+  })
   return (
-    <svg viewBox="0 0 640 640" style={{ display: 'block', width: '100%', background: '#211d1d' }}>
-      {geo.cells.map((c, k) =>
-        // 新北 is drawn faded so the eye stays on Taipei.
-        <path key={k} d={c.d} fill={rate ? rateColour(rate[c.node]) : color(counts[c.node] * perAgent / c.km2)} fillOpacity={c.taipei ? 1 : 0.45}
-          style={{ transition: fade }} stroke="#fff" strokeOpacity={0.1} strokeWidth={0.4} />)}
+    <div style={{ position: 'relative', background: '#211d1d' }}>
+      <Fills cells={geo.cells} proj={proj} colours={colours} fadeSeconds={fadeSeconds} />
       {fixed}
-      {geo.labels.map(l => <text key={l.town} x={l.xy[0]} y={l.xy[1]} textAnchor="middle" fontSize={12} fill="#fff" stroke="#211d1d" strokeWidth={3} paintOrder="stroke">
-        {l.name}<tspan x={l.xy[0]} dy={14}>{((byTown.get(l.town) ?? 0) * perAgent).toLocaleString()}</tspan></text>)}
-    </svg>
+      <svg viewBox="0 0 640 640" style={{ position: 'absolute', inset: 0, width: '100%' }}>
+        {geo.labels.map(l => <text key={l.town} x={l.xy[0]} y={l.xy[1]} textAnchor="middle" fontSize={12} fill="#fff" stroke="#211d1d" strokeWidth={3} paintOrder="stroke">
+          {l.name}<tspan x={l.xy[0]} dy={14}>{((byTown.get(l.town) ?? 0) * perAgent).toLocaleString()}</tspan></text>)}
+      </svg>
+    </div>
   )
 }

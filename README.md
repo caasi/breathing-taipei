@@ -47,7 +47,7 @@ An unknown value goes back to the default. In `layers`, unknown names are ignore
 
 | Key | Values | Default |
 |---|---|---|
-| `speed` | `0` (pause), `1`, `2`, `4`, `8`, `16` simulated hours per second | `1` |
+| `speed` | `0` (pause), `1`, `2`, `4`, `8` simulated hours per second | `1` |
 | `level` | `village`, `district` | `village` |
 | `color` | `rate`, `density` | `rate` |
 | `window` | `15`, `30`, `60`, `120` simulated minutes for the change rate | `30` |
@@ -83,7 +83,7 @@ Example: `?speed=4&dot=20&color=rate&window=60&layers=mrt,highway`
 - Night-time workers and visitors are residents who do not commute (on the MRT or as an added commuter) and do not make a short trip. Each group is the same share of the residents of every village. The work district is drawn by its businesses and its distance from home, then the village by its businesses.
 - A night-time worker or visitor gets a mode from the 2024 mode share of Taipei residents (MRT included), with the walk and bike distance limits. A mode that does not run in some hour of the group's departure or return window is not used. Buses run from 05:00 to 24:00, and the MRT from 06:00 to 24:00. So the early shift, nightlife and night-out groups use a scooter, a car, a bicycle, or walk.
 - Each agent has one plan at a time: leave home, travel, work, travel, go home. When the agent is home again, it gets its next plan. A plan can go past midnight. The position of an agent at a time is a function of this plan.
-- The simulation runs in a Web Worker. The map is SVG. The dots are on a 2D canvas.
+- The simulation runs in a Web Worker. The page needs WebGL2. From the bottom: the village fills (WebGL), then one SVG with cell edges, borders, lines and stations, then an SVG with the district labels, then the dots (WebGL).
 
 ### Real data and estimates
 

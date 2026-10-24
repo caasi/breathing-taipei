@@ -8,7 +8,7 @@ import type { Batch } from './sim/paths.ts'
 import { useQuery, oneOf, setOf, bool, fromBool } from './query.ts'
 import { record, since, KEEP, type Entry } from './history.ts'
 
-const SPEEDS = [0, 1, 2, 4, 8, 16]
+const SPEEDS = [0, 1, 2, 4, 8]
 const EVERY = [2, 5, 10, 20, 50]
 const LAYERS: [string, string][] = [['mrt', '捷運'], ['lrt', '輕軌'], ['tra', '台鐵'], ['hsr', '高鐵'], ['airport', '機場'], ['highway', '國道與快速道路']]
 const PER_AGENT = 10
