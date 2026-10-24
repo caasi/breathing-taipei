@@ -1,6 +1,6 @@
 import { expect, test } from 'vitest'
 import fc from 'fast-check'
-import { graphFrom, tree, pathTo, type GraphJson } from './route.ts'
+import { graphFrom, graphHash, tree, pathTo, type GraphJson } from './route.ts'
 
 // Random connected-or-not graphs of 2-12 nodes; some edges carry in-between points.
 const graphArb = fc.integer({ min: 2, max: 12 }).chain(n => fc.record({
@@ -52,4 +52,14 @@ test('edge points run from the node the path comes from', () => {
     }
     expect(pathTo(g, via, dst)).toEqual(expected)
   }))
+})
+
+test('the graph hash changes when one coordinate, edge end, geometry point or weight changes', () => {
+  const j = { lon: [121.5, 121.51, 121.52], lat: [25.0, 25.01, 25.02], edges: [[0, 1, 1, []], [1, 2, 1, [121.515, 25.015]]] as [number, number, number, number[]][] }
+  const h = graphHash(graphFrom(j))
+  expect(graphHash(graphFrom({ ...j, lon: [121.5, 121.51, 121.520001] }))).not.toBe(h)
+  expect(graphHash(graphFrom({ ...j, edges: [[0, 2, 1, []], [1, 2, 1, [121.515, 25.015]]] }))).not.toBe(h)
+  expect(graphHash(graphFrom({ ...j, edges: [[0, 1, 1, []], [1, 2, 1, [121.515, 25.016]]] }))).not.toBe(h)
+  expect(graphHash(graphFrom({ ...j, edges: [[0, 1, 2, []], [1, 2, 1, [121.515, 25.015]]] }))).not.toBe(h)
+  expect(graphHash(graphFrom(j))).toBe(h)
 })

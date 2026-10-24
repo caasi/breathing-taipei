@@ -3,7 +3,7 @@ export type GraphJson = { lon: number[]; lat: number[]; edges: [number, number, 
 export type Graph = {
   lon: Float64Array; lat: Float64Array
   start: Int32Array; to: Int32Array; w: Float64Array; edge: Int32Array; owner: Int32Array // adjacency (CSR); owner = node a slot belongs to
-  geom: number[][]; from: Int32Array // per edge: in-between points (lon, lat, ...) listed from `from` to the other end
+  geom: number[][]; from: Int32Array; end: Int32Array // per edge: in-between points (lon, lat, ...) listed from `from` to `end`
 }
 
 export const graphFrom = (j: GraphJson): Graph => {
@@ -17,7 +17,18 @@ export const graphFrom = (j: GraphJson): Graph => {
     owner[fill[b]] = b; to[fill[b]] = a; w[fill[b]] = d; edge[fill[b]++] = e
   })
   return { lon: Float64Array.from(j.lon), lat: Float64Array.from(j.lat), start: deg, to, w, edge, owner,
-    geom: j.edges.map(e => e[3]), from: Int32Array.from(j.edges.map(e => e[0])) }
+    geom: j.edges.map(e => e[3]), from: Int32Array.from(j.edges.map(e => e[0])), end: Int32Array.from(j.edges.map(e => e[1])) }
+}
+
+/** FNV-1a over the whole graph (nodes, edge ends, weights, geometry), to tie data made from it to it. */
+export const graphHash = (g: Graph) => {
+  let h = 0x811c9dc5
+  const add = (x: number) => { h = Math.imul(h ^ (Math.round(x) | 0), 0x01000193) >>> 0 }
+  add(g.lon.length); add(g.geom.length)
+  for (let v = 0; v < g.lon.length; v++) { add(g.lon[v] * 1e6); add(g.lat[v] * 1e6) }
+  for (let e = 0; e < g.geom.length; e++) { add(g.from[e]); add(g.end[e]); for (const p of g.geom[e]) add(p * 1e6) }
+  for (let k = 0; k < g.w.length; k++) add(g.w[k] * 1e3)
+  return h
 }
 
 export const nearest = (g: Graph, lon: number, lat: number, ok: (v: number) => boolean = () => true) => {
@@ -69,21 +80,30 @@ export const tree = (g: Graph, src: number) => {
   return { via, dist }
 }
 
+/** Edge ids of the path from the tree's source to dst, in order. */
+export const edgesTo = (g: Graph, via: Int32Array, dst: number): number[] => {
+  const out: number[] = []
+  for (let v = dst; via[v] >= 0; v = g.owner[via[v]]) out.push(g.edge[via[v]])
+  return out.reverse()
+}
+
+/** Points (lon, lat, ...) along `edges` from node src, edge geometry included. */
+export const pathAlong = (g: Graph, src: number, edges: ArrayLike<number>): number[] => {
+  const out = [g.lon[src], g.lat[src]]
+  let p = src
+  for (let k = 0; k < edges.length; k++) {
+    const e = edges[k], pts = g.geom[e], forward = g.from[e] === p, q = forward ? g.end[e] : g.from[e]
+    if (forward) for (let i = 0; i < pts.length; i += 2) out.push(pts[i], pts[i + 1])
+    else for (let i = pts.length - 2; i >= 0; i -= 2) out.push(pts[i], pts[i + 1])
+    out.push(g.lon[q], g.lat[q])
+    p = q
+  }
+  return out
+}
+
 /** Points (lon, lat, ...) of the path from the tree's source to dst, edge geometry included. */
 export const pathTo = (g: Graph, via: Int32Array, dst: number): number[] => {
-  const parts: number[][] = []
-  for (let v = dst; via[v] >= 0;) {
-    const k = via[v], e = g.edge[k], p = g.owner[k]
-    const pts = g.geom[e], forward = g.from[e] === p
-    const seg: number[] = []
-    for (let i = 0; i < pts.length; i += 2) seg.push(pts[i], pts[i + 1])
-    if (!forward) for (let i = 0, j = seg.length - 2; i < j; i += 2, j -= 2) { [seg[i], seg[j]] = [seg[j], seg[i]]; [seg[i + 1], seg[j + 1]] = [seg[j + 1], seg[i + 1]] }
-    parts.push([...seg, g.lon[v], g.lat[v]])
-    v = p
-  }
   let src = dst
   while (via[src] >= 0) src = g.owner[via[src]]
-  const out: number[] = [g.lon[src], g.lat[src]]
-  for (let i = parts.length - 1; i >= 0; i--) out.push(...parts[i])
-  return out
+  return pathAlong(g, src, edgesTo(g, via, dst))
 }

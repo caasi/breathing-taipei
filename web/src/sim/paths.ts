@@ -1,11 +1,13 @@
-import { graphFrom, nearest, tree, pathTo, type GraphJson, type Graph } from './route.ts'
+import { graphFrom, graphHash, nearest, tree, pathTo, pathAlong, type GraphJson, type Graph } from './route.ts'
 import { MRT } from './city.ts'
 
 /** Paths for trips ks: trip ks[i]'s points (lon, lat, ...) are pts[off[i] .. off[i + 1]), from home to work. */
 export type Batch = { ks: Uint32Array; pts: Float32Array; off: Uint32Array }
 type Leg = { home: ArrayLike<number>; work: ArrayLike<number>; mode: ArrayLike<number> }
 
-const ROAD_MODES = new Set([1, 2, 3]) // bus, scooter, car follow bus route shapes; walk and bike go straight
+export const ROAD_MODES = new Set([1, 2, 3]) // bus, scooter, car follow bus route shapes; walk and bike go straight
+// Known road paths are built and sent in batches of this many trips, small enough to fit in one frame of the worker.
+export const KNOWN_BATCH = 2000
 
 export const networks = (road: GraphJson, mrt: GraphJson) => {
   const r = graphFrom(road), m = graphFrom(mrt)
@@ -14,6 +16,38 @@ export const networks = (road: GraphJson, mrt: GraphJson) => {
   const stations = new Set(Object.values(mrt.stations!).filter(s => Number.isFinite(reach[s])))
   return { road: r, mrt: m, stations }
 }
+
+/**
+ * Road paths made ahead of time by scripts/routes.ts: (from road node, to road node) -> edge ids.
+ * File layout, all Uint16: graph hash (low, high), then per path to the end of the file: from, to, length, edge ids.
+ * The hash ties the file to its road graph; a file for another graph, or one cut inside a record, is ignored.
+ * A file cut at a record boundary reads as a smaller set of paths; the worker routes the trips it lacks.
+ * Limits: fewer than 65,536 road nodes and edges, and paths shorter than 65,536 edges (writeRoutes throws
+ * beyond them); the number of paths has no limit. The hash does not cover
+ * the routing code: after a change to tree() or its costs, run `pnpm routes` again (dev and build do).
+ */
+export type Routes = Map<number, Uint16Array>
+export const routeKey = (from: number, to: number) => from * 65536 + to
+export const readRoutes = (data: Uint16Array, g: Graph): Routes | undefined => {
+  if (data.length < 2 || (data[0] | (data[1] << 16)) >>> 0 !== graphHash(g)) return undefined
+  const routes: Routes = new Map()
+  for (let i = 2; i < data.length;) {
+    if (i + 3 > data.length || i + 3 + data[i + 2] > data.length) return undefined
+    routes.set(routeKey(data[i], data[i + 1]), data.subarray(i + 3, i + 3 + data[i + 2]))
+    i += 3 + data[i + 2]
+  }
+  return routes
+}
+export const writeRoutes = (g: Graph, paths: Map<number, number[]>) => {
+  if (g.lon.length > 65535 || g.geom.length > 65535) throw new Error('road nodes or edges do not fit Uint16')
+  const hash = graphHash(g), out = [hash & 0xffff, hash >>> 16]
+  for (const [key, edges] of paths) out.push(Math.floor(key / 65536), key % 65536, edges.length, ...edges)
+  if (out.some(v => v > 65535)) throw new Error('a value does not fit Uint16')
+  return Uint16Array.from(out)
+}
+/** The road node a village (or district center) starts and ends its road trips at; the script and the worker share it. */
+export const roadNode = (net: ReturnType<typeof networks>, coords: [number, number][], v: number) =>
+  nearest(net.road, coords[v][0], coords[v][1])
 
 const pack = (ks: number[], parts: number[][]): Batch => {
   const off = new Uint32Array(ks.length + 1)
@@ -24,12 +58,15 @@ const pack = (ks: number[], parts: number[][]): Batch => {
 }
 
 /**
- * Yields path batches: first every trip that needs no road routing (MRT, walk, bike, same node),
- * then one batch per road start node, so a caller can spread the slow part over many frames.
+ * Yields path batches: first every trip that needs no road routing (MRT, walk, bike, same node), then the
+ * road trips found in `routes`, then one batch per road start node for the rest, so a caller can spread
+ * the slow part over many frames.
  */
-export function* tripPaths(legs: Leg, coords: [number, number][], net: ReturnType<typeof networks>): Generator<Batch> {
+export function* tripPaths(legs: Leg, coords: [number, number][], net: ReturnType<typeof networks>, routes?: Routes): Generator<Batch> {
   const n = legs.home.length
   const roadAt = new Map<number, number>(), stationAt = new Map<number, number>()
+  const road = (v: number) => roadAt.get(v) ?? roadAt.set(v, roadNode(net, coords, v)).get(v)!
+  const known: number[] = [], knownFrom: number[] = [], knownEdges: Uint16Array[] = []
   const on = (g: Graph, cache: Map<number, number>, v: number, ok?: (x: number) => boolean) => {
     if (!cache.has(v)) cache.set(v, nearest(g, coords[v][0], coords[v][1], ok))
     return cache.get(v)!
@@ -42,7 +79,11 @@ export function* tripPaths(legs: Leg, coords: [number, number][], net: ReturnTyp
     const m = legs.mode[k], h = legs.home[k], w = legs.work[k]
     const into = (map: Map<number, number[]>, a: number) => (map.get(a) ?? map.set(a, []).get(a)!).push(k)
     if (m === MRT && station(h) !== station(w)) into(mrtFrom, station(h))
-    else if (ROAD_MODES.has(m) && on(net.road, roadAt, h) !== on(net.road, roadAt, w)) into(roadFrom, on(net.road, roadAt, h))
+    else if (ROAD_MODES.has(m) && road(h) !== road(w)) {
+      const a = road(h), edges = routes?.get(routeKey(a, road(w)))
+      if (edges) { known.push(k); knownFrom.push(a); knownEdges.push(edges) }
+      else into(roadFrom, a)
+    }
     else { first.push(k); firstParts.push(full(k, [])) }
   }
   // The MRT graph is small (about 0.1 ms per start), so MRT trips go out with the first batch.
@@ -51,8 +92,12 @@ export function* tripPaths(legs: Leg, coords: [number, number][], net: ReturnTyp
     for (const k of ks) { first.push(k); firstParts.push(full(k, pathTo(net.mrt, via, station(legs.work[k])))) }
   }
   yield pack(first, firstParts)
+  for (let s = 0; s < known.length; s += KNOWN_BATCH) {
+    const ks = known.slice(s, s + KNOWN_BATCH)
+    yield pack(ks, ks.map((k, j) => full(k, pathAlong(net.road, knownFrom[s + j], knownEdges[s + j]))))
+  }
   for (const [a, ks] of roadFrom) {
     const { via } = tree(net.road, a)
-    yield pack(ks, ks.map(k => full(k, pathTo(net.road, via, on(net.road, roadAt, legs.work[k])))))
+    yield pack(ks, ks.map(k => full(k, pathTo(net.road, via, road(legs.work[k])))))
   }
 }
