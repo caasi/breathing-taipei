@@ -1,6 +1,6 @@
 import { getJson, getOptional } from '../load.ts'
 import { init, advance, counts, PLAY, STAY, type World } from './core.ts'
-import { kindAt, type Calendar } from './calendar.ts'
+import { kindAt, WORKDAY, type Calendar } from './calendar.ts'
 import { drawNames, nameOf, type People } from './people.ts'
 import type { SimEvent } from './events.ts'
 import { mulberry32 } from './rng.ts'
@@ -131,7 +131,7 @@ onmessage = async (e: MessageEvent<ToWorker>) => {
       const dest = world.dest[i]
       if (pickRng() >= keep * SHOWN[dest]) return
       // A STAY on a workday is a commuter who works in its home node (at district level: its own district), not a day of rest.
-      if (dest === STAY && !kindAt(cal as Calendar, m.startDay + Math.floor(world.dep[i] / 1440) - 1)) return
+      if (dest === STAY && kindAt(cal as Calendar, m.startDay + Math.floor(world.dep[i] / 1440) - 1) === WORKDAY) return
       const play = dest === PLAY, group = world.kind[i] ? c.city.kinds![world.kind[i] - 1].name : ''
       // A day at home has no departure. ponytail: it shows at 09:00 of that day, a time chosen by eye.
       const t = dest === STAY ? world.dep[i] - 15 * 60 : world.dep[i]

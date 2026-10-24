@@ -26,7 +26,7 @@ The author did not register for the event, so this is not an entry.
 
 ## Run it
 
-You need Node.js 24 and pnpm.
+You need Node.js 24, pnpm and a git clone: the build reads the commit with `git rev-parse HEAD`, so `pnpm dev`, `pnpm build` and `pnpm test` do not run in a ZIP from GitHub.
 
 ```sh
 cd web
