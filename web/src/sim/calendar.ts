@@ -1,5 +1,8 @@
-/** calendar.json from scripts/calendar.py: one entry per day from `start`, [kind of day, lunar month (below 0: leap), lunar day, solar term that starts that day, holiday]. */
-export type Calendar = { start: string; kinds: string[]; days: [number, number, number, string, string][] }
+/**
+ * calendar.json from scripts/calendar.py: one entry per day from `start`, [kind of day, lunar month (below 0: leap), lunar day,
+ * solar term that starts that day, holiday (a day off), observances (commemorative days and festivals that are not days off)].
+ */
+export type Calendar = { start: string; kinds: string[]; days: [number, number, number, string, string, string][] }
 
 export const WORKDAY = 0, SATURDAY = 1, HOLIDAY = 2
 
@@ -41,5 +44,5 @@ export const dateText = (cal: Calendar, i: number) => {
   const date = new Date(utc(cal.start) + i * DAY_MS)
   const roc = `民國${date.getUTCFullYear() - 1911}年${date.getUTCMonth() + 1}月${date.getUTCDate()}日（${WEEKDAYS[date.getUTCDay()]}）`
   const d = cal.days[i]
-  return { roc, lunar: d ? `農曆${lunarMonth(d[1])}${lunarDay(d[2])}` : '', term: d ? termAt(cal, i) : '', holiday: d?.[4] ?? '' }
+  return { roc, lunar: d ? `農曆${lunarMonth(d[1])}${lunarDay(d[2])}` : '', term: d ? termAt(cal, i) : '', holiday: d?.[4] ?? '', observances: d?.[5] ?? '' }
 }

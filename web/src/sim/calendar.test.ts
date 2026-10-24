@@ -13,7 +13,8 @@ test('the table covers eight years from the first simulated day, one entry per d
 
 test('known days: the office calendar, the 中央氣象署 lunar table and its solar terms', () => {
   const at = (iso: string) => ({ ...dateText(cal, indexOf(cal, iso)), kind: kindAt(cal, indexOf(cal, iso)) })
-  expect(at('2026-10-24')).toEqual({ roc: '民國115年10月24日（六）', lunar: '農曆九月十五', term: '霜降', holiday: '', kind: SATURDAY })
+  expect(at('2026-10-24')).toEqual({ roc: '民國115年10月24日（六）', lunar: '農曆九月十五', term: '霜降', holiday: '', observances: '臺灣聯合國日', kind: SATURDAY })
+  expect(at('2026-03-12')).toMatchObject({ holiday: '', observances: '國父逝世紀念日、植樹節', kind: WORKDAY }) // 只紀念不放假
   expect(at('2026-10-25')).toMatchObject({ holiday: '臺灣光復暨金門古寧頭大捷紀念日', kind: HOLIDAY })
   expect(at('2026-10-26')).toMatchObject({ holiday: '補假', kind: HOLIDAY })
   expect(at('2026-10-27')).toMatchObject({ kind: WORKDAY })
