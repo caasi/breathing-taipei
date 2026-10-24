@@ -8,6 +8,7 @@ import type { Batch } from './sim/paths.ts'
 import { useStored, oneOf, setOf, bool, fromBool } from './query.ts'
 import { record, since, KEEP, type Entry } from './history.ts'
 import { layoutFor, PANEL } from './ui/view.ts'
+import { dateText, indexOf, todayInTaipei, type Calendar } from './sim/calendar.ts'
 import { Events, Policies, usePolicies } from './ui/Dashboard.tsx'
 import { hhmm, H2 } from './ui/format.ts'
 
@@ -43,6 +44,9 @@ export function App() {
   const [towns, setTowns] = useState<any>()
   const [villages, setVillages] = useState<any>()
   const [transit, setTransit] = useState<Transit>()
+  const [cal, setCal] = useState<Calendar>()
+  // Day 0 of the run is the day the page opens, in Taiwan.
+  const startDay = useMemo(() => cal && indexOf(cal, todayInTaipei()), [cal])
   const [nodes, setNodes] = useState<string[]>([])
   const [coords, setCoords] = useState<[number, number][]>([])
   const [trips, setTrips] = useState<Trips>()
@@ -78,6 +82,7 @@ export function App() {
 
   useEffect(() => {
     getJson('towns.json').then(setTowns).catch(err => setLoadError(String(err)))
+    getJson('calendar.json').then(setCal).catch(err => setLoadError(String(err)))
     getJson('villages2-topo.json').then(setVillages).catch(err => setLoadError(String(err)))
     getJson('transit.json').then(setTransit).catch(err => setLoadError(String(err)))
     const w = new Worker(new URL('./sim/worker.ts', import.meta.url), { type: 'module' })
@@ -132,6 +137,8 @@ export function App() {
   const taipei = useMemo(() => projection && taipeiIn(towns, projection), [projection])
   const { kind, box, fit, view } = useMemo(() => layoutFor(size.w, size.h, taipei), [size, taipei]), phone = kind !== 'desktop', titleSize = phone ? 20 : 28
   const road = s ? Array.from(s.road) : []
+  const date = cal && startDay !== undefined ? dateText(cal, startDay + (s?.day ?? 0)) : undefined
+  const dayLabel = (day: number) => (cal && startDay !== undefined ? dateText(cal, startDay + day).roc : '')
   // A desktop always shows the policies and has no icon to close them, so a phone's open policy panel closes when the window turns into a desktop.
   useEffect(() => { if (!phone && open === 'policies') setOpen(undefined) }, [phone])
   const people = (pick: (node: string) => boolean) => padded(s ? nodes.reduce((sum, n, i) => pick(n) ? sum + s.counts[i] : sum, 0) * PER_AGENT : 0, 7)
@@ -189,8 +196,10 @@ export function App() {
           fontSize: titleSize * SUBTITLE_SCALE, fontVariantCaps: 'small-caps', letterSpacing: '0.05em', color: '#ccc' }}>Breathing Taipei</p>
       </header>
       {/* A phone's map is too narrow for the clock between the title and the edge, so it moves to the right. */}
-      <p style={{ position: 'absolute', top: 16, left: fit.x + 16, width: fit.w - 32, margin: 0, textAlign: phone ? 'right' : 'center', fontSize: phone ? 18 : 24, color: '#fff', pointerEvents: 'none', fontVariantNumeric: 'tabular-nums' }}>
-        第 {s?.day ?? 0} 天 {hhmm(s?.minute ?? 0)}</p>
+      <div style={{ position: 'absolute', top: 16, left: fit.x + 16, width: fit.w - 32, textAlign: phone ? 'right' : 'center', color: '#fff', pointerEvents: 'none', fontVariantNumeric: 'tabular-nums' }}>
+        <p style={{ margin: 0, fontSize: phone ? 16 : 24 }}>{date?.roc} {hhmm(s?.minute ?? 0)}</p>
+        <p style={{ margin: 0, fontSize: phone ? 12 : 14, color: '#ccc' }}>{date && [date.lunar, date.term, date.holiday].filter(Boolean).join('　')}</p>
+      </div>
       </div>
       {loadError && <p role="alert" style={{ ...ALERT, width: fit.w - 32 }}>無法載入地圖資料：{loadError}</p>}
       {runError && <p role="alert" style={{ ...ALERT, width: fit.w - 32 }}>模擬無法執行：{runError}</p>}
@@ -201,12 +210,12 @@ export function App() {
           <div style={{ position: 'absolute', left: box.x + 12, top: box.y + box.h - 52 }}>{icons}</div>
           <div style={{ position: 'absolute', left: kind === 'landscape' ? box.w : 0, top: kind === 'portrait' ? box.h : 0, right: 0, bottom: 0, overflowY: 'auto', padding: '0 12px' }}>{panel || (open === 'policies'
             ? <div id="policies" role="region" aria-label="政策"><Policies {...policies} /></div>
-            : <section aria-label="事件"><Events now={s ? s.day * 1440 + s.minute : 0} /></section>)}</div>
+            : <section aria-label="事件"><Events now={s ? s.day * 1440 + s.minute : 0} dayLabel={dayLabel} /></section>)}</div>
         </>
         : <div style={{ position: 'absolute', left: 16, bottom: 16, display: 'flex', flexDirection: 'column-reverse' }}>
           <div>{icons}</div>{panel}</div>}
       {!phone && <>
-        <aside aria-label="事件" style={{ ...SIDE_PANEL, right: 2 * PANEL.gap + PANEL.policies, width: PANEL.events }}><Events now={s ? s.day * 1440 + s.minute : 0} /></aside>
+        <aside aria-label="事件" style={{ ...SIDE_PANEL, right: 2 * PANEL.gap + PANEL.policies, width: PANEL.events }}><Events now={s ? s.day * 1440 + s.minute : 0} dayLabel={dayLabel} /></aside>
         <aside aria-label="政策" style={{ ...SIDE_PANEL, right: PANEL.gap, width: PANEL.policies }}><Policies {...policies} /></aside>
       </>}
     </div>

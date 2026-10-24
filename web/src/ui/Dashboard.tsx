@@ -63,14 +63,14 @@ export const recent = (now: number, limit = MAX_EVENTS) => {
   return out
 }
 
-export function Events({ now }: { now: number }) {
+export function Events({ now, dayLabel }: { now: number; dayLabel: (day: number) => string }) {
   const happened = recent(now)
   return <>
     <h2 style={H2}>事件</h2>
     <p style={NOTE}>示意資料，還沒有接上模擬。只留最新 {MAX_EVENTS} 則。</p>
     {happened.length ? <ol style={{ listStyle: 'none', margin: 0, padding: 0 }}>
       {happened.map(({ day, e }, i) => <li key={day * 1440 + e.at} style={{ padding: '6px 0', borderTop: '1px solid #3a3333', fontSize: 14 }}>
-        {(i === 0 || happened[i - 1].day !== day) && <p style={{ margin: '0 0 6px', fontSize: 12, color: '#888' }}>第 {day} 天</p>}
+        {(i === 0 || happened[i - 1].day !== day) && <p style={{ margin: '0 0 6px', fontSize: 12, color: '#888' }}>{dayLabel(day)}</p>}
         <div style={{ display: 'flex', gap: 8 }}>
           <span style={{ fontVariantNumeric: 'tabular-nums', color: '#aaa' }}>{hhmm(e.at)}</span>
           <span style={{ color: KIND_COLOURS[e.kind], whiteSpace: 'nowrap' }}>{e.kind}</span>
