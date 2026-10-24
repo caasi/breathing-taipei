@@ -7,7 +7,8 @@ import { getJson } from './load.ts'
 import type { Batch } from './sim/paths.ts'
 import { useQuery, oneOf, setOf, bool, fromBool } from './query.ts'
 import { record, since, KEEP, type Entry } from './history.ts'
-import { layoutFor } from './ui/view.ts'
+import { layoutFor, PANEL } from './ui/view.ts'
+import { Events, Policies } from './ui/Dashboard.tsx'
 
 const SPEEDS = [0, 1, 2, 4, 8]
 const EVERY = [2, 5, 10, 20, 50]
@@ -20,6 +21,7 @@ const WINDOWS = [15, 30, 60, KEEP] // simulated minutes the change rate can look
 const inTaipei = (node: string) => node.startsWith('63000') || node.startsWith('台北市')
 const H2 = { fontSize: 14, color: '#aaa', margin: '12px 0 4px' }
 const ALERT = { position: 'absolute', top: 72, left: 16, right: 16, margin: 0, color: '#ff8b6b' } as const
+const SIDE_PANEL = { position: 'absolute', top: 16, bottom: 16, overflowY: 'auto', padding: '0 12px', boxSizing: 'border-box', background: 'rgba(33, 29, 29, 0.85)', borderRadius: 4 } as const
 const ICON_BUTTON = { width: 40, height: 40, marginRight: 8, padding: 8, border: 0, borderRadius: 20, color: '#fff', cursor: 'pointer' }
 const InfoIcon = () => <svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true">
   <circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" strokeWidth="2" />
@@ -185,14 +187,19 @@ export function App() {
       </div>
       {loadError && <p role="alert" style={ALERT}>無法載入地圖資料：{loadError}</p>}
       {runError && <p role="alert" style={ALERT}>模擬無法執行：{runError}</p>}
-      {/* On a desktop the panel opens over the map, above the icons. On a phone the icons sit on the map, and the panel opens beside or below it, never over it. */}
+      {/* On a desktop the panel opens over the map, above the icons. On a phone the icons sit on the map, and the panel opens beside or below it, never over it,
+          in the place of the dashboard until it is closed. */}
       {phone
         ? <>
           <div style={{ position: 'absolute', left: box.x + 12, top: box.y + box.h - 52 }}>{icons}</div>
-          <div style={{ position: 'absolute', left: kind === 'landscape' ? box.w : 0, top: kind === 'portrait' ? box.h : 0, right: 0, bottom: 0, overflowY: 'auto', padding: '0 12px' }}>{panel}</div>
+          <div style={{ position: 'absolute', left: kind === 'landscape' ? box.w : 0, top: kind === 'portrait' ? box.h : 0, right: 0, bottom: 0, overflowY: 'auto', padding: '0 12px' }}>{panel || <><Events minute={s?.minute ?? 0} /><Policies /></>}</div>
         </>
         : <div style={{ position: 'absolute', left: 16, bottom: 16, display: 'flex', flexDirection: 'column-reverse' }}>
           <div>{icons}</div>{panel}</div>}
+      {!phone && <>
+        <aside aria-label="事件" style={{ ...SIDE_PANEL, right: 2 * PANEL.gap + PANEL.policies, width: PANEL.events }}><Events minute={s?.minute ?? 0} /></aside>
+        <aside aria-label="政策" style={{ ...SIDE_PANEL, right: PANEL.gap, width: PANEL.policies }}><Policies /></aside>
+      </>}
     </div>
   )
 }

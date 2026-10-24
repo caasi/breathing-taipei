@@ -5,8 +5,9 @@ export type Rect = { x: number; y: number; w: number; h: number }
 export type Layout = { kind: 'desktop' | 'portrait' | 'landscape'; box: Rect; fit: Rect; view: View }
 
 export const MAP_SIZE = 640
-// The event and policy dashboard sits on the right, over the map; the map fits in the rest.
-export const DASHBOARD_WIDTH = 360
+// The event and policy panels sit side by side on the right, over the map; the map fits in the rest.
+export const PANEL = { gap: 16, events: 300, policies: 280 }
+export const DASHBOARD_WIDTH = PANEL.events + PANEL.policies + 3 * PANEL.gap
 // Below 1 the fitted area shrinks, so more of 新北 around it shows; the user chose these by eye.
 // A desktop fits the whole map square; a phone's box is small, so it fits 台北市 alone.
 const ZOOM = { desktop: 0.8, portrait: 1, landscape: 1 }
