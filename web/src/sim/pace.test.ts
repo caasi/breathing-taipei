@@ -59,7 +59,7 @@ test('a clock far ahead of the model is made up over several callbacks, at most 
   expect(Math.abs(c.minute - model)).toBeLessThan(step)
 })
 
-test('a pause makes no step', () => {
+test('a step of 0 (no speed yet that was not a pause) makes no step', () => {
   expect(stepsTo(100, 0, 0)).toBe(0)
 })
 
@@ -88,7 +88,8 @@ test('the clock of the page never goes back in a run, for any timing of callback
     let now = 0, model = 0, seen = -Infinity
     // since: the change of speed (or new run) that the clock uses. run: the run of the world; loaded: when it is ready.
     let worker: Clock = { minute: 0, at: 0, perMs: PER_MS }, workerSince = 0, workerRun = 0, loaded = 0
-    let firstFrame = false, speedBeforeFirst = false // the next frame is the first of a run; a change of speed came before it
+    // The next frame is the first of a run; a change of speed came before it; the last speed that was not a pause.
+    let firstFrame = false, speedBeforeFirst = false, lastPerMs = PER_MS
     let page: Clock = { ...worker }, pageSince = 0, pageModel = 0, pageRun = 0 // pageModel: the model minute of the last message
     // Messages in flight. Each way keeps its order, so a message never arrives before an earlier one of the same way.
     const inbox: { at: number; run: () => void }[] = []
@@ -112,6 +113,7 @@ test('the clock of the page never goes back in a run, for any timing of callback
         inbox.push({ at: lastToWorker, run: () => {
           respeed(worker, sent.minute, model, sent.at, sent.perMs); workerSince = sent.at
           if (firstFrame) speedBeforeFirst = true
+          if (sent.perMs) lastPerMs = sent.perMs
         } })
       } else if ('load' in e) {
         respeed(page, 0, 0, now, page.perMs)
@@ -128,8 +130,11 @@ test('the clock of the page never goes back in a run, for any timing of callback
         // The clock waited during the load, so the first frame of the run is at most the cap ahead of minute 0.
         if (firstFrame && !speedBeforeFirst) expect(worker.minute).toBeLessThanOrEqual(MAX_FRAMES * FRAME_MS * worker.perMs + 1e-9)
         firstFrame = false
-        const step = worker.perMs * FRAME_MS
+        const step = (worker.perMs || lastPerMs) * FRAME_MS, ahead = worker.minute - model
         model += stepsTo(worker.minute, model, step) * step
+        // On a pause the model goes on to the clock, in steps of the last speed, so the dots and the time agree.
+        const last = lastPerMs * FRAME_MS
+        if (!worker.perMs) expect(Math.abs(worker.minute - model)).toBeLessThanOrEqual(Math.max(last / 2, ahead - (MAX_FRAMES + 1) * last) + 1e-9)
         const sent = { clock: structuredClone(worker), model, since: workerSince, run: workerRun } // postMessage copies the clock
         lastToPage = Math.max(lastToPage, now + e.delay)
         inbox.push({ at: lastToPage, run: () => {

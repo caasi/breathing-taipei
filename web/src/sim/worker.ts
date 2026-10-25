@@ -40,7 +40,7 @@ const EVENTS_PER_DAY = 48
 const SHOWN = [0.25, 1, 3, 0.05]
 let w: World | undefined
 let every = 20
-let hoursPerSec = 0
+let hoursPerSec = 0, lastHours = 0 // lastHours: the last speed that was not a pause
 const clock: Clock = { minute: 0, at: performance.now(), perMs: 0 }
 let since = 0
 let extra: Pick<FromWorker, 'start' | 'nodes' | 'homes' | 'coords' | 'trips' | 'replans'> = {}
@@ -94,9 +94,12 @@ function* bothPaths(trips: Trips, coords: [number, number][], graphs: Awaited<ty
 }
 
 const frame = () => {
-  const t = performance.now(), step = hoursPerSec * 60 / FPS
-  // While a world loads, the clock waits, as the clock of the page does (it has no message to move it past the cap).
-  // Without this, the first frames would make up the whole load.
+  // On a pause the clock stops, and the model goes on to it in steps of the last speed, at most MAX_FRAMES + 1 a
+  // callback, so within a few callbacks the dots (on the clock) and the shown time (the model) agree. The model can end
+  // up to half a step past the clock.
+  const t = performance.now(), step = (hoursPerSec || lastHours) * 60 / FPS
+  // While a world loads, the clock waits; the page clock stops at the cap, as no message moves it on. Without this,
+  // the first frames would make up the whole load.
   if (!w) return
   clock.minute = clockAt(clock, t); clock.at = t
   for (let k = stepsTo(clock.minute, w.day * 1440 + w.minute, step); k > 0; k--) advance(w, step)
@@ -134,6 +137,7 @@ onmessage = async (e: MessageEvent<ToWorker>) => {
   const m = e.data
   if (m.type === 'speed') {
     hoursPerSec = m.hoursPerSec
+    if (hoursPerSec) lastHours = hoursPerSec
     respeed(clock, m.minute, w ? w.day * 1440 + w.minute : 0, m.at - performance.timeOrigin, hoursPerSec * 60 / 1000)
     since = m.at
     return
