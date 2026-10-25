@@ -161,13 +161,13 @@ export function App() {
   // Change per hour over the last rateWindow minutes, as a share of the node's residents.
   const rate = useMemo(() => {
     const h = history
-    if (colourBy !== 'rate' || !s || !h.length) return undefined
+    if (colourBy !== 'rate' || !h.length) return undefined
     const last = h[h.length - 1], first = since(h, rateWindow)
     if (last.t === first.t) return undefined
     const out = new Float32Array(last.counts.length), perHour = 60 / (last.t - first.t)
     for (let i = 0; i < out.length; i++) out[i] = (last.counts[i] - first.counts[i]) * perHour / Math.max(1, homes[i])
     return out
-  }, [history, homes, !s, colourBy, rateWindow])
+  }, [history, homes, colourBy, rateWindow])
   const ready = projection && villages && s && nodes.length === s.counts.length
   const [size, setSize] = useState({ w: innerWidth, h: innerHeight })
   useEffect(() => { const on = () => setSize({ w: innerWidth, h: innerHeight }); addEventListener('resize', on); return () => removeEventListener('resize', on) }, [])
