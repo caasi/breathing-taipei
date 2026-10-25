@@ -8,12 +8,10 @@ The user set this workflow on 2026-10-24, during the 市政 debug 松 (an off-si
 
 1. Do the work on a branch, in a git worktree on the RAM disk (`/dev/shm/<branch>`).
 2. While you work, run a check when you need its result: a spike, or the tests of one file (`pnpm test <file>` in `web/`). The full suite is not required before each push. Record each check that you rely on: the command and what it showed, in the commit body or in your report.
-3. Run the review loop (the `review-loop` skill) until two rounds in a row find nothing open, for at most 5 rounds (the user set the limit on 2026-10-24). After round 5, give the open findings to the user. The reviewers are an Opus subagent, a Sonnet subagent, and Codex (`gpt-6-astra`, or `gpt-6-sol` when Codex usage is at 50% or more).
+3. Run the review loop (the `review-loop` skill) until two rounds in a row find nothing open, for at most 5 rounds (the user set the limit on 2026-10-24). After round 5, give the open findings to the user.
 4. Group the commits by logical step.
 5. Push the branch and give the user the command that opens the pull request into `main` (the user opens it). The CI runs on each push to the pull request: the workflow builds and tests, and does not publish. Without a pull request, run it with `gh workflow run pages.yml --ref <branch>`, then `gh run watch`. Ask the user for the merge only when the run passes.
 6. Merge into `main` with a merge commit (`--no-ff`, or the merge commit of the pull request) only after the user says yes. Then bump the pointer in the omni repository.
-
-Codex cannot read `/dev/shm`. Give it the omni checkout (`~/GitHub/omni/breathing-taipei`, which stays on `main`) and tell it to read the branch through git (`git show <branch>:<path>`).
 
 The CI is the one full check, and it runs before a merge: on a pull request into `main` (or `gh workflow run pages.yml --ref <branch>`) it runs `pnpm build` (with `tsc --noEmit`) and `pnpm test`. A push to `main` runs `pnpm build` and publishes the site, with no tests, so a change that reaches `main` with no passing pull request run or manual run of its branch is published untested.
 
