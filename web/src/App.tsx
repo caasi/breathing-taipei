@@ -134,16 +134,17 @@ export function App() {
   useEffect(() => post({ type: 'sample', every }), [every])
   useEffect(() => {
     if (runStart === undefined) return
-    // The new world starts at minute 0. A change of speed while it loads must not carry the clock of the old run into it.
-    const l = last.current
-    l.minute = 0; l.at = performance.now(); l.model = 0
-    setS(undefined); setRunError(undefined); post({ type: 'init', perAgent: PER_AGENT, seed: 42, level, startDay: runStart, start: ++started.current })
+    // The new world starts at minute 0, and the worker starts its clock from the same time, so the first frame does
+    // not take the clock of the page back.
+    const l = last.current, now = performance.now(), since = performance.timeOrigin + now
+    respeed(l, 0, 0, now, l.perMs); l.model = 0; l.since = since
+    setS(undefined); setRunError(undefined)
+    post({ type: 'init', perAgent: PER_AGENT, seed: 42, level, startDay: runStart, start: ++started.current, at: since })
   }, [level, runStart])
   useEffect(() => {
     const l = last.current, now = performance.now(), since = performance.timeOrigin + now
-    const c = respeed(clockAt(l, now), l.model, now, speed * 60 / 1000)
-    Object.assign(l, c); l.since = since
-    post({ type: 'speed', hoursPerSec: speed, minute: c.minute, at: since })
+    respeed(l, clockAt(l, now), l.model, now, speed * 60 / 1000); l.since = since
+    post({ type: 'speed', hoursPerSec: speed, minute: l.minute, at: since })
   }, [speed])
 
   const projection = useMemo(() => towns && projectionFor(towns), [towns])

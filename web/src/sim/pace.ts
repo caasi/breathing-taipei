@@ -15,10 +15,12 @@ export type Clock = { minute: number; at: number; perMs: number }
 export const clockAt = (c: Clock, now: number) => c.minute + Math.min(Math.max(0, now - c.at), MAX_FRAMES * FRAME_MS) * c.perMs
 
 /**
- * The clock from a change of speed at `at`. The model never goes back, so a clock behind it moves up to it; the
- * page and the worker both use this, so they agree.
+ * Sets `c` to the clock from a change of speed (or a new run) at `at`. The model never goes back, so a clock behind
+ * it moves up to it; the page and the worker both use this, so they agree.
  */
-export const respeed = (minute: number, model: number, at: number, perMs: number): Clock => ({ minute: Math.max(minute, model), at, perMs })
+export const respeed = (c: Clock, minute: number, model: number, at: number, perMs: number) => {
+  c.minute = Math.max(minute, model); c.at = at; c.perMs = perMs
+}
 
 /**
  * The steps of `step` minutes that bring the model closest to the clock. Rounded, so a timer up to half a frame early

@@ -51,23 +51,26 @@ test('a pause makes no step', () => {
 test('after a slow-down, the model goes on at the next callback, even when it was ahead of the clock', () => {
   // At 8x the model can be up to half a step (8 minutes) ahead of the clock. At 1x a step is 2 minutes, so without
   // moving the clock up to the model, the model would wait about 4 frames.
-  const model = 100 + 0.4 * STEP, slow = 60 / 1000
-  const c = respeed(100, model, 0, slow)
+  const model = 100 + 0.4 * STEP, slow = 60 / 1000, c: Clock = { minute: 0, at: 0, perMs: 0 }
+  respeed(c, 100, model, 0, slow)
   expect(stepsTo(clockAt(c, FRAME_MS), model, slow * FRAME_MS)).toBe(1)
 })
 
 // One event of a run: a callback of the worker (`gap` ms after the last event), with the delay of its message to the
-// page, or a change of speed on the page.
+// page, a change of speed on the page, or a new run that takes `load` ms to load in the worker.
+const ms = (max: number) => fc.double({ min: 0, max, noNaN: true })
 const events = fc.array(fc.oneof(
-  fc.record({ gap: fc.double({ min: 0, max: 10 * FRAME_MS, noNaN: true }), delay: fc.double({ min: 0, max: 50, noNaN: true }) }),
-  fc.record({ gap: fc.double({ min: 0, max: 2 * FRAME_MS, noNaN: true }), speed: fc.constantFrom(0, 1, 2, 4, 8), delay: fc.double({ min: 0, max: 50, noNaN: true }) }),
+  fc.record({ gap: ms(10 * FRAME_MS), delay: ms(50) }),
+  fc.record({ gap: ms(2 * FRAME_MS), speed: fc.constantFrom(0, 1, 2, 4, 8), delay: ms(50) }),
+  fc.record({ gap: ms(2 * FRAME_MS), load: ms(20 * FRAME_MS), delay: ms(50) }),
 ), { maxLength: 200 })
 
-test('the clock of the page never goes back, for any timing of callbacks, messages and changes of speed', () => {
+test('the clock of the page never goes back in a run, for any timing of callbacks, messages, changes of speed and new runs', () => {
   fc.assert(fc.property(events, es => {
     let now = 0, model = 0, seen = -Infinity
-    let worker: Clock = { minute: 0, at: 0, perMs: PER_MS }, workerSince = 0 // the change of speed that the worker uses
-    let page: Clock = { ...worker }, pageSince = 0, pageModel = 0 // pageModel: the model minute of the last message
+    // since: the change of speed (or new run) that the clock uses. run: the run of the world; loaded: when it is ready.
+    let worker: Clock = { minute: 0, at: 0, perMs: PER_MS }, workerSince = 0, workerRun = 0, loaded = 0
+    let page: Clock = { ...worker }, pageSince = 0, pageModel = 0, pageRun = 0 // pageModel: the model minute of the last message
     // Messages in flight. Each way keeps its order, so a message never arrives before an earlier one of the same way.
     const inbox: { at: number; run: () => void }[] = []
     let lastToPage = 0, lastToWorker = 0
@@ -82,17 +85,31 @@ test('the clock of the page never goes back, for any timing of callbacks, messag
       now = due
       look()
       if ('speed' in e) {
-        const sent = (page = respeed(clockAt(page, now), pageModel, now, e.speed * 60 / 1000))
+        respeed(page, clockAt(page, now), pageModel, now, e.speed * 60 / 1000)
+        const sent = structuredClone(page) // postMessage copies the clock
         pageSince = now
         lastToWorker = Math.max(lastToWorker, now + e.delay)
-        inbox.push({ at: lastToWorker, run: () => { worker = respeed(sent.minute, model, sent.at, sent.perMs); workerSince = sent.at } })
+        inbox.push({ at: lastToWorker, run: () => { respeed(worker, sent.minute, model, sent.at, sent.perMs); workerSince = sent.at } })
+      } else if ('load' in e) {
+        respeed(page, 0, 0, now, page.perMs)
+        const at = now, run = ++pageRun, load = e.load
+        pageModel = 0; pageSince = at; seen = -Infinity
+        lastToWorker = Math.max(lastToWorker, now + e.delay)
+        inbox.push({ at: lastToWorker, run: () => {
+          model = 0; workerRun = run; loaded = now + load
+          respeed(worker, 0, 0, at, worker.perMs); workerSince = at
+        } })
       } else {
         worker.minute = clockAt(worker, now); worker.at = now
+        if (now < loaded) continue // the worker sends no frame while the world loads
         const step = worker.perMs * FRAME_MS
         model += stepsTo(worker.minute, model, step) * step
-        const sent = { clock: structuredClone(worker), model, since: workerSince } // postMessage copies the clock
+        const sent = { clock: structuredClone(worker), model, since: workerSince, run: workerRun } // postMessage copies the clock
         lastToPage = Math.max(lastToPage, now + e.delay)
-        inbox.push({ at: lastToPage, run: () => { pageModel = sent.model; if (sent.since === pageSince) page = sent.clock } })
+        inbox.push({ at: lastToPage, run: () => {
+          if (sent.run !== pageRun) return // a frame of an earlier run
+          pageModel = sent.model; if (sent.since === pageSince) page = sent.clock
+        } })
       }
     }
     deliver(Infinity)

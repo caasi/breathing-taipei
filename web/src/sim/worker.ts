@@ -11,7 +11,8 @@ import { networks, readRoutes, tripPaths, type Batch, type Routes } from './path
 export type Level = 'district' | 'village'
 export type ToWorker =
   // startDay: index into calendar.json of day 0. start: an id that the first frame of the run gives back.
-  | { type: 'init'; perAgent: number; seed: number; level: Level; startDay: number; start: number }
+  // at: as in speed. The clock of the new run starts at minute 0 at that time, also while the run loads.
+  | { type: 'init'; perAgent: number; seed: number; level: Level; startDay: number; start: number; at: number }
   // minute: the clock of the page at at (performance.timeOrigin + performance.now() of the change), so both clocks agree.
   | { type: 'speed'; hoursPerSec: number; minute: number; at: number }
   | { type: 'sample'; every: number } // the run goes on; only the agents drawn as dots change
@@ -40,7 +41,8 @@ const SHOWN = [0.25, 1, 3, 0.05]
 let w: World | undefined
 let every = 20
 let hoursPerSec = 0
-let clock: Clock = { minute: 0, at: performance.now(), perMs: 0 }, since = 0
+const clock: Clock = { minute: 0, at: performance.now(), perMs: 0 }
+let since = 0
 let extra: Pick<FromWorker, 'start' | 'nodes' | 'homes' | 'coords' | 'trips' | 'replans'> = {}
 let pending: Generator<Batch> | undefined
 let newEvents: SimEvent[] = []
@@ -130,18 +132,21 @@ onmessage = async (e: MessageEvent<ToWorker>) => {
   const m = e.data
   if (m.type === 'speed') {
     hoursPerSec = m.hoursPerSec
-    clock = respeed(m.minute, w ? w.day * 1440 + w.minute : 0, m.at - performance.timeOrigin, hoursPerSec * 60 / 1000)
+    respeed(clock, m.minute, w ? w.day * 1440 + w.minute : 0, m.at - performance.timeOrigin, hoursPerSec * 60 / 1000)
     since = m.at
     return
   }
   if (m.type === 'sample') { every = m.every; if (w) net.then(g => { if (w) extra = { ...extra, trips: draw(w, g) } }); return }
+  // The old world stops now, so a change of speed while the new one loads moves the clock of the new run, as on the page.
+  w = undefined
+  respeed(clock, 0, 0, m.at - performance.timeOrigin, hoursPerSec * 60 / 1000)
+  since = m.at
   // Any failure while starting (loading, building the city, sampling) goes to the page.
   // The async handler would otherwise reject without a message, and onerror does not see a rejection.
   try {
     const [[od2, villages, signal, , , night, cal, people], graphs] = await Promise.all([data, net])
     const c = cityFrom({ ...od2, villages, signal, night }, m.perAgent, m.level, day => kindAt(cal as Calendar, m.startDay + day))
     w = init(c.city, m.seed)
-    clock = { minute: 0, at: performance.now(), perMs: hoursPerSec * 60 / 1000 }
     const world = w, districtOf = Array.from(w.home, h => (m.level === 'village' ? villages[h].town : c.nodes[h]))
     const ids = drawNames(people as People, districtOf, m.seed + 1), pickRng = mulberry32(m.seed + 2)
     // ponytail: EVENTS_PER_DAY is the base rate before the SHOWN weights (each agent makes about one plan a day); DATA.md,
