@@ -5,6 +5,8 @@
 export const FPS = 30
 export const FRAME_MS = 1000 / FPS
 // A longer gap (a tab back from the background) counts as this many frames, so the clock does not jump hours.
+// ponytail: so a device with callbacks more than 133 ms apart (below 7.5 fps) runs slower than its speed setting, at
+// 133 ms of each gap. Raise the cap if such devices matter; the clock of a stalled page then jumps further.
 export const MAX_FRAMES = 4
 
 /** The clock shows `minute` (since 00:00 of day 0) at `at` (ms, as performance.now()) and moves `perMs` minutes a ms. */
