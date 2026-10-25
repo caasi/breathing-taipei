@@ -95,8 +95,10 @@ function* bothPaths(trips: Trips, coords: [number, number][], graphs: Awaited<ty
 
 const frame = () => {
   const t = performance.now(), step = hoursPerSec * 60 / FPS
-  clock.minute = clockAt(clock, t); clock.at = t
+  // While a world loads, the clock waits, as the clock of the page does (it has no message to move it past the cap).
+  // Without this, the first frames would make up the whole load.
   if (!w) return
+  clock.minute = clockAt(clock, t); clock.at = t
   for (let k = stepsTo(clock.minute, w.day * 1440 + w.minute, step); k > 0; k--) advance(w, step)
   extra.replans = replans(w)
   const c = counts(w, MODES.length)

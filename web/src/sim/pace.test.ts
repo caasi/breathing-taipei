@@ -100,10 +100,11 @@ test('the clock of the page never goes back in a run, for any timing of callback
           respeed(worker, 0, 0, at, worker.perMs); workerSince = at
         } })
       } else {
-        worker.minute = clockAt(worker, now); worker.at = now
         if (now < loaded) continue // the worker sends no frame while the world loads
-        const step = worker.perMs * FRAME_MS
-        model += stepsTo(worker.minute, model, step) * step
+        worker.minute = clockAt(worker, now); worker.at = now
+        const step = worker.perMs * FRAME_MS, n = stepsTo(worker.minute, model, step)
+        expect(n).toBeLessThanOrEqual(MAX_FRAMES + 1) // a callback, also the first after a load, makes up at most the cap
+        model += n * step
         const sent = { clock: structuredClone(worker), model, since: workerSince, run: workerRun } // postMessage copies the clock
         lastToPage = Math.max(lastToPage, now + e.delay)
         inbox.push({ at: lastToPage, run: () => {
@@ -113,5 +114,9 @@ test('the clock of the page never goes back in a run, for any timing of callback
       }
     }
     deliver(Infinity)
-  }), { seed: 1 })
+  }), {
+    seed: 1,
+    // A load longer than the cap, with callbacks all through it: random cases seldom make one, as the numbers lean to 0.
+    examples: [[[{ gap: 0, load: 20 * FRAME_MS, delay: 0 }, ...Array(40).fill({ gap: FRAME_MS, delay: 0 })]]],
+  })
 })
