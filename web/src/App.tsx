@@ -75,9 +75,9 @@ export function App() {
   const [dots, setDots] = useStored('dots', true, bool, fromBool)
   const [byMode, setByMode] = useStored('mode', false, bool, fromBool)
   const [colourBy, setColourBy] = useStored<'density' | 'rate'>('color', 'rate', oneOf(['density', 'rate'] as const))
-  const history = useRef<Entry[]>([])
-  const personal = useRef<SimEvent[]>([]) // the personal events from the worker; the newest KEEP_EVENTS stay
-  const homes = useRef(new Uint32Array(0))
+  const [history, setHistory] = useState<Entry[]>([])
+  const [personal, setPersonal] = useState<SimEvent[]>([]) // the personal events from the worker; the newest KEEP_EVENTS stay
+  const [homes, setHomes] = useState(new Uint32Array(0))
   const [fps, setFps] = useState(0)
   // A file the page loads once stays failed until reload; a run error belongs to the current run.
   const [loadError, setLoadError] = useState<string>()
@@ -107,11 +107,13 @@ export function App() {
       if (m.start !== undefined) { if (m.start !== started.current) return; shown.current = m.start }
       else if (shown.current !== started.current) return
       if (m.nodes) setNodes(m.nodes)
-      if (m.homes) homes.current = m.homes
-      if (m.coords) { history.current = []; personal.current = [] }
+      // The first frame of a run (it has coords) starts the history and the events again. The updaters keep only
+      // these values, not the message.
+      const fresh = m.coords !== undefined, events = m.events, entry = { t: m.day * 1440 + m.minute, counts: m.counts }
+      if (m.homes) setHomes(m.homes)
       if (m.trips) { tracks.current = []; unplaced.current = [] }
-      if (m.events?.length) personal.current = [...personal.current, ...m.events].slice(-KEEP_EVENTS)
-      history.current = record(history.current, { t: m.day * 1440 + m.minute, counts: m.counts }, KEEP)
+      if (fresh || events?.length) setPersonal(p => [...(fresh ? [] : p), ...(events ?? [])].slice(-KEEP_EVENTS))
+      setHistory(h => record(fresh ? [] : h, entry, KEEP))
       if (m.trips) { tripsRef.current = m.trips; setTrips(m.trips) }
       // The dots read the arrays every frame, so new plans are written into them in place.
       const t = tripsRef.current, r = m.replans
@@ -158,14 +160,14 @@ export function App() {
   const clock = () => clockAt(last.current, performance.now())
   // Change per hour over the last rateWindow minutes, as a share of the node's residents.
   const rate = useMemo(() => {
-    const h = history.current
+    const h = history
     if (colourBy !== 'rate' || !s || !h.length) return undefined
     const last = h[h.length - 1], first = since(h, rateWindow)
     if (last.t === first.t) return undefined
-    const out = new Float32Array(s.counts.length), perHour = 60 / (last.t - first.t)
-    for (let i = 0; i < out.length; i++) out[i] = (last.counts[i] - first.counts[i]) * perHour / Math.max(1, homes.current[i])
+    const out = new Float32Array(last.counts.length), perHour = 60 / (last.t - first.t)
+    for (let i = 0; i < out.length; i++) out[i] = (last.counts[i] - first.counts[i]) * perHour / Math.max(1, homes[i])
     return out
-  }, [s, colourBy, rateWindow])
+  }, [history, homes, !s, colourBy, rateWindow])
   const ready = projection && villages && s && nodes.length === s.counts.length
   const [size, setSize] = useState({ w: innerWidth, h: innerHeight })
   useEffect(() => { const on = () => setSize({ w: innerWidth, h: innerHeight }); addEventListener('resize', on); return () => removeEventListener('resize', on) }, [])
@@ -177,14 +179,14 @@ export function App() {
   // The worker posts about 30 times a second, and at any speed above a pause the simulated minute changes on nearly each post.
   // The list changes only when the clock passes the time of its next event, a new event comes, or a new day starts,
   // so it is built again then and not on every post.
-  const nowMinute = s ? s.day * 1440 + Math.floor(s.minute) : 0, newest = personal.current.at(-1)?.id
+  const nowMinute = s ? s.day * 1440 + Math.floor(s.minute) : 0
   // The time of the event that the clock has passed: it changes with each event passed, so a yes/no would miss the second.
   // It is state set after the commit, not a ref set in render: a render that React drops must not move it.
   const [nextDue, setNextDue] = useState(Infinity), passed = nowMinute >= nextDue ? nextDue : -1
   const list = useMemo(() => {
-    const events = cal && runStart !== undefined && s ? withPublic(personal.current, cal, runStart, nowMinute, MAX_EVENTS) : personal.current
+    const events = cal && runStart !== undefined && s ? withPublic(personal, cal, runStart, nowMinute, MAX_EVENTS) : personal
     return { now: nowMinute, events, next: nextAfter(events, nowMinute) }
-  }, [cal, runStart, newest, !s, s?.day, passed])
+  }, [cal, runStart, personal, !s, s?.day, passed])
   useEffect(() => setNextDue(list.next), [list.next])
   const placeOf = useMemo(() => {
     const byCode = new Map<string, { town: string; village: string }>()
