@@ -11,7 +11,7 @@ import { layoutFor, PANEL } from './ui/view.ts'
 import { dateText, indexOf, todayInTaipei, type Calendar } from './sim/calendar.ts'
 import { Events, Policies, usePolicies, MAX_EVENTS } from './ui/Dashboard.tsx'
 import { withPublic, type SimEvent } from './sim/events.ts'
-import { clockAt, respeed, type Clock } from './sim/pace.ts'
+import { clockAt, respeed, READY_MS, type Clock } from './sim/pace.ts'
 import { hhmm, H2 } from './ui/format.ts'
 
 const SPEEDS = [0, 1, 2, 4, 8]
@@ -29,6 +29,11 @@ const WINDOWS = [15, 30, 60, KEEP] // simulated minutes the change rate can look
 const inTaipei = (node: string) => node.startsWith('63000') || node.startsWith('台北市')
 const ALERT = { position: 'absolute', top: 72, left: 16, margin: 0, color: '#ff8b6b' } as const
 const SIDE_PANEL = { position: 'absolute', top: 16, bottom: 16, overflowY: 'auto', padding: '0 12px', boxSizing: 'border-box', background: 'rgba(33, 29, 29, 0.85)', borderRadius: 4 } as const
+// Turns in a CSS animation of an HTML box (index.html), which the browser can run while the main thread builds a run.
+const SpinnerIcon = () => <span className="spin" style={{ display: 'inline-block', width: 24, height: 24 }}>
+  <svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true" style={{ display: 'block' }}>
+    <circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeDasharray={`${Math.PI * 9 * 1.5} ${Math.PI * 9 * 0.5}`} /></svg></span>
+const HIDDEN = { position: 'absolute', width: 1, height: 1, overflow: 'hidden', clipPath: 'inset(50%)', whiteSpace: 'nowrap' } as const
 const ICON_BUTTON = { width: 40, height: 40, marginRight: 8, padding: 8, border: 0, borderRadius: 20, color: '#fff', cursor: 'pointer' }
 const InfoIcon = () => <svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true">
   <circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" strokeWidth="2" />
@@ -89,6 +94,10 @@ export function App() {
     setOf(LAYERS.map(l => l[0])), v => [...v].join(','))
   const worker = useRef<Worker>()
   const started = useRef(0), shown = useRef(0) // the latest start posted, and the start of the frames on the page
+  // The start of a new run whose clock stands until the page is ready: state for the icon, a ref for the logic, so a
+  // click between a start and its render does not read an old value. deadline: when the run starts anyway.
+  const [waiting, setWaiting] = useState<number>()
+  const waitRef = useRef<number>(), deadline = useRef(0), speedRef = useRef(speed)
   // The clock of the dots (pace.ts), the model minute of the last message, and the change of speed that the clock uses.
   const last = useRef<Clock & { model: number; since: number }>({ minute: 0, at: 0, perMs: 0, model: 0, since: 0 })
   const toggle = (k: string) => setShow(s => { const n = new Set(s); n.has(k) ? n.delete(k) : n.add(k); return n })
@@ -137,18 +146,30 @@ export function App() {
   useEffect(() => post({ type: 'sample', every }), [every])
   useEffect(() => {
     if (runStart === undefined) return
-    // The new world starts at minute 0, and the worker starts its clock from the same time, so the first frame does
-    // not take the clock of the page back.
+    // The new world starts at minute 0, and both clocks stand there until the page has drawn the first frame. The page
+    // is busy while it builds the new run; a clock that ran then would jump when the page draws again.
     const l = last.current, now = performance.now(), since = performance.timeOrigin + now
-    respeed(l, 0, 0, now, l.perMs); l.model = 0; l.since = since
-    setS(undefined); setRunError(undefined)
-    post({ type: 'init', perAgent: PER_AGENT, seed: 42, level, startDay: runStart, start: ++started.current, at: since })
+    respeed(l, 0, 0, now, 0); l.model = 0; l.since = since
+    waitRef.current = ++started.current; deadline.current = now + READY_MS
+    setS(undefined); setRunError(undefined); setWaiting(started.current)
+    post({ type: 'init', perAgent: PER_AGENT, seed: 42, level, startDay: runStart, start: started.current, at: since })
   }, [level, runStart])
-  useEffect(() => {
+  // The page clock goes on at the speed from now, and the worker clock follows it from the same time.
+  const startClock = (hours: number) => {
     const l = last.current, now = performance.now(), since = performance.timeOrigin + now
-    respeed(l, clockAt(l, now), l.model, now, speed * 60 / 1000); l.since = since
-    post({ type: 'speed', hoursPerSec: speed, minute: l.minute, at: since })
-  }, [speed])
+    respeed(l, clockAt(l, now), l.model, now, hours * 60 / 1000); l.since = since
+    post({ type: 'speed', hoursPerSec: hours, minute: l.minute, at: since })
+  }
+  // The clock runs at the chosen speed, but stands while the tab is hidden: a hidden page draws nothing, and a run that
+  // goes on would only use the battery.
+  const resume = () => startClock(document.hidden ? 0 : speedRef.current)
+  // While a new run waits, a change of speed is kept for its start.
+  useEffect(() => { speedRef.current = speed; if (waitRef.current === undefined) resume() }, [speed])
+  useEffect(() => {
+    const on = () => { if (waitRef.current === undefined) resume() }
+    document.addEventListener('visibilitychange', on)
+    return () => document.removeEventListener('visibilitychange', on)
+  }, [])
 
   const projection = useMemo(() => towns && projectionFor(towns), [towns])
   // The worker handler is set once, so it reads the projection through a ref.
@@ -157,7 +178,7 @@ export function App() {
   useEffect(() => {
     if (projection && unplaced.current.length) { addBatches(tracks.current, unplaced.current, projection); unplaced.current = [] }
   }, [projection])
-  // The worker posts about 30 times a second; between posts the dots move on the extrapolated clock.
+  // The worker posts up to 30 times a second while the clock runs; between posts the dots move on the extrapolated clock.
   const clock = () => clockAt(last.current, performance.now())
   // Change per hour over the last rateWindow minutes, as a share of the node's residents.
   const rate = useMemo(() => {
@@ -170,6 +191,17 @@ export function App() {
     return out
   }, [history, homes, colourBy, rateWindow])
   const ready = projection && villages && s && nodes.length === s.counts.length
+  // The new run starts when the map of its first frame is on the screen, or at the deadline. The effect depends on
+  // whether the map is ready, not on each frame.
+  const drawn = !!ready && shown.current === waiting
+  useEffect(() => {
+    if (waiting === undefined) return
+    const go = () => { waitRef.current = undefined; setWaiting(undefined); resume() }
+    // Two animation frames: the browser paints the new run before the first one ends, and the clock starts after it.
+    if (drawn) { let raf = requestAnimationFrame(() => { raf = requestAnimationFrame(go) }); return () => cancelAnimationFrame(raf) }
+    const timer = setTimeout(go, Math.max(0, deadline.current - performance.now()))
+    return () => clearTimeout(timer)
+  }, [waiting, drawn])
   const [size, setSize] = useState({ w: innerWidth, h: innerHeight })
   useEffect(() => { const on = () => setSize({ w: innerWidth, h: innerHeight }); addEventListener('resize', on); return () => removeEventListener('resize', on) }, [])
   const taipei = useMemo(() => projection && taipeiIn(towns, projection), [projection])
@@ -248,6 +280,11 @@ export function App() {
         <HeatMap towns={towns} villages={villages} level={level} nodes={nodes} counts={s.counts} perAgent={PER_AGENT} proj={projection} transit={transit} show={show} rate={rate} speed={speed} view={view} />
         {dots && dotTrips && <Travellers tracks={tracks} trips={dotTrips} clock={clock} onFps={setFps} byMode={byMode} view={view} />}
       </>}
+      {/* Always there, so a screen reader reads the change. */}
+      {/* In the bottom right of the map, left of the panels on a desktop. */}
+      <div role="status" style={{ position: 'absolute', right: box.w - fit.x - fit.w + 16, bottom: 16, color: '#fff', pointerEvents: 'none' }}>
+        {waiting !== undefined && !runError && <><SpinnerIcon /><span style={HIDDEN}>準備中</span></>}
+      </div>
       <header style={{ position: 'absolute', top: 16, left: 16, pointerEvents: 'none' }}>
         <h1 style={{ margin: 0, fontSize: titleSize, fontWeight: 'bold', color: '#fff' }}>台北鼓動</h1>
         {/* Centred on the Chinese title alone: a flex row with no width of its own overflows evenly to both sides. */}
