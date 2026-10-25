@@ -133,6 +133,8 @@ export function App() {
   useEffect(() => post({ type: 'sample', every }), [every])
   useEffect(() => {
     if (runStart === undefined) return
+    // The new world starts at minute 0. A change of speed while it loads must not carry the clock of the old run into it.
+    last.current = { ...last.current, minute: 0, at: performance.now(), model: 0 }
     setS(undefined); setRunError(undefined); post({ type: 'init', perAgent: PER_AGENT, seed: 42, level, startDay: runStart, start: ++started.current })
   }, [level, runStart])
   useEffect(() => {
