@@ -77,8 +77,9 @@ test('the clock of the page never goes back, for any timing of callbacks, messag
       while (inbox.length && inbox[0].at <= until) { const m = inbox.shift()!; now = m.at; m.run(); look() }
     }
     for (const e of es) {
-      deliver(now + e.gap)
-      now += e.gap
+      const due = now + e.gap
+      deliver(due)
+      now = due
       look()
       if ('speed' in e) {
         const sent = (page = respeed(clockAt(page, now), pageModel, now, e.speed * 60 / 1000))
