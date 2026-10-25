@@ -10,7 +10,7 @@ import { record, since, KEEP, type Entry } from './history.ts'
 import { layoutFor, PANEL } from './ui/view.ts'
 import { dateText, indexOf, todayInTaipei, type Calendar } from './sim/calendar.ts'
 import { Events, Policies, usePolicies, MAX_EVENTS } from './ui/Dashboard.tsx'
-import { nextAfter, withPublic, type SimEvent } from './sim/events.ts'
+import { withPublic, type SimEvent } from './sim/events.ts'
 import { clockAt, respeed, type Clock } from './sim/pace.ts'
 import { hhmm, H2 } from './ui/format.ts'
 
@@ -176,18 +176,11 @@ export function App() {
   const road = s ? Array.from(s.road) : []
   const date = cal && runStart !== undefined ? dateText(cal, runStart + (s?.day ?? 0)) : undefined
   const dayLabel = useMemo(() => (day: number) => (cal && runStart !== undefined ? dateText(cal, runStart + day).roc : ''), [cal, runStart])
-  // The worker posts about 30 times a second, and at any speed above a pause the simulated minute changes on nearly each post.
-  // The list changes only when the clock passes the time of its next event, a new event comes, or a new day starts,
-  // so it is built again then and not on every post.
   const nowMinute = s ? s.day * 1440 + Math.floor(s.minute) : 0
-  // The time of the event that the clock has passed: it changes with each event passed, so a yes/no would miss the second.
-  // It is state set after the commit, not a ref set in render: a render that React drops must not move it.
-  const [nextDue, setNextDue] = useState(Infinity), passed = nowMinute >= nextDue ? nextDue : -1
   const list = useMemo(() => {
     const events = cal && runStart !== undefined && s ? withPublic(personal, cal, runStart, nowMinute, MAX_EVENTS) : personal
-    return { now: nowMinute, events, next: nextAfter(events, nowMinute) }
-  }, [cal, runStart, personal, !s, s?.day, passed])
-  useEffect(() => setNextDue(list.next), [list.next])
+    return { now: nowMinute, events }
+  }, [cal, runStart, personal, !s, nowMinute])
   const placeOf = useMemo(() => {
     const byCode = new Map<string, { town: string; village: string }>()
     for (const g of villages?.objects.villages.geometries ?? []) byCode.set(g.properties.VILLCODE, { town: g.properties.TOWNNAME, village: g.properties.VILLNAME })
