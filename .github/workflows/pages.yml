@@ -1,4 +1,5 @@
-# On main, it builds the site and publishes it to GitHub Pages. It does not run the tests: they ran on the pull request.
+# On main, it builds the site and publishes it to GitHub Pages. It does not run the tests. Run them on the branch before
+# the merge: open a pull request, or run the workflow on the branch. A merge pushed without either is not tested.
 # On a pull request into main, or on a branch with `gh workflow run pages.yml --ref <branch>`, it builds without a publish
 # and then runs the tests: this is the check before a merge.
 # The Pages source of the repository must be "GitHub Actions" (Settings > Pages).
