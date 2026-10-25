@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import { HeatMap, Outline, projectionFor, taipeiIn, type Transit } from './ui/HeatMap.tsx'
+import { HeatMap, Land, Outline, SEA, projectionFor, taipeiIn, type Transit } from './ui/HeatMap.tsx'
 import { Travellers, MODE_COLOURS, addBatches, type Track } from './ui/Travellers.tsx'
 import { MODES } from './sim/city.ts'
 import type { FromWorker, WorkerError, ToWorker, Level, Trips } from './sim/worker.ts'
@@ -316,7 +316,8 @@ export function App() {
     {open === 'info' ? info : settings}</div>
   return (
     <div style={{ position: 'fixed', inset: 0, overflow: 'hidden', background: '#211d1d' }}>
-      <div style={{ position: 'absolute', left: box.x, top: box.y, width: box.w, height: box.h, overflow: 'hidden' }}>
+      <div style={{ position: 'absolute', left: box.x, top: box.y, width: box.w, height: box.h, overflow: 'hidden', background: SEA }}>
+      {towns && projection && <Land towns={towns} proj={projection} view={view} />}
       {/* The blurred outline is under the map until the map has faded in, once, at the first frame. */}
       {!faded && towns && projection && <Outline towns={towns} proj={projection} view={view} pop={pop} />}
       <div className="reveal" style={{ position: 'absolute', inset: 0, opacity: revealed ? 1 : 0, filter: revealed ? 'none' : 'blur(8px)' }}>
