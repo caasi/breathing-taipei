@@ -178,7 +178,7 @@ export function App() {
   useEffect(() => {
     if (projection && unplaced.current.length) { addBatches(tracks.current, unplaced.current, projection); unplaced.current = [] }
   }, [projection])
-  // The worker posts about 30 times a second; between posts the dots move on the extrapolated clock.
+  // The worker posts up to 30 times a second while the clock runs; between posts the dots move on the extrapolated clock.
   const clock = () => clockAt(last.current, performance.now())
   // Change per hour over the last rateWindow minutes, as a share of the node's residents.
   const rate = useMemo(() => {
@@ -191,8 +191,8 @@ export function App() {
     return out
   }, [history, homes, colourBy, rateWindow])
   const ready = projection && villages && s && nodes.length === s.counts.length
-  // The new run starts when the map of its first frame is on the screen, or at the deadline. The worker posts also
-  // while the run waits, so the effect depends on whether the map is ready, not on each frame.
+  // The new run starts when the map of its first frame is on the screen, or at the deadline. The effect depends on
+  // whether the map is ready, not on each frame.
   const drawn = !!ready && shown.current === waiting
   useEffect(() => {
     if (waiting === undefined) return

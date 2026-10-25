@@ -66,7 +66,7 @@ export function Fills({ cells, proj, colours, fadeSeconds, view }: Props) {
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST)
     gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1)
     const shown = Float32Array.from(target.current), from = Float32Array.from(shown), bytes = new Uint8Array(shown.length)
-    // HeatMap makes a new array on every render (the worker posts 30 times a second, also while paused),
+    // HeatMap makes a new array on every render (the worker posts up to 30 times a second),
     // so a change is a change of content, not of identity.
     const seen = Uint8Array.from(target.current)
     const changed = (t: Uint8Array) => t.length !== seen.length || t.some((v, i) => v !== seen[i])

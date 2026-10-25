@@ -11,7 +11,7 @@ import { networks, readRoutes, tripPaths, type Batch, type Routes } from './path
 export type Level = 'district' | 'village'
 export type ToWorker =
   // startDay: index into calendar.json of day 0. start: an id that the first frame of the run gives back.
-  // at: as in speed. The clock of the new run starts at minute 0 at that time, also while the run loads.
+  // at: as in speed. The clock of the new run stands at minute 0 from that time until the page sends a speed.
   | { type: 'init'; perAgent: number; seed: number; level: Level; startDay: number; start: number; at: number }
   // minute: the clock of the page at at (performance.timeOrigin + performance.now() of the change), so both clocks agree.
   | { type: 'speed'; hoursPerSec: number; minute: number; at: number }
@@ -42,7 +42,7 @@ let w: World | undefined
 let every = 20
 let hoursPerSec = 0, lastHours = 0 // lastHours: the last speed that was not a pause
 const clock: Clock = { minute: 0, at: performance.now(), perMs: 0 }
-let since = 0
+let since = 0, owed = false // owed: the page has no frame yet with the clock of the latest change of speed
 let extra: Pick<FromWorker, 'start' | 'nodes' | 'homes' | 'coords' | 'trips' | 'replans'> = {}
 let pending: Generator<Batch> | undefined
 let newEvents: SimEvent[] = []
@@ -102,7 +102,12 @@ const frame = () => {
   // the first frames would make up the whole load.
   if (!w) return
   clock.minute = clockAt(clock, t); clock.at = t
-  for (let k = stepsTo(clock.minute, w.day * 1440 + w.minute, step); k > 0; k--) advance(w, step)
+  const n = stepsTo(clock.minute, w.day * 1440 + w.minute, step)
+  // Nothing moves and nothing new is there to send (a pause, a hidden tab, a run that waits): skip the frame, so a
+  // paused page costs almost nothing. After a change of speed one frame goes out anyway: the page takes the worker
+  // clock only from a frame of its latest change, and a frame from before it can have moved the model past its clock.
+  if (n === 0 && !owed && !pending && !newEvents.length && !Object.keys(extra).length) return
+  for (let k = n; k > 0; k--) advance(w, step)
   extra.replans = replans(w)
   const c = counts(w, MODES.length)
   const ms = performance.now() - t
@@ -117,6 +122,7 @@ const frame = () => {
   }
   const msg: FromWorker = { ...extra, paths, routed, minute: w.minute, day: w.day, counts: c.nodes, road: c.road, away: c.away, ms, events: newEvents, clock: clock.minute, at: performance.timeOrigin + t, since }
   newEvents = []
+  owed = false
   postMessage(msg)
   extra = {}
 }
@@ -139,7 +145,7 @@ onmessage = async (e: MessageEvent<ToWorker>) => {
     hoursPerSec = m.hoursPerSec
     if (hoursPerSec) lastHours = hoursPerSec
     respeed(clock, m.minute, w ? w.day * 1440 + w.minute : 0, m.at - performance.timeOrigin, hoursPerSec * 60 / 1000)
-    since = m.at
+    since = m.at; owed = true
     return
   }
   if (m.type === 'sample') { every = m.every; if (w) net.then(g => { if (w) extra = { ...extra, trips: draw(w, g) } }); return }

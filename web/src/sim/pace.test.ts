@@ -84,8 +84,9 @@ const events = fc.array(fc.oneof(
 ), { maxLength: 200 })
 
 // ponytail: the test models the clock code of the message handlers in App.tsx and worker.ts (respeed on a change of
-// speed and on a new run, the since check, the hold while a world loads); it does not run them. A change there must be
-// made here too. To test the handlers themselves, move their clock code into functions in pace.ts that both call.
+// speed and on a new run, the since check, the hold while a world loads, the wait for the page, the skipped frames and
+// the owed frame); it does not run them. A change there must be made here too. To test the handlers themselves, move
+// their clock code into functions in pace.ts that both call.
 test('the clock of the page never goes back in a run, for any timing of callbacks, messages, changes of speed and new runs', () => {
   fc.assert(fc.property(events, es => {
     let now = 0, model = 0, seen = -Infinity
@@ -96,6 +97,7 @@ test('the clock of the page never goes back in a run, for any timing of callback
     let page: Clock = { ...worker }, pageSince = 0, pageModel = 0, pageRun = 0 // pageModel: the model minute of the last message
     let speed = PER_MS, waiting = false // the speed chosen on the page; a new run waits for the page to be ready
     let startedAt = 0, gotFrame = false // when the page started the run; a frame of it has reached the page
+    let owed = false // as worker.ts: the page has no frame yet with the clock of the latest change of speed
     // Messages in flight. Each way keeps its order, so a message never arrives before an earlier one of the same way.
     const inbox: { at: number; run: () => void }[] = []
     let lastToPage = 0, lastToWorker = 0
@@ -112,7 +114,7 @@ test('the clock of the page never goes back in a run, for any timing of callback
       pageSince = now
       lastToWorker = Math.max(lastToWorker, now + delay)
       inbox.push({ at: lastToWorker, run: () => {
-        respeed(worker, sent.minute, model, sent.at, sent.perMs); workerSince = sent.at
+        respeed(worker, sent.minute, model, sent.at, sent.perMs); workerSince = sent.at; owed = true
         if (firstFrame && !ready) speedBeforeFirst = true
         if (sent.perMs) lastPerMs = sent.perMs
       } })
@@ -121,6 +123,31 @@ test('the clock of the page never goes back in a run, for any timing of callback
       inbox.sort((a, b) => a.at - b.at)
       // A look just before each message too: a message can take the clock back from where it has moved since the last look.
       while (inbox.length && inbox[0].at <= until) { const m = inbox.shift()!; now = m.at; look(); m.run(); look() }
+    }
+    // A callback of the worker.
+    const frame = (delay: number) => {
+      if (now < loaded) return // the worker sends no frame while the world loads
+      worker.minute = clockAt(worker, now); worker.at = now
+      // The clock waited during the load, so the first frame of the run is at most the cap ahead of minute 0.
+      if (firstFrame && !speedBeforeFirst) expect(worker.minute).toBeLessThanOrEqual(MAX_FRAMES * FRAME_MS * worker.perMs + 1e-9)
+      const first = firstFrame
+      firstFrame = false
+      const step = (worker.perMs || lastPerMs) * FRAME_MS, ahead = worker.minute - model, n = stepsTo(worker.minute, model, step)
+      model += n * step
+      // On a pause the model goes on to the clock, in steps of the last speed, so the dots and the time agree.
+      const last = lastPerMs * FRAME_MS
+      if (!worker.perMs) expect(Math.abs(worker.minute - model)).toBeLessThanOrEqual(Math.max(last / 2, ahead - (MAX_FRAMES + 1) * last) + 1e-9)
+      // As worker.ts: a frame that makes no step and owes no clock is not sent (the first frame of a run always is).
+      if (n === 0 && !owed && !first) return
+      owed = false
+      const sent = { clock: structuredClone(worker), model, since: workerSince, run: workerRun } // postMessage copies the clock
+      lastToPage = Math.max(lastToPage, now + delay)
+      inbox.push({ at: lastToPage, run: () => {
+        if (sent.run !== pageRun) return // a frame of an earlier run
+        gotFrame = true
+        // As App.tsx: only minute and at; the page keeps its own perMs.
+        pageModel = sent.model; if (sent.since === pageSince) { page.minute = sent.clock.minute; page.at = sent.clock.at }
+      } })
     }
     for (const e of es) {
       const due = now + e.gap
@@ -131,6 +158,7 @@ test('the clock of the page never goes back in a run, for any timing of callback
         speed = e.speed * 60 / 1000
         if (!waiting) send(false, e.delay) // while a new run waits, the page keeps the speed for the start
       } else if ('ready' in e) {
+        // No check depends on this gate: it keeps the ready events to those that App.tsx can make.
         if (waiting && (gotFrame || now - startedAt >= READY_MS)) { waiting = false; send(true, e.delay) }
       } else if ('load' in e) {
         // Both clocks of the new run stand at minute 0 until the page is ready.
@@ -142,28 +170,13 @@ test('the clock of the page never goes back in a run, for any timing of callback
           model = 0; workerRun = run; loaded = now + load; firstFrame = true; speedBeforeFirst = false
           respeed(worker, 0, 0, at, 0); workerSince = at
         } })
-      } else {
-        if (now < loaded) continue // the worker sends no frame while the world loads
-        worker.minute = clockAt(worker, now); worker.at = now
-        // The clock waited during the load, so the first frame of the run is at most the cap ahead of minute 0.
-        if (firstFrame && !speedBeforeFirst) expect(worker.minute).toBeLessThanOrEqual(MAX_FRAMES * FRAME_MS * worker.perMs + 1e-9)
-        firstFrame = false
-        const step = (worker.perMs || lastPerMs) * FRAME_MS, ahead = worker.minute - model
-        model += stepsTo(worker.minute, model, step) * step
-        // On a pause the model goes on to the clock, in steps of the last speed, so the dots and the time agree.
-        const last = lastPerMs * FRAME_MS
-        if (!worker.perMs) expect(Math.abs(worker.minute - model)).toBeLessThanOrEqual(Math.max(last / 2, ahead - (MAX_FRAMES + 1) * last) + 1e-9)
-        const sent = { clock: structuredClone(worker), model, since: workerSince, run: workerRun } // postMessage copies the clock
-        lastToPage = Math.max(lastToPage, now + e.delay)
-        inbox.push({ at: lastToPage, run: () => {
-          if (sent.run !== pageRun) return // a frame of an earlier run
-          gotFrame = true
-          // As App.tsx: only minute and at; the page keeps its own perMs.
-          pageModel = sent.model; if (sent.since === pageSince) { page.minute = sent.clock.minute; page.at = sent.clock.at }
-        } })
-      }
+      } else frame(e.delay)
     }
     deliver(Infinity)
+    // With every message in, one more callback leaves the page clock on the worker clock: a skipped frame must not
+    // leave the page with an older clock (for example a pause right after the worker made a step).
+    now += FRAME_MS; frame(0); deliver(Infinity)
+    expect(Math.abs(clockAt(page, now) - clockAt(worker, now))).toBeLessThanOrEqual(1e-6)
   }), {
     seed: 1,
     // Random cases seldom make these, as the numbers lean to 0.
@@ -173,6 +186,9 @@ test('the clock of the page never goes back in a run, for any timing of callback
       [[{ gap: 0, load: READY_MS + 1000, delay: 0 }, { gap: READY_MS, ready: true, delay: 0 }, ...Array(80).fill({ gap: FRAME_MS, delay: 0 })]],
       // A frame of a new run that waits: the worker clock must stand at minute 0, so the page clock does too.
       [[{ gap: 0, load: 0, delay: 0 }, { gap: FRAME_MS, delay: 0 }]],
+      // At 8x a frame rounds the model to minute 16 and is on its way when the page pauses at minute 12. The frame
+      // carries the old since, so it cannot move the page clock: the worker must send a frame after the pause.
+      [[{ gap: 20, delay: 10 }, { gap: 5, speed: 0, delay: 0 }, { gap: FRAME_MS, delay: 0 }, { gap: FRAME_MS, delay: 0 }]],
       // A frame message still on its way when the speed changes, which the since check must drop.
       [[{ gap: FRAME_MS, delay: 0 }, { gap: FRAME_MS, delay: 30 }, { gap: 1, speed: 1, delay: 0 }, { gap: FRAME_MS, delay: 0 }, { gap: FRAME_MS, delay: 0 }]],
     ],
