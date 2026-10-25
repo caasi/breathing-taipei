@@ -325,9 +325,10 @@ export function App() {
       </>}
       </div>
       {/* Always there, so a screen reader reads the change. */}
-      {/* In the bottom right of the map, left of the panels on a desktop. */}
+      {/* In the bottom right of the map, left of the panels on a desktop. It shows from the first paint until the
+          run of the selected level and day is on the screen and started, also in the paint right after a click. */}
       <div role="status" style={{ position: 'absolute', right: box.w - fit.x - fit.w + 16, bottom: 16, color: '#fff', pointerEvents: 'none' }}>
-        {waiting !== undefined && !runError && <><SpinnerIcon /><span style={HIDDEN}>準備中</span></>}
+        {(waiting !== undefined || onScreen?.level !== level || onScreen.runStart !== runStart) && !runError && !loadError && <><SpinnerIcon /><span style={HIDDEN}>準備中</span></>}
       </div>
       <header style={{ position: 'absolute', top: 16, left: 16, pointerEvents: 'none' }}>
         <h1 style={{ margin: 0, fontSize: titleSize, fontWeight: 'bold', color: '#fff' }}>台北鼓動</h1>
