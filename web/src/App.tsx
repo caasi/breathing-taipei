@@ -29,6 +29,11 @@ const WINDOWS = [15, 30, 60, KEEP] // simulated minutes the change rate can look
 const inTaipei = (node: string) => node.startsWith('63000') || node.startsWith('台北市')
 const ALERT = { position: 'absolute', top: 72, left: 16, margin: 0, color: '#ff8b6b' } as const
 const SIDE_PANEL = { position: 'absolute', top: 16, bottom: 16, overflowY: 'auto', padding: '0 12px', boxSizing: 'border-box', background: 'rgba(33, 29, 29, 0.85)', borderRadius: 4 } as const
+// Turns in a CSS animation of an HTML box (index.html), which the browser can run while the main thread builds a run.
+const SpinnerIcon = () => <span className="spin" style={{ display: 'inline-block', width: 24, height: 24 }}>
+  <svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true" style={{ display: 'block' }}>
+    <circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeDasharray={`${Math.PI * 9 * 1.5} ${Math.PI * 9 * 0.5}`} /></svg></span>
+const HIDDEN = { position: 'absolute', width: 1, height: 1, overflow: 'hidden', clipPath: 'inset(50%)', whiteSpace: 'nowrap' } as const
 const ICON_BUTTON = { width: 40, height: 40, marginRight: 8, padding: 8, border: 0, borderRadius: 20, color: '#fff', cursor: 'pointer' }
 const InfoIcon = () => <svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true">
   <circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" strokeWidth="2" />
@@ -267,6 +272,11 @@ export function App() {
         <HeatMap towns={towns} villages={villages} level={level} nodes={nodes} counts={s.counts} perAgent={PER_AGENT} proj={projection} transit={transit} show={show} rate={rate} speed={speed} view={view} />
         {dots && dotTrips && <Travellers tracks={tracks} trips={dotTrips} clock={clock} onFps={setFps} byMode={byMode} view={view} />}
       </>}
+      {/* Always there, so a screen reader reads the change. */}
+      {/* In the bottom right of the map, left of the panels on a desktop. */}
+      <div role="status" style={{ position: 'absolute', right: box.w - fit.x - fit.w + 16, bottom: 16, color: '#fff', pointerEvents: 'none' }}>
+        {waiting !== undefined && !runError && <><SpinnerIcon /><span style={HIDDEN}>準備中</span></>}
+      </div>
       <header style={{ position: 'absolute', top: 16, left: 16, pointerEvents: 'none' }}>
         <h1 style={{ margin: 0, fontSize: titleSize, fontWeight: 'bold', color: '#fff' }}>台北鼓動</h1>
         {/* Centred on the Chinese title alone: a flex row with no width of its own overflows evenly to both sides. */}
