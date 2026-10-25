@@ -15,13 +15,18 @@ export type Clock = { minute: number; at: number; perMs: number }
 export const clockAt = (c: Clock, now: number) => c.minute + Math.min(Math.max(0, now - c.at), MAX_FRAMES * FRAME_MS) * c.perMs
 
 /**
- * The clock from a change of speed at `at`. The model never goes back, so a clock behind it moves up to it; the
- * page and the worker both use this, so they agree.
+ * Sets `c` to the clock from a change of speed (or a new run) at `at`. The model never goes back, so a clock behind
+ * it moves up to it; the page and the worker both use this, so they agree.
  */
-export const respeed = (minute: number, model: number, at: number, perMs: number): Clock => ({ minute: Math.max(minute, model), at, perMs })
+export const respeed = (c: Clock, minute: number, model: number, at: number, perMs: number) => {
+  c.minute = Math.max(minute, model); c.at = at; c.perMs = perMs
+}
 
 /**
  * The steps of `step` minutes that bring the model closest to the clock. Rounded, so a timer up to half a frame early
- * or late still gives one step, as a fixed step for each callback did.
+ * or late still gives one step, as a fixed step for each callback did. At most MAX_FRAMES + 1: the cap, plus the one
+ * that the rounding can add. A clock further ahead (several changes of speed with no callback between them, each with
+ * a new cap) is made up over the next callbacks, so one callback does not stall the run.
  */
-export const stepsTo = (clock: number, model: number, step: number) => (step > 0 ? Math.max(0, Math.round((clock - model) / step)) : 0)
+export const stepsTo = (clock: number, model: number, step: number) =>
+  step > 0 ? Math.min(MAX_FRAMES + 1, Math.max(0, Math.round((clock - model) / step))) : 0

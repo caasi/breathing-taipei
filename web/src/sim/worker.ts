@@ -11,7 +11,8 @@ import { networks, readRoutes, tripPaths, type Batch, type Routes } from './path
 export type Level = 'district' | 'village'
 export type ToWorker =
   // startDay: index into calendar.json of day 0. start: an id that the first frame of the run gives back.
-  | { type: 'init'; perAgent: number; seed: number; level: Level; startDay: number; start: number }
+  // at: as in speed. The clock of the new run starts at minute 0 at that time, also while the run loads.
+  | { type: 'init'; perAgent: number; seed: number; level: Level; startDay: number; start: number; at: number }
   // minute: the clock of the page at at (performance.timeOrigin + performance.now() of the change), so both clocks agree.
   | { type: 'speed'; hoursPerSec: number; minute: number; at: number }
   | { type: 'sample'; every: number } // the run goes on; only the agents drawn as dots change
@@ -39,8 +40,9 @@ const EVENTS_PER_DAY = 48
 const SHOWN = [0.25, 1, 3, 0.05]
 let w: World | undefined
 let every = 20
-let hoursPerSec = 0
-let clock: Clock = { minute: 0, at: performance.now(), perMs: 0 }, since = 0
+let hoursPerSec = 0, lastHours = 0 // lastHours: the last speed that was not a pause
+const clock: Clock = { minute: 0, at: performance.now(), perMs: 0 }
+let since = 0
 let extra: Pick<FromWorker, 'start' | 'nodes' | 'homes' | 'coords' | 'trips' | 'replans'> = {}
 let pending: Generator<Batch> | undefined
 let newEvents: SimEvent[] = []
@@ -92,9 +94,14 @@ function* bothPaths(trips: Trips, coords: [number, number][], graphs: Awaited<ty
 }
 
 const frame = () => {
-  const t = performance.now(), step = hoursPerSec * 60 / FPS
-  clock = { ...clock, minute: clockAt(clock, t), at: t }
+  // On a pause the clock stops, and the model goes on to it in steps of the last speed, at most MAX_FRAMES + 1 a
+  // callback, so within a few callbacks the dots (on the clock) and the shown time (the model) agree. The model can end
+  // up to half a step past the clock.
+  const t = performance.now(), step = (hoursPerSec || lastHours) * 60 / FPS
+  // While a world loads, the clock waits; the page clock stops at the cap, as no message moves it on. Without this,
+  // the first frames would make up the whole load.
   if (!w) return
+  clock.minute = clockAt(clock, t); clock.at = t
   for (let k = stepsTo(clock.minute, w.day * 1440 + w.minute, step); k > 0; k--) advance(w, step)
   extra.replans = replans(w)
   const c = counts(w, MODES.length)
@@ -130,18 +137,22 @@ onmessage = async (e: MessageEvent<ToWorker>) => {
   const m = e.data
   if (m.type === 'speed') {
     hoursPerSec = m.hoursPerSec
-    clock = respeed(m.minute, w ? w.day * 1440 + w.minute : 0, m.at - performance.timeOrigin, hoursPerSec * 60 / 1000)
+    if (hoursPerSec) lastHours = hoursPerSec
+    respeed(clock, m.minute, w ? w.day * 1440 + w.minute : 0, m.at - performance.timeOrigin, hoursPerSec * 60 / 1000)
     since = m.at
     return
   }
   if (m.type === 'sample') { every = m.every; if (w) net.then(g => { if (w) extra = { ...extra, trips: draw(w, g) } }); return }
+  // The old world stops now, so a change of speed while the new one loads moves the clock of the new run, as on the page.
+  w = undefined
+  respeed(clock, 0, 0, m.at - performance.timeOrigin, hoursPerSec * 60 / 1000)
+  since = m.at
   // Any failure while starting (loading, building the city, sampling) goes to the page.
   // The async handler would otherwise reject without a message, and onerror does not see a rejection.
   try {
     const [[od2, villages, signal, , , night, cal, people], graphs] = await Promise.all([data, net])
     const c = cityFrom({ ...od2, villages, signal, night }, m.perAgent, m.level, day => kindAt(cal as Calendar, m.startDay + day))
     w = init(c.city, m.seed)
-    clock = { minute: 0, at: performance.now(), perMs: hoursPerSec * 60 / 1000 }
     const world = w, districtOf = Array.from(w.home, h => (m.level === 'village' ? villages[h].town : c.nodes[h]))
     const ids = drawNames(people as People, districtOf, m.seed + 1), pickRng = mulberry32(m.seed + 2)
     // ponytail: EVENTS_PER_DAY is the base rate before the SHOWN weights (each agent makes about one plan a day); DATA.md,
