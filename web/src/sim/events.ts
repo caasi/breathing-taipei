@@ -86,9 +86,6 @@ export const withPublic = (personal: SimEvent[], cal: Calendar, startDay: number
   return out
 }
 
-/** The time of the first event after `now`, or Infinity: until the clock passes it, the shown list stays the same. */
-export const nextAfter = (events: SimEvent[], now: number) => events.reduce((t, e) => (e.t > now && e.t < t ? e.t : t), Infinity)
-
 /**
  * Picks the plans that the stream shows: about rates[kind] of the plans of each kind, but by error diffusion instead of
  * one draw for each plan, so a viewer sees fewer groups of events and fewer long gaps between them (#10).
