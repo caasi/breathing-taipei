@@ -24,6 +24,9 @@ export const respeed = (c: Clock, minute: number, model: number, at: number, per
 
 /**
  * The steps of `step` minutes that bring the model closest to the clock. Rounded, so a timer up to half a frame early
- * or late still gives one step, as a fixed step for each callback did.
+ * or late still gives one step, as a fixed step for each callback did. At most MAX_FRAMES + 1: the cap, plus the one
+ * that the rounding can add. A clock further ahead (several changes of speed with no callback between them, each with
+ * a new cap) is made up over the next callbacks, so one callback does not stall the run.
  */
-export const stepsTo = (clock: number, model: number, step: number) => (step > 0 ? Math.max(0, Math.round((clock - model) / step)) : 0)
+export const stepsTo = (clock: number, model: number, step: number) =>
+  step > 0 ? Math.min(MAX_FRAMES + 1, Math.max(0, Math.round((clock - model) / step))) : 0

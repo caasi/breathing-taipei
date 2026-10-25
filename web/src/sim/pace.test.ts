@@ -44,6 +44,21 @@ test('a long gap (a tab back from the background) counts as MAX_FRAMES frames', 
   expect(run([10_000, FRAME_MS, FRAME_MS])).toEqual([MAX_FRAMES, 1, 1])
 })
 
+test('a clock far ahead of the model is made up over several callbacks, at most MAX_FRAMES + 1 steps in each', () => {
+  // Several changes of speed with no callback between them can put the clock far ahead: each one starts a new cap.
+  // At 1x a step is 2 minutes: without the cap, 95 minutes ahead gave 49 steps in the next callback.
+  const slow = 60 / 1000, step = slow * FRAME_MS, c: Clock = { minute: 95, at: 0, perMs: slow }
+  let model = 0
+  const steps = Array.from({ length: 20 }, (_, k) => {
+    c.minute = clockAt(c, (k + 1) * FRAME_MS); c.at = (k + 1) * FRAME_MS
+    const n = stepsTo(c.minute, model, step)
+    model += n * step
+    return n
+  })
+  expect(Math.max(...steps)).toBe(MAX_FRAMES + 1)
+  expect(Math.abs(c.minute - model)).toBeLessThan(step)
+})
+
 test('a pause makes no step', () => {
   expect(stepsTo(100, 0, 0)).toBe(0)
 })
@@ -70,6 +85,7 @@ test('the clock of the page never goes back in a run, for any timing of callback
     let now = 0, model = 0, seen = -Infinity
     // since: the change of speed (or new run) that the clock uses. run: the run of the world; loaded: when it is ready.
     let worker: Clock = { minute: 0, at: 0, perMs: PER_MS }, workerSince = 0, workerRun = 0, loaded = 0
+    let firstFrame = false, speedInLoad = false // the next frame is the first of a run; a change of speed came during its load
     let page: Clock = { ...worker }, pageSince = 0, pageModel = 0, pageRun = 0 // pageModel: the model minute of the last message
     // Messages in flight. Each way keeps its order, so a message never arrives before an earlier one of the same way.
     const inbox: { at: number; run: () => void }[] = []
@@ -90,22 +106,27 @@ test('the clock of the page never goes back in a run, for any timing of callback
         const sent = structuredClone(page) // postMessage copies the clock
         pageSince = now
         lastToWorker = Math.max(lastToWorker, now + e.delay)
-        inbox.push({ at: lastToWorker, run: () => { respeed(worker, sent.minute, model, sent.at, sent.perMs); workerSince = sent.at } })
+        inbox.push({ at: lastToWorker, run: () => {
+          respeed(worker, sent.minute, model, sent.at, sent.perMs); workerSince = sent.at
+          if (now < loaded) speedInLoad = true
+        } })
       } else if ('load' in e) {
         respeed(page, 0, 0, now, page.perMs)
         const at = now, run = ++pageRun, load = e.load
         pageModel = 0; pageSince = at; seen = -Infinity
         lastToWorker = Math.max(lastToWorker, now + e.delay)
         inbox.push({ at: lastToWorker, run: () => {
-          model = 0; workerRun = run; loaded = now + load
+          model = 0; workerRun = run; loaded = now + load; firstFrame = true; speedInLoad = false
           respeed(worker, 0, 0, at, worker.perMs); workerSince = at
         } })
       } else {
         if (now < loaded) continue // the worker sends no frame while the world loads
         worker.minute = clockAt(worker, now); worker.at = now
-        const step = worker.perMs * FRAME_MS, n = stepsTo(worker.minute, model, step)
-        expect(n).toBeLessThanOrEqual(MAX_FRAMES + 1) // a callback, also the first after a load, makes up at most the cap
-        model += n * step
+        // The clock waited during the load, so the first frame of the run is at most the cap ahead of minute 0.
+        if (firstFrame && !speedInLoad) expect(worker.minute).toBeLessThanOrEqual(MAX_FRAMES * FRAME_MS * worker.perMs + 1e-9)
+        firstFrame = false
+        const step = worker.perMs * FRAME_MS
+        model += stepsTo(worker.minute, model, step) * step
         const sent = { clock: structuredClone(worker), model, since: workerSince, run: workerRun } // postMessage copies the clock
         lastToPage = Math.max(lastToPage, now + e.delay)
         inbox.push({ at: lastToPage, run: () => {
