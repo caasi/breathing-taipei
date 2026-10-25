@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import { HeatMap, projectionFor, taipeiIn, type Transit } from './ui/HeatMap.tsx'
+import { HeatMap, Outline, projectionFor, taipeiIn, type Transit } from './ui/HeatMap.tsx'
 import { Travellers, MODE_COLOURS, addBatches, type Track } from './ui/Travellers.tsx'
 import { MODES } from './sim/city.ts'
 import type { FromWorker, WorkerError, ToWorker, Level, Trips } from './sim/worker.ts'
@@ -39,8 +39,9 @@ const InfoIcon = () => <svg viewBox="0 0 24 24" width="24" height="24" aria-hidd
   <circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" strokeWidth="2" />
   <path d="M12 11v6" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" /><circle cx="12" cy="7.5" r="1.5" fill="currentColor" /></svg>
 const SlidersIcon = () => <svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true">
-  {[[6, 15], [12, 7], [18, 12]].map(([y, x]) => <g key={y}><path d={`M3 ${y}h18`} stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-    <circle cx={x} cy={y} r="2.5" fill="#211d1d" stroke="currentColor" strokeWidth="2" /></g>)}</svg>
+  {/* The line stops at each knob, and the knob has no fill, so the background of the button (orange when open) shows. */}
+  {[[6, 15], [12, 7], [18, 12]].map(([y, x]) => <g key={y}><path d={`M3 ${y}H${x - 3.5}M${x + 3.5} ${y}H21`} stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+    <circle cx={x} cy={y} r="2.5" fill="none" stroke="currentColor" strokeWidth="2" /></g>)}</svg>
 // The teeth are the dashes of one thick stroke: 8 dashes on a circle of length 2πr.
 const GitHubIcon = () => <svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><path fill="currentColor" d="M12 1C5.923 1 1 5.923 1 12c0 4.867 3.149 8.979 7.521 10.436.55.096.756-.233.756-.522 0-.262-.013-1.128-.013-2.049-2.764.509-3.479-.674-3.699-1.292-.124-.317-.66-1.293-1.127-1.554-.385-.207-.936-.715-.014-.729.866-.014 1.485.797 1.691 1.128.99 1.663 2.571 1.196 3.204.907.096-.715.385-1.196.701-1.471-2.448-.275-5.005-1.224-5.005-5.432 0-1.196.426-2.186 1.128-2.956-.111-.275-.496-1.402.11-2.915 0 0 .921-.288 3.024 1.128a10.193 10.193 0 0 1 2.75-.371c.936 0 1.871.123 2.75.371 2.104-1.43 3.025-1.128 3.025-1.128.605 1.513.221 2.64.111 2.915.701.77 1.127 1.747 1.127 2.956 0 4.222-2.571 5.157-5.019 5.432.399.344.743 1.004.743 2.035 0 1.471-.014 2.654-.014 3.025 0 .289.206.632.756.522C19.851 20.979 23 16.854 23 12c0-6.077-4.922-11-11-11Z" /></svg>
 const GearIcon = () => <svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true">
@@ -62,10 +63,19 @@ export function App() {
   // A switch of level starts a new model, on the day that the clock shows, so the date goes on.
   const [dayOffset, setDayOffset] = useState(0)
   const runStart = startDay === undefined ? undefined : startDay + dayOffset
+  // The run whose frames are on the screen. After a switch of level the old picture stays (frozen) until the first
+  // frame of the new run comes, so the map does not go black while the new run loads.
+  const [onScreen, setOnScreen] = useState<{ level: Level; runStart: number }>()
+  const [pop, setPop] = useState<Map<string, number>>()
+  // The run that loads; the frozen dots (the dots of one run, at one minute).
+  const next = useRef<{ level: Level; runStart: number }>(), frozen = useRef<{ run: number; minute: number }>()
   const [nodes, setNodes] = useState<string[]>([])
-  // Replans write into the arrays in place, so the trips are a ref; a new trips object asks for a render.
-  const trips = useRef<Trips>()
-  const [, setTripsId] = useState(0)
+  // The dot trips by id, each with the tracks of its dots. Replans and routes write into them in place, so they are a
+  // ref; a new id asks for a render. Render reads the entry of the committed id, so it never pairs trips with the
+  // tracks of other trips, also when a click renders before the update of a new id.
+  // run: the start of the run that made the trips.
+  const dotRuns = useRef(new Map<number, { trips: Trips; tracks: { current: (Track | undefined)[] }; run: number }>()), lastDots = useRef(0)
+  const [tripsId, setTripsId] = useState(0)
   const [s, setS] = useState<FromWorker>()
   // Display settings belong to this viewer, so they stay in this browser; the policies (usePolicies) are in the URL.
   const policies = usePolicies()
@@ -76,7 +86,6 @@ export function App() {
   const every = dot / PER_AGENT
   const [rateWindow, setRateWindow] = useStored('window', 30, oneOf(WINDOWS))
   const [routed, setRouted] = useState(0)
-  const tracks = useRef<(Track | undefined)[]>([])
   const unplaced = useRef<Batch[]>([])
   const [dots, setDots] = useStored('dots', true, bool, fromBool)
   const [byMode, setByMode] = useStored('mode', false, bool, fromBool)
@@ -108,28 +117,34 @@ export function App() {
     getJson('calendar.json').then(setCal).catch(err => setLoadError(String(err)))
     getJson('villages2-topo.json').then(setVillages).catch(err => setLoadError(String(err)))
     getJson('transit.json').then(setTransit).catch(err => setLoadError(String(err)))
+    // Residents by town for the labels of the outline; the worker loads the same file, so it is usually in the cache.
+    getJson('villages2.json').then((vs: { town: string; pop: number }[]) => {
+      const m = new Map<string, number>()
+      for (const v of vs) m.set(v.town, (m.get(v.town) ?? 0) + v.pop)
+      setPop(m)
+    }).catch(() => {}) // only the outline labels miss it
     const w = new Worker(new URL('./sim/worker.ts', import.meta.url), { type: 'module' })
     w.onmessage = (e: MessageEvent<FromWorker | WorkerError>) => {
       if ('error' in e.data) { if (e.data.start === started.current) setRunError(e.data.error); return }
       const m = e.data
       // Frames of an earlier run can still be on their way after a start (also the first frame of a run that a quick
       // second switch replaced); their day and nodes would be read with the new start and level.
-      if (m.start !== undefined) { if (m.start !== started.current) return; shown.current = m.start }
+      if (m.start !== undefined) { if (m.start !== started.current) return; shown.current = m.start; setOnScreen(next.current) }
       else if (shown.current !== started.current) return
       if (m.nodes) setNodes(m.nodes)
       // The first frame of a run (it has coords) starts the history and the events again. The updaters keep only
       // these values, not the message.
       const fresh = m.coords !== undefined, events = m.events, entry = { t: m.day * 1440 + m.minute, counts: m.counts }
       if (m.homes) setHomes(m.homes)
-      if (m.trips) { tracks.current = []; unplaced.current = [] }
+      if (m.trips) { dotRuns.current.set(++lastDots.current, { trips: m.trips, tracks: { current: [] }, run: shown.current }); setTripsId(lastDots.current); unplaced.current = [] }
       if (fresh || events?.length) setPersonal(p => [...(fresh ? [] : p), ...(events ?? [])].slice(-KEEP_EVENTS))
       setHistory(h => record(fresh ? [] : h, entry, KEEP))
-      if (m.trips) { trips.current = m.trips; setTripsId(n => n + 1) }
       // The dots read the arrays every frame, so new plans are written into them in place.
-      const t = trips.current, r = m.replans
+      // New plans and routes are for the newest trips, also before a render shows them.
+      const dots = dotRuns.current.get(lastDots.current), t = dots?.trips, r = m.replans
       if (t && r) r.k.forEach((k, j) => { t.dest[k] = r.dest[j]; t.dep[k] = r.dep[j]; t.dur1[k] = r.dur1[j]; t.ret[k] = r.ret[j]; t.dur2[k] = r.dur2[j] })
       // The worker sends each batch once; keep the ones that arrive before the map projection exists.
-      if (m.paths?.length) proj.current ? addBatches(tracks.current, m.paths, proj.current) : unplaced.current.push(...m.paths)
+      if (dots && m.paths?.length) proj.current ? addBatches(dots.tracks.current, m.paths, proj.current) : unplaced.current.push(...m.paths)
       if (m.routed !== undefined) setRouted(m.routed)
       // A clock from before the latest change of speed would take the clock of the page back.
       const l = last.current, model = m.day * 1440 + m.minute
@@ -149,9 +164,15 @@ export function App() {
     // The new world starts at minute 0, and both clocks stand there until the page has drawn the first frame. The page
     // is busy while it builds the new run; a clock that ran then would jump when the page draws again.
     const l = last.current, now = performance.now(), since = performance.timeOrigin + now
+    // The dots of the old run stay where they are; a second switch before the new run shows keeps the same picture.
+    // The dots on the screen freeze at the time of the frame on the screen, so they agree with the map and the clock. A
+    // second switch before the new run shows keeps the same freeze.
+    const on = dotRuns.current.get(tripsId)
+    if (on && frozen.current?.run !== on.run) frozen.current = { run: on.run, minute: l.model }
     respeed(l, 0, 0, now, 0); l.model = 0; l.since = since
     waitRef.current = ++started.current; deadline.current = now + READY_MS
-    setS(undefined); setRunError(undefined); setWaiting(started.current)
+    next.current = { level, runStart }
+    setRunError(undefined); setWaiting(started.current)
     post({ type: 'init', perAgent: PER_AGENT, seed: 42, level, startDay: runStart, start: started.current, at: since })
   }, [level, runStart])
   // The page clock goes on at the speed from now, and the worker clock follows it from the same time.
@@ -176,10 +197,12 @@ export function App() {
   const proj = useRef(projection)
   proj.current = projection
   useEffect(() => {
-    if (projection && unplaced.current.length) { addBatches(tracks.current, unplaced.current, projection); unplaced.current = [] }
+    const dots = dotRuns.current.get(lastDots.current)
+    if (projection && dots && unplaced.current.length) { addBatches(dots.tracks.current, unplaced.current, projection); unplaced.current = [] }
   }, [projection])
   // The worker posts up to 30 times a second while the clock runs; between posts the dots move on the extrapolated clock.
-  const clock = () => clockAt(last.current, performance.now())
+  // Dots of a frozen run stand at its minute; the dots of the next run, once shown, follow the clock.
+  const clock = () => { const f = frozen.current; return f && dotRun?.run === f.run ? f.minute : clockAt(last.current, performance.now()) }
   // Change per hour over the last rateWindow minutes, as a share of the node's residents.
   const rate = useMemo(() => {
     const h = history
@@ -191,6 +214,22 @@ export function App() {
     return out
   }, [history, homes, colourBy, rateWindow])
   const ready = projection && villages && s && nodes.length === s.counts.length
+  // The map fades in from the blurred outline at its first frame; one animation frame later, so the start state paints.
+  const [revealed, setRevealed] = useState(false), [faded, setFaded] = useState(false)
+  useEffect(() => {
+    if (!ready || revealed) return
+    const raf = requestAnimationFrame(() => setRevealed(true))
+    return () => cancelAnimationFrame(raf)
+  }, [!!ready, revealed])
+  // The outline goes when the fade ends: the cells of 里 do not cover every part of the towns, and the blurs would
+  // stay. The time is the transition in index.html; with reduced motion there is no fade, so it goes at once.
+  useEffect(() => {
+    if (!revealed) return
+    const timer = setTimeout(() => setFaded(true), matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : 600)
+    return () => clearTimeout(timer)
+  }, [revealed])
+  // After the render that shows new trips (a new run or a new dot density), the older ones go.
+  useEffect(() => { for (const id of dotRuns.current.keys()) if (id < tripsId) dotRuns.current.delete(id) }, [tripsId])
   // The new run starts when the map of its first frame is on the screen, or at the deadline. The effect depends on
   // whether the map is ready, not on each frame.
   const drawn = !!ready && shown.current === waiting
@@ -207,14 +246,16 @@ export function App() {
   const taipei = useMemo(() => projection && taipeiIn(towns, projection), [projection])
   const { kind, box, fit, view } = useMemo(() => layoutFor(size.w, size.h, taipei), [size, taipei]), phone = kind !== 'desktop', titleSize = phone ? 20 : 28
   const road = s ? Array.from(s.road) : []
-  const date = cal && runStart !== undefined ? dateText(cal, runStart + (s?.day ?? 0)) : undefined
-  const dayLabel = useMemo(() => (day: number) => (cal && runStart !== undefined ? dateText(cal, runStart + day).roc : ''), [cal, runStart])
-  const dotTrips = trips.current
+  // Before the first frame no run is on the screen, and its day is 0 of the selected start.
+  const shownStart = onScreen?.runStart ?? runStart
+  const date = cal && shownStart !== undefined ? dateText(cal, shownStart + (s?.day ?? 0)) : undefined
+  const dayLabel = useMemo(() => (day: number) => (cal && shownStart !== undefined ? dateText(cal, shownStart + day).roc : ''), [cal, shownStart])
+  const dotRun = dotRuns.current.get(tripsId), dotTrips = dotRun?.trips
   const nowMinute = s ? s.day * 1440 + Math.floor(s.minute) : 0
   const list = useMemo(() => {
-    const events = cal && runStart !== undefined && s ? withPublic(personal, cal, runStart, nowMinute, MAX_EVENTS) : personal
+    const events = cal && shownStart !== undefined && s ? withPublic(personal, cal, shownStart, nowMinute, MAX_EVENTS) : personal
     return { now: nowMinute, events }
-  }, [cal, runStart, personal, !s, nowMinute])
+  }, [cal, shownStart, personal, !s, nowMinute])
   const placeOf = useMemo(() => {
     const byCode = new Map<string, { town: string; village: string }>()
     for (const g of villages?.objects.villages.geometries ?? []) byCode.set(g.properties.VILLCODE, { town: g.properties.TOWNNAME, village: g.properties.VILLNAME })
@@ -227,7 +268,7 @@ export function App() {
   const settings = <>
     <h2 style={H2}>顯示</h2>
     <p>{SPEEDS.map(v => <button key={v} onClick={() => setSpeed(v)} style={{ marginRight: 4, fontWeight: v === speed ? 'bold' : 'normal' }}>{v === 0 ? '暫停' : `${v}x`}</button>)}
-      <span style={{ marginLeft: 12 }}>{(['district', 'village'] as Level[]).map(l => <button key={l} onClick={() => { if (l !== level) { setDayOffset(o => o + (s?.day ?? 0)); setS(undefined); setLevel(l) } }}
+      <span style={{ marginLeft: 12 }}>{(['district', 'village'] as Level[]).map(l => <button key={l} onClick={() => { if (l !== level) { if (onScreen && startDay !== undefined) setDayOffset(onScreen.runStart - startDay + (s?.day ?? 0)); setLevel(l) } }}
         style={{ marginRight: 4, fontWeight: l === level ? 'bold' : 'normal' }}>{l === 'district' ? '區' : '里'}</button>)}</span>
       <br /><small>切換區、里會從當天 00:00 重新模擬。</small></p>
     <p><label><input type="checkbox" checked={dots} onChange={() => setDots(!dots)} />路上的人</label>，1 點 = {every * PER_AGENT} 人：
@@ -276,14 +317,19 @@ export function App() {
   return (
     <div style={{ position: 'fixed', inset: 0, overflow: 'hidden', background: '#211d1d' }}>
       <div style={{ position: 'absolute', left: box.x, top: box.y, width: box.w, height: box.h, overflow: 'hidden' }}>
+      {/* The blurred outline is under the map until the map has faded in, once, at the first frame. */}
+      {!faded && towns && projection && <Outline towns={towns} proj={projection} view={view} pop={pop} />}
+      <div className="reveal" style={{ position: 'absolute', inset: 0, opacity: revealed ? 1 : 0, filter: revealed ? 'none' : 'blur(8px)' }}>
       {ready && <>
-        <HeatMap towns={towns} villages={villages} level={level} nodes={nodes} counts={s.counts} perAgent={PER_AGENT} proj={projection} transit={transit} show={show} rate={rate} speed={speed} view={view} />
-        {dots && dotTrips && <Travellers tracks={tracks} trips={dotTrips} clock={clock} onFps={setFps} byMode={byMode} view={view} />}
+        <HeatMap towns={towns} villages={villages} level={onScreen?.level ?? level} nodes={nodes} counts={s.counts} perAgent={PER_AGENT} proj={projection} transit={transit} show={show} rate={rate} speed={speed} view={view} />
+        {dots && dotTrips && <Travellers tracks={dotRun!.tracks} trips={dotTrips} clock={clock} onFps={setFps} byMode={byMode} view={view} />}
       </>}
+      </div>
       {/* Always there, so a screen reader reads the change. */}
-      {/* In the bottom right of the map, left of the panels on a desktop. */}
+      {/* In the bottom right of the map, left of the panels on a desktop. It shows from the first paint until the
+          run of the selected level and day is on the screen and started, also in the paint right after a click. */}
       <div role="status" style={{ position: 'absolute', right: box.w - fit.x - fit.w + 16, bottom: 16, color: '#fff', pointerEvents: 'none' }}>
-        {waiting !== undefined && !runError && <><SpinnerIcon /><span style={HIDDEN}>準備中</span></>}
+        {(waiting !== undefined || onScreen?.level !== level || onScreen.runStart !== runStart) && !runError && !loadError && <><SpinnerIcon /><span style={HIDDEN}>準備中</span></>}
       </div>
       <header style={{ position: 'absolute', top: 16, left: 16, pointerEvents: 'none' }}>
         <h1 style={{ margin: 0, fontSize: titleSize, fontWeight: 'bold', color: '#fff' }}>台北鼓動</h1>
