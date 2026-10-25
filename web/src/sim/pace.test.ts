@@ -77,7 +77,8 @@ test('the clock of the page never goes back in a run, for any timing of callback
     const look = () => { const c = clockAt(page, now); expect(c).toBeGreaterThanOrEqual(seen - 1e-9); seen = c }
     const deliver = (until: number) => {
       inbox.sort((a, b) => a.at - b.at)
-      while (inbox.length && inbox[0].at <= until) { const m = inbox.shift()!; now = m.at; m.run(); look() }
+      // A look just before each message too: a message can take the clock back from where it has moved since the last look.
+      while (inbox.length && inbox[0].at <= until) { const m = inbox.shift()!; now = m.at; look(); m.run(); look() }
     }
     for (const e of es) {
       const due = now + e.gap
@@ -109,14 +110,19 @@ test('the clock of the page never goes back in a run, for any timing of callback
         lastToPage = Math.max(lastToPage, now + e.delay)
         inbox.push({ at: lastToPage, run: () => {
           if (sent.run !== pageRun) return // a frame of an earlier run
-          pageModel = sent.model; if (sent.since === pageSince) page = sent.clock
+          // As App.tsx: only minute and at; the page keeps its own perMs.
+          pageModel = sent.model; if (sent.since === pageSince) { page.minute = sent.clock.minute; page.at = sent.clock.at }
         } })
       }
     }
     deliver(Infinity)
   }), {
     seed: 1,
-    // A load longer than the cap, with callbacks all through it: random cases seldom make one, as the numbers lean to 0.
-    examples: [[[{ gap: 0, load: 20 * FRAME_MS, delay: 0 }, ...Array(40).fill({ gap: FRAME_MS, delay: 0 })]]],
+    // Random cases seldom make these, as the numbers lean to 0: a load longer than the cap, with callbacks all through
+    // it; and a frame message still on its way when the speed changes, which the since check must drop.
+    examples: [
+      [[{ gap: 0, load: 20 * FRAME_MS, delay: 0 }, ...Array(40).fill({ gap: FRAME_MS, delay: 0 })]],
+      [[{ gap: FRAME_MS, delay: 0 }, { gap: FRAME_MS, delay: 30 }, { gap: 1, speed: 1, delay: 0 }, { gap: FRAME_MS, delay: 0 }, { gap: FRAME_MS, delay: 0 }]],
+    ],
   })
 })
