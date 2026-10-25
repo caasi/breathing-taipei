@@ -11,7 +11,7 @@ import { layoutFor, PANEL } from './ui/view.ts'
 import { dateText, indexOf, todayInTaipei, type Calendar } from './sim/calendar.ts'
 import { Events, Policies, usePolicies, MAX_EVENTS } from './ui/Dashboard.tsx'
 import { nextAfter, withPublic, type SimEvent } from './sim/events.ts'
-import { clockAt } from './sim/pace.ts'
+import { clockAt, respeed, type Clock } from './sim/pace.ts'
 import { hhmm, H2 } from './ui/format.ts'
 
 const SPEEDS = [0, 1, 2, 4, 8]
@@ -88,7 +88,8 @@ export function App() {
     setOf(LAYERS.map(l => l[0])), v => [...v].join(','))
   const worker = useRef<Worker>()
   const started = useRef(0), shown = useRef(0) // the latest start posted, and the start of the frames on the page
-  const last = useRef({ minute: 0, at: 0, speed: 1 }) // minute since 00:00 of day 0
+  // The clock of the dots (pace.ts), the model minute of the last message, and the change of speed that the clock uses.
+  const last = useRef<Clock & { model: number; since: number }>({ minute: 0, at: 0, perMs: 0, model: 0, since: 0 })
   const toggle = (k: string) => setShow(s => { const n = new Set(s); n.has(k) ? n.delete(k) : n.add(k); return n })
   const post = (m: ToWorker) => worker.current?.postMessage(m)
 
@@ -118,7 +119,9 @@ export function App() {
       // The worker sends each batch once; keep the ones that arrive before the map projection exists.
       if (m.paths?.length) proj.current ? addBatches(tracks.current, m.paths, proj.current) : unplaced.current.push(...m.paths)
       if (m.routed !== undefined) setRouted(m.routed)
-      last.current = { ...last.current, minute: m.day * 1440 + m.minute + m.lead, at: m.at - performance.timeOrigin }
+      // A clock from before the latest change of speed would take the clock of the page back.
+      const l = last.current, model = m.day * 1440 + m.minute
+      last.current = m.since === l.since ? { ...l, minute: m.clock, at: m.at - performance.timeOrigin, model } : { ...l, model }
       setS(m)
     }
     // A throw in the worker's frame loop (routing, counting) reaches the page through onerror.
@@ -132,7 +135,12 @@ export function App() {
     if (runStart === undefined) return
     setS(undefined); setRunError(undefined); post({ type: 'init', perAgent: PER_AGENT, seed: 42, level, startDay: runStart, start: ++started.current })
   }, [level, runStart])
-  useEffect(() => { last.current.speed = speed; post({ type: 'speed', hoursPerSec: speed }) }, [speed])
+  useEffect(() => {
+    const l = last.current, now = performance.now(), since = performance.timeOrigin + now
+    const c = respeed(clockAt(l, now), l.model, now, speed * 60 / 1000)
+    last.current = { ...c, model: l.model, since }
+    post({ type: 'speed', hoursPerSec: speed, minute: c.minute, at: since })
+  }, [speed])
 
   const projection = useMemo(() => towns && projectionFor(towns), [towns])
   // The worker handler is set once, so it reads the projection through a ref.
@@ -142,7 +150,7 @@ export function App() {
     if (projection && unplaced.current.length) { addBatches(tracks.current, unplaced.current, projection); unplaced.current = [] }
   }, [projection])
   // The worker posts about 30 times a second; between posts the dots move on the extrapolated clock.
-  const clock = () => { const l = last.current; return clockAt(l.minute, l.at, l.speed * 60 / 1000, performance.now()) }
+  const clock = () => clockAt(last.current, performance.now())
   // Change per hour over the last rateWindow minutes, as a share of the node's residents.
   const rate = useMemo(() => {
     const h = history.current

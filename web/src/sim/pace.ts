@@ -1,31 +1,25 @@
-// The fixed timestep of a game loop ("Fix Your Timestep", Glenn Fiedler): the real time between callbacks goes into an
-// accumulator, and the model moves in whole frames of it. A slow device makes more than one step in a callback, so the
-// run keeps its speed setting.
+// The fixed timestep of a game loop ("Fix Your Timestep", Glenn Fiedler). The clock is real time times the speed; the
+// model follows it in whole steps of one frame at that speed. A slow device makes more than one step in a callback, so
+// the run keeps its speed setting. The worker and the page compute the clock with the same functions, so the clock
+// that the page shows does not go back when a message comes.
 export const FPS = 30
 export const FRAME_MS = 1000 / FPS
 // A longer gap (a tab back from the background) counts as this many frames, so the clock does not jump hours.
-// The page caps its clock at the same gap; with a different cap the clock of the page would go back.
 export const MAX_FRAMES = 4
 
-/**
- * Gives the frames to step for each callback at the time `now` (ms, as performance.now()), and the lead: the part of a
- * frame that the accumulator still holds, from -0.5 to 0.5. Steps plus lead is the real time since `start` in frames.
- */
-export const pacer = (start: number) => {
-  // Half a frame to start with: a timer up to half a frame early or late still gives one step, as a fixed step did.
-  let last = start, acc = FRAME_MS / 2
-  return (now: number) => {
-    acc += Math.min(now - last, MAX_FRAMES * FRAME_MS)
-    last = now
-    const steps = Math.floor(acc / FRAME_MS)
-    acc -= steps * FRAME_MS
-    return { steps, lead: acc / FRAME_MS - 0.5 }
-  }
-}
+/** The clock shows `minute` (since 00:00 of day 0) at `at` (ms, as performance.now()) and moves `perMs` minutes a ms. */
+export type Clock = { minute: number; at: number; perMs: number }
+
+export const clockAt = (c: Clock, now: number) => c.minute + Math.min(Math.max(0, now - c.at), MAX_FRAMES * FRAME_MS) * c.perMs
 
 /**
- * The clock of the page: the minute of the last message (with its lead), moved on by the real time since its callback.
- * It moves at most as far as the pacer would count, so the next message does not take it back.
+ * The clock from a change of speed at `at`. The model never goes back, so a clock behind it moves up to it; the
+ * page and the worker both use this, so they agree.
  */
-export const clockAt = (minute: number, at: number, minutesPerMs: number, now: number) =>
-  minute + Math.min(Math.max(0, now - at), MAX_FRAMES * FRAME_MS) * minutesPerMs
+export const respeed = (minute: number, model: number, at: number, perMs: number): Clock => ({ minute: Math.max(minute, model), at, perMs })
+
+/**
+ * The steps of `step` minutes that bring the model closest to the clock. Rounded, so a timer up to half a frame early
+ * or late still gives one step, as a fixed step for each callback did.
+ */
+export const stepsTo = (clock: number, model: number, step: number) => (step > 0 ? Math.max(0, Math.round((clock - model) / step)) : 0)

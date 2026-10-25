@@ -1,13 +1,19 @@
 import { expect, test } from 'vitest'
 import fc from 'fast-check'
-import { clockAt, FRAME_MS, MAX_FRAMES, pacer } from './pace.ts'
+import { clockAt, FRAME_MS, MAX_FRAMES, respeed, stepsTo, type Clock } from './pace.ts'
 import { mulberry32 } from './rng.ts'
 
-// The steps of each callback, for callbacks that come the given number of ms apart.
+const PER_MS = 8 * 60 / 1000, STEP = PER_MS * FRAME_MS // 8x
+// The worker loop without the model: for callbacks that come the given number of ms apart, the steps of each one.
 const run = (gaps: number[]) => {
-  let now = 0
-  const pace = pacer(now)
-  return gaps.map(gap => pace(now += gap).steps)
+  let c: Clock = { minute: 0, at: 0, perMs: PER_MS }, model = 0
+  return gaps.map(gap => {
+    const now = c.at + gap
+    c = { ...c, minute: clockAt(c, now), at: now }
+    const n = stepsTo(c.minute, model, STEP)
+    model += n * STEP
+    return n
+  })
 }
 const sum = (a: number[]) => a.reduce((x, y) => x + y, 0)
 
@@ -38,37 +44,56 @@ test('a long gap (a tab back from the background) counts as MAX_FRAMES frames', 
   expect(run([10_000, FRAME_MS, FRAME_MS])).toEqual([MAX_FRAMES, 1, 1])
 })
 
-test('steps plus lead is the real time in frames, with each gap capped at MAX_FRAMES frames', () => {
-  const gaps = fc.array(fc.double({ min: 0, max: 10 * FRAME_MS, noNaN: true }), { maxLength: 200 })
-  fc.assert(fc.property(gaps, gs => {
-    let now = 0, steps = 0, lead = 0
-    const pace = pacer(now)
-    for (const g of gs) { const p = pace(now += g); steps += p.steps; lead = p.lead }
-    expect(steps + lead).toBeCloseTo(sum(gs.map(g => Math.min(g, MAX_FRAMES * FRAME_MS))) / FRAME_MS, 6)
-    expect(Math.abs(lead)).toBeLessThanOrEqual(0.5)
-  }), { seed: 1 })
+test('a pause makes no step', () => {
+  expect(stepsTo(100, 0, 0)).toBe(0)
 })
 
-test('the clock of the page never goes back, for any timing of callbacks and of the messages that reach the page', () => {
-  const minutesPerMs = 8 * 60 / 1000, step = minutesPerMs * FRAME_MS // 8x
-  // Each callback: the gap since the last one, and how long its message takes to reach the page.
-  const callbacks = fc.array(fc.tuple(fc.double({ min: 0, max: 10 * FRAME_MS, noNaN: true }), fc.double({ min: 0, max: 50, noNaN: true })), { maxLength: 200 })
-  fc.assert(fc.property(callbacks, cs => {
-    let now = 0, model = 0, arrived = 0, shown = { minute: 0, at: 0 }, seen = 0
-    const pace = pacer(now)
-    for (const [gap, delay] of cs) {
-      const p = pace(now += gap)
-      model += p.steps * step
-      // The page reads the clock up to the arrival, then takes the new message. Messages keep their order.
-      const arrival = Math.max(arrived, now + delay)
-      for (const t of [arrived, (arrived + arrival) / 2, arrival]) {
-        const c = clockAt(shown.minute, shown.at, minutesPerMs, t)
-        expect(c).toBeGreaterThanOrEqual(seen - 1e-9); seen = c
-      }
-      shown = { minute: model + p.lead * step, at: now }
-      arrived = arrival
-      const c = clockAt(shown.minute, shown.at, minutesPerMs, arrival)
-      expect(c).toBeGreaterThanOrEqual(seen - 1e-9); seen = c
+test('after a slow-down, the model goes on at the next callback, even when it was ahead of the clock', () => {
+  // At 8x the model can be up to half a step (8 minutes) ahead of the clock. At 1x a step is 2 minutes, so without
+  // moving the clock up to the model, the model would wait about 4 frames.
+  const model = 100 + 0.4 * STEP, slow = 60 / 1000
+  const c = respeed(100, model, 0, slow)
+  expect(stepsTo(clockAt(c, FRAME_MS), model, slow * FRAME_MS)).toBe(1)
+})
+
+// One event of a run: a callback of the worker (`gap` ms after the last event), with the delay of its message to the
+// page, or a change of speed on the page.
+const events = fc.array(fc.oneof(
+  fc.record({ gap: fc.double({ min: 0, max: 10 * FRAME_MS, noNaN: true }), delay: fc.double({ min: 0, max: 50, noNaN: true }) }),
+  fc.record({ gap: fc.double({ min: 0, max: 2 * FRAME_MS, noNaN: true }), speed: fc.constantFrom(0, 1, 2, 4, 8), delay: fc.double({ min: 0, max: 50, noNaN: true }) }),
+), { maxLength: 200 })
+
+test('the clock of the page never goes back, for any timing of callbacks, messages and changes of speed', () => {
+  fc.assert(fc.property(events, es => {
+    let now = 0, model = 0, seen = -Infinity
+    let worker: Clock = { minute: 0, at: 0, perMs: PER_MS }, workerSince = 0 // the change of speed that the worker uses
+    let page: Clock = { ...worker }, pageSince = 0, pageModel = 0 // pageModel: the model minute of the last message
+    // Messages in flight. Each way keeps its order, so a message never arrives before an earlier one of the same way.
+    const inbox: { at: number; run: () => void }[] = []
+    let lastToPage = 0, lastToWorker = 0
+    const look = () => { const c = clockAt(page, now); expect(c).toBeGreaterThanOrEqual(seen - 1e-9); seen = c }
+    const deliver = (until: number) => {
+      inbox.sort((a, b) => a.at - b.at)
+      while (inbox.length && inbox[0].at <= until) { const m = inbox.shift()!; now = m.at; m.run(); look() }
     }
+    for (const e of es) {
+      deliver(now + e.gap)
+      now += e.gap
+      look()
+      if ('speed' in e) {
+        const sent = (page = respeed(clockAt(page, now), pageModel, now, e.speed * 60 / 1000))
+        pageSince = now
+        lastToWorker = Math.max(lastToWorker, now + e.delay)
+        inbox.push({ at: lastToWorker, run: () => { worker = respeed(sent.minute, model, sent.at, sent.perMs); workerSince = sent.at } })
+      } else {
+        worker = { ...worker, minute: clockAt(worker, now), at: now }
+        const step = worker.perMs * FRAME_MS
+        model += stepsTo(worker.minute, model, step) * step
+        const sent = { clock: worker, model, since: workerSince }
+        lastToPage = Math.max(lastToPage, now + e.delay)
+        inbox.push({ at: lastToPage, run: () => { pageModel = sent.model; if (sent.since === pageSince) page = sent.clock } })
+      }
+    }
+    deliver(Infinity)
   }), { seed: 1 })
 })

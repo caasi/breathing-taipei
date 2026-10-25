@@ -4,7 +4,7 @@ import { kindAt, WORKDAY, type Calendar } from './calendar.ts'
 import { drawNames, nameOf, type People } from './people.ts'
 import { evenPick, type SimEvent } from './events.ts'
 import { mulberry32 } from './rng.ts'
-import { FPS, pacer } from './pace.ts'
+import { FPS, clockAt, respeed, stepsTo, type Clock } from './pace.ts'
 import { cityFrom, MODES } from './city.ts'
 import { networks, readRoutes, tripPaths, type Batch, type Routes } from './paths.ts'
 
@@ -12,7 +12,8 @@ export type Level = 'district' | 'village'
 export type ToWorker =
   // startDay: index into calendar.json of day 0. start: an id that the first frame of the run gives back.
   | { type: 'init'; perAgent: number; seed: number; level: Level; startDay: number; start: number }
-  | { type: 'speed'; hoursPerSec: number }
+  // minute: the clock of the page at at (performance.timeOrigin + performance.now() of the change), so both clocks agree.
+  | { type: 'speed'; hoursPerSec: number; minute: number; at: number }
   | { type: 'sample'; every: number } // the run goes on; only the agents drawn as dots change
 /**
  * Sampled agents' current plans (minutes since 00:00 of day 0), for the renderer to interpolate.
@@ -27,8 +28,8 @@ export type FromWorker = {
   start?: number; nodes?: string[]; homes?: Uint32Array; coords?: [number, number][]; trips?: Trips; replans?: Replans; paths?: Batch[]; routed?: number
   minute: number; day: number; counts: Uint32Array; road: Uint32Array; away: number; ms: number
   events?: SimEvent[] // personal events of plans made since the last message
-  lead: number // simulated minutes of real time that the model has not stepped yet; the page starts its clock from minute + lead
-  at: number // performance.timeOrigin + performance.now() of the callback, the time at which minute + lead holds
+  clock: number; at: number // the clock (pace.ts) shows minute `clock` at `at` (performance.timeOrigin + performance.now())
+  since: number // the `at` of the change of speed that the clock uses; the page takes the clock only from its latest change
 }
 
 const EVENTS_PER_DAY = 48
@@ -39,6 +40,7 @@ const SHOWN = [0.25, 1, 3, 0.05]
 let w: World | undefined
 let every = 20
 let hoursPerSec = 0
+let clock: Clock = { minute: 0, at: performance.now(), perMs: 0 }, since = 0
 let extra: Pick<FromWorker, 'start' | 'nodes' | 'homes' | 'coords' | 'trips' | 'replans'> = {}
 let pending: Generator<Batch> | undefined
 let newEvents: SimEvent[] = []
@@ -90,9 +92,10 @@ function* bothPaths(trips: Trips, coords: [number, number][], graphs: Awaited<ty
 }
 
 const frame = () => {
-  const t = performance.now(), { steps, lead } = pace(t), step = hoursPerSec * 60 / FPS
+  const t = performance.now(), step = hoursPerSec * 60 / FPS
+  clock = { ...clock, minute: clockAt(clock, t), at: t }
   if (!w) return
-  for (let k = 0; k < steps; k++) advance(w, step)
+  for (let k = stepsTo(clock.minute, w.day * 1440 + w.minute, step); k > 0; k--) advance(w, step)
   extra.replans = replans(w)
   const c = counts(w, MODES.length)
   const ms = performance.now() - t
@@ -105,12 +108,11 @@ const frame = () => {
     if (b.done) { pending = undefined; break }
     paths.push(b.value); routed += b.value.ks.length
   }
-  const msg: FromWorker = { ...extra, paths, routed, minute: w.minute, day: w.day, counts: c.nodes, road: c.road, away: c.away, ms, events: newEvents, lead: lead * step, at: performance.timeOrigin + t }
+  const msg: FromWorker = { ...extra, paths, routed, minute: w.minute, day: w.day, counts: c.nodes, road: c.road, away: c.away, ms, events: newEvents, clock: clock.minute, at: performance.timeOrigin + t, since }
   newEvents = []
   postMessage(msg)
   extra = {}
 }
-const pace = pacer(performance.now())
 setInterval(frame, 1000 / FPS)
 
 let drawn = 0 // the latest draw; a routes file that arrives after a newer draw is not applied to the old one
@@ -126,7 +128,12 @@ const draw = (world: World, graphs: Awaited<typeof net>) => {
 }
 onmessage = async (e: MessageEvent<ToWorker>) => {
   const m = e.data
-  if (m.type === 'speed') { hoursPerSec = m.hoursPerSec; return }
+  if (m.type === 'speed') {
+    hoursPerSec = m.hoursPerSec
+    clock = respeed(m.minute, w ? w.day * 1440 + w.minute : 0, m.at - performance.timeOrigin, hoursPerSec * 60 / 1000)
+    since = m.at
+    return
+  }
   if (m.type === 'sample') { every = m.every; if (w) net.then(g => { if (w) extra = { ...extra, trips: draw(w, g) } }); return }
   // Any failure while starting (loading, building the city, sampling) goes to the page.
   // The async handler would otherwise reject without a message, and onerror does not see a rejection.
@@ -134,6 +141,7 @@ onmessage = async (e: MessageEvent<ToWorker>) => {
     const [[od2, villages, signal, , , night, cal, people], graphs] = await Promise.all([data, net])
     const c = cityFrom({ ...od2, villages, signal, night }, m.perAgent, m.level, day => kindAt(cal as Calendar, m.startDay + day))
     w = init(c.city, m.seed)
+    clock = { minute: 0, at: performance.now(), perMs: hoursPerSec * 60 / 1000 }
     const world = w, districtOf = Array.from(w.home, h => (m.level === 'village' ? villages[h].town : c.nodes[h]))
     const ids = drawNames(people as People, districtOf, m.seed + 1), pickRng = mulberry32(m.seed + 2)
     // ponytail: EVENTS_PER_DAY is the base rate before the SHOWN weights (each agent makes about one plan a day); DATA.md,
