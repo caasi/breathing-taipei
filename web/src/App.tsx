@@ -58,8 +58,9 @@ export function App() {
   const [dayOffset, setDayOffset] = useState(0)
   const runStart = startDay === undefined ? undefined : startDay + dayOffset
   const [nodes, setNodes] = useState<string[]>([])
-  const [trips, setTrips] = useState<Trips>()
-  const tripsRef = useRef<Trips>()
+  // Replans write into the arrays in place, so the trips are a ref; a new trips object asks for a render.
+  const trips = useRef<Trips>()
+  const [, setTripsId] = useState(0)
   const [s, setS] = useState<FromWorker>()
   // Display settings belong to this viewer, so they stay in this browser; the policies (usePolicies) are in the URL.
   const policies = usePolicies()
@@ -114,9 +115,9 @@ export function App() {
       if (m.trips) { tracks.current = []; unplaced.current = [] }
       if (fresh || events?.length) setPersonal(p => [...(fresh ? [] : p), ...(events ?? [])].slice(-KEEP_EVENTS))
       setHistory(h => record(fresh ? [] : h, entry, KEEP))
-      if (m.trips) { tripsRef.current = m.trips; setTrips(m.trips) }
+      if (m.trips) { trips.current = m.trips; setTripsId(n => n + 1) }
       // The dots read the arrays every frame, so new plans are written into them in place.
-      const t = tripsRef.current, r = m.replans
+      const t = trips.current, r = m.replans
       if (t && r) r.k.forEach((k, j) => { t.dest[k] = r.dest[j]; t.dep[k] = r.dep[j]; t.dur1[k] = r.dur1[j]; t.ret[k] = r.ret[j]; t.dur2[k] = r.dur2[j] })
       // The worker sends each batch once; keep the ones that arrive before the map projection exists.
       if (m.paths?.length) proj.current ? addBatches(tracks.current, m.paths, proj.current) : unplaced.current.push(...m.paths)
@@ -176,6 +177,7 @@ export function App() {
   const road = s ? Array.from(s.road) : []
   const date = cal && runStart !== undefined ? dateText(cal, runStart + (s?.day ?? 0)) : undefined
   const dayLabel = useMemo(() => (day: number) => (cal && runStart !== undefined ? dateText(cal, runStart + day).roc : ''), [cal, runStart])
+  const dotTrips = trips.current
   const nowMinute = s ? s.day * 1440 + Math.floor(s.minute) : 0
   const list = useMemo(() => {
     const events = cal && runStart !== undefined && s ? withPublic(personal, cal, runStart, nowMinute, MAX_EVENTS) : personal
@@ -209,7 +211,7 @@ export function App() {
     <p>台北市 {people(inTaipei)} 人，新北市 {people(n => !inTaipei(n))} 人，路上 {padded(road.reduce((a, b) => a + b, 0) * PER_AGENT, 6)} 人，外地 {padded((s?.away ?? 0) * PER_AGENT, 6)} 人</p>
     <p style={{ fontSize: 13 }}>{MODES.map((m, k) => <span key={m} style={{ marginRight: 10, whiteSpace: 'nowrap', display: 'inline-block' }}>
       <span style={{ color: MODE_COLOURS[k] }}>●</span> {m} {padded((road[k] ?? 0) * PER_AGENT, 6)}</span>)}</p>
-    {trips && <p>{padded(trips.home.length, 6)} 點{routed < 2 * trips.home.length ? `，路網計算中 ${padded(Math.floor(50 * routed / trips.home.length), 2)}%` : ''}</p>}
+    {dotTrips && <p>{padded(dotTrips.home.length, 6)} 點{routed < 2 * dotTrips.home.length ? `，路網計算中 ${padded(Math.floor(50 * routed / dotTrips.home.length), 2)}%` : ''}</p>}
     <p>模擬每幀 {padded(s?.ms ?? 0, 2, 1)} ms，畫面 {padded(fps, 3)} fps</p>
     </div>
   </>
@@ -244,7 +246,7 @@ export function App() {
       <div style={{ position: 'absolute', left: box.x, top: box.y, width: box.w, height: box.h, overflow: 'hidden' }}>
       {ready && <>
         <HeatMap towns={towns} villages={villages} level={level} nodes={nodes} counts={s.counts} perAgent={PER_AGENT} proj={projection} transit={transit} show={show} rate={rate} speed={speed} view={view} />
-        {dots && trips && <Travellers tracks={tracks} trips={trips} clock={clock} onFps={setFps} byMode={byMode} view={view} />}
+        {dots && dotTrips && <Travellers tracks={tracks} trips={dotTrips} clock={clock} onFps={setFps} byMode={byMode} view={view} />}
       </>}
       <header style={{ position: 'absolute', top: 16, left: 16, pointerEvents: 'none' }}>
         <h1 style={{ margin: 0, fontSize: titleSize, fontWeight: 'bold', color: '#fff' }}>台北鼓動</h1>
