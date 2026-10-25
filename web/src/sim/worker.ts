@@ -143,9 +143,10 @@ onmessage = async (e: MessageEvent<ToWorker>) => {
     return
   }
   if (m.type === 'sample') { every = m.every; if (w) net.then(g => { if (w) extra = { ...extra, trips: draw(w, g) } }); return }
-  // The old world stops now, so a change of speed while the new one loads moves the clock of the new run, as on the page.
+  // The old world stops now. The clock of the new run stands at minute 0 until the page is ready for it and sends a
+  // speed, as the clock of the page does.
   w = undefined
-  respeed(clock, 0, 0, m.at - performance.timeOrigin, hoursPerSec * 60 / 1000)
+  respeed(clock, 0, 0, m.at - performance.timeOrigin, 0)
   since = m.at
   // Any failure while starting (loading, building the city, sampling) goes to the page.
   // The async handler would otherwise reject without a message, and onerror does not see a rejection.

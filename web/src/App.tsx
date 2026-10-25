@@ -11,7 +11,7 @@ import { layoutFor, PANEL } from './ui/view.ts'
 import { dateText, indexOf, todayInTaipei, type Calendar } from './sim/calendar.ts'
 import { Events, Policies, usePolicies, MAX_EVENTS } from './ui/Dashboard.tsx'
 import { withPublic, type SimEvent } from './sim/events.ts'
-import { clockAt, respeed, type Clock } from './sim/pace.ts'
+import { clockAt, respeed, READY_MS, type Clock } from './sim/pace.ts'
 import { hhmm, H2 } from './ui/format.ts'
 
 const SPEEDS = [0, 1, 2, 4, 8]
@@ -89,6 +89,10 @@ export function App() {
     setOf(LAYERS.map(l => l[0])), v => [...v].join(','))
   const worker = useRef<Worker>()
   const started = useRef(0), shown = useRef(0) // the latest start posted, and the start of the frames on the page
+  // The start of a new run whose clock stands until the page is ready: state for the icon, a ref for the logic, so a
+  // click between a start and its render does not read an old value. deadline: when the run starts anyway.
+  const [waiting, setWaiting] = useState<number>()
+  const waitRef = useRef<number>(), deadline = useRef(0), speedRef = useRef(speed)
   // The clock of the dots (pace.ts), the model minute of the last message, and the change of speed that the clock uses.
   const last = useRef<Clock & { model: number; since: number }>({ minute: 0, at: 0, perMs: 0, model: 0, since: 0 })
   const toggle = (k: string) => setShow(s => { const n = new Set(s); n.has(k) ? n.delete(k) : n.add(k); return n })
@@ -137,18 +141,22 @@ export function App() {
   useEffect(() => post({ type: 'sample', every }), [every])
   useEffect(() => {
     if (runStart === undefined) return
-    // The new world starts at minute 0, and the worker starts its clock from the same time, so the first frame does
-    // not take the clock of the page back.
+    // The new world starts at minute 0, and both clocks stand there until the page has drawn the first frame. The page
+    // is busy while it builds the new run; a clock that ran then would jump when the page draws again.
     const l = last.current, now = performance.now(), since = performance.timeOrigin + now
-    respeed(l, 0, 0, now, l.perMs); l.model = 0; l.since = since
-    setS(undefined); setRunError(undefined)
-    post({ type: 'init', perAgent: PER_AGENT, seed: 42, level, startDay: runStart, start: ++started.current, at: since })
+    respeed(l, 0, 0, now, 0); l.model = 0; l.since = since
+    waitRef.current = ++started.current; deadline.current = now + READY_MS
+    setS(undefined); setRunError(undefined); setWaiting(started.current)
+    post({ type: 'init', perAgent: PER_AGENT, seed: 42, level, startDay: runStart, start: started.current, at: since })
   }, [level, runStart])
-  useEffect(() => {
+  // The page clock goes on at the speed from now, and the worker clock follows it from the same time.
+  const startClock = (hours: number) => {
     const l = last.current, now = performance.now(), since = performance.timeOrigin + now
-    respeed(l, clockAt(l, now), l.model, now, speed * 60 / 1000); l.since = since
-    post({ type: 'speed', hoursPerSec: speed, minute: l.minute, at: since })
-  }, [speed])
+    respeed(l, clockAt(l, now), l.model, now, hours * 60 / 1000); l.since = since
+    post({ type: 'speed', hoursPerSec: hours, minute: l.minute, at: since })
+  }
+  // While a new run waits, a change of speed is kept for its start.
+  useEffect(() => { speedRef.current = speed; if (waitRef.current === undefined) startClock(speed) }, [speed])
 
   const projection = useMemo(() => towns && projectionFor(towns), [towns])
   // The worker handler is set once, so it reads the projection through a ref.
@@ -170,6 +178,17 @@ export function App() {
     return out
   }, [history, homes, colourBy, rateWindow])
   const ready = projection && villages && s && nodes.length === s.counts.length
+  // The new run starts when the map of its first frame is on the screen, or at the deadline. The worker posts also
+  // while the run waits, so the effect depends on whether the map is ready, not on each frame.
+  const drawn = !!ready && shown.current === waiting
+  useEffect(() => {
+    if (waiting === undefined) return
+    const go = () => { waitRef.current = undefined; setWaiting(undefined); startClock(speedRef.current) }
+    // Two animation frames: the browser paints the new run before the first one ends, and the clock starts after it.
+    if (drawn) { let raf = requestAnimationFrame(() => { raf = requestAnimationFrame(go) }); return () => cancelAnimationFrame(raf) }
+    const timer = setTimeout(go, Math.max(0, deadline.current - performance.now()))
+    return () => clearTimeout(timer)
+  }, [waiting, drawn])
   const [size, setSize] = useState({ w: innerWidth, h: innerHeight })
   useEffect(() => { const on = () => setSize({ w: innerWidth, h: innerHeight }); addEventListener('resize', on); return () => removeEventListener('resize', on) }, [])
   const taipei = useMemo(() => projection && taipeiIn(towns, projection), [projection])

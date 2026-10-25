@@ -8,6 +8,10 @@ export const FRAME_MS = 1000 / FPS
 // ponytail: so a device with callbacks more than 133 ms apart (below 7.5 fps) runs slower than its speed setting, at
 // 133 ms of each gap. Raise the cap if such devices matter; the clock of a stalled page then jumps further.
 export const MAX_FRAMES = 4
+// A new run starts when the page has drawn its first frame. If that does not come by this time after the start (an
+// error, or a first load of more than this time on a slow network), the run starts anyway: the clock then moves
+// before the map shows, up to the cap.
+export const READY_MS = 5000
 
 /** The clock shows `minute` (since 00:00 of day 0) at `at` (ms, as performance.now()) and moves `perMs` minutes a ms. */
 export type Clock = { minute: number; at: number; perMs: number }
