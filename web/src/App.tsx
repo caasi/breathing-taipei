@@ -160,8 +160,16 @@ export function App() {
     respeed(l, clockAt(l, now), l.model, now, hours * 60 / 1000); l.since = since
     post({ type: 'speed', hoursPerSec: hours, minute: l.minute, at: since })
   }
+  // The clock runs at the chosen speed, but stands while the tab is hidden: a hidden page draws nothing, and a run that
+  // goes on would only use the battery.
+  const resume = () => startClock(document.hidden ? 0 : speedRef.current)
   // While a new run waits, a change of speed is kept for its start.
-  useEffect(() => { speedRef.current = speed; if (waitRef.current === undefined) startClock(speed) }, [speed])
+  useEffect(() => { speedRef.current = speed; if (waitRef.current === undefined) resume() }, [speed])
+  useEffect(() => {
+    const on = () => { if (waitRef.current === undefined) resume() }
+    document.addEventListener('visibilitychange', on)
+    return () => document.removeEventListener('visibilitychange', on)
+  }, [])
 
   const projection = useMemo(() => towns && projectionFor(towns), [towns])
   // The worker handler is set once, so it reads the projection through a ref.
@@ -188,7 +196,7 @@ export function App() {
   const drawn = !!ready && shown.current === waiting
   useEffect(() => {
     if (waiting === undefined) return
-    const go = () => { waitRef.current = undefined; setWaiting(undefined); startClock(speedRef.current) }
+    const go = () => { waitRef.current = undefined; setWaiting(undefined); resume() }
     // Two animation frames: the browser paints the new run before the first one ends, and the clock starts after it.
     if (drawn) { let raf = requestAnimationFrame(() => { raf = requestAnimationFrame(go) }); return () => cancelAnimationFrame(raf) }
     const timer = setTimeout(go, Math.max(0, deadline.current - performance.now()))
