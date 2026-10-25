@@ -129,3 +129,28 @@ export function HeatMap({ towns, villages, level, nodes, counts, perAgent, proj,
   )
 }
 
+/**
+ * The town borders, faint and blurred, with the Taipei labels of the map: what shows before the first frame of the
+ * first run. It needs no run, so it draws as soon as the page has the towns and the projection. `pop` (registered
+ * residents by town, from villages2.json) is used in place of the counts of the first frame; the two differ a little.
+ */
+export function Outline({ towns, proj, view, pop }: { towns: any; proj: GeoProjection; view: View; pop?: Map<string, number> }) {
+  const { borders, labels } = useMemo(() => {
+    const path = geoPath(proj), all = cityTowns(towns)
+    return {
+      borders: all.map(f => path(f) ?? ''),
+      labels: all.filter(f => f.properties.COUNTYNAME === '台北市').map(f => ({ xy: path.centroid(f), name: f.properties.TOWNNAME, town: f.properties.COUNTYNAME + f.properties.TOWNNAME })),
+    }
+  }, [towns, proj])
+  return <>
+    <svg style={{ ...SVG, filter: 'blur(3px)', opacity: 0.6 }}><g transform={svgTransform(view)}>
+      {borders.map((d, k) => <path key={k} d={d} fill="#2c2626" stroke="#fff" strokeOpacity={0.3} strokeWidth={1.2} />)}
+    </g></svg>
+    {/* The same place and style as the labels of the map, so they meet when the map fades in. Blurred too: the
+        figures are not the ones of the run, so they are not to be read. */}
+    <svg style={{ ...SVG, filter: 'blur(1.5px)', opacity: 0.6 }}><g transform={svgTransform(view)}>
+      {labels.map(l => <text key={l.town} x={l.xy[0]} y={l.xy[1]} textAnchor="middle" fontSize={12} fill="#fff" stroke="#211d1d" strokeWidth={3} paintOrder="stroke">
+        {l.name}{pop && <tspan x={l.xy[0]} dy={14}>{(pop.get(l.town) ?? 0).toLocaleString()}</tspan>}</text>)}
+    </g></svg>
+  </>
+}

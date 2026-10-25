@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import { HeatMap, projectionFor, taipeiIn, type Transit } from './ui/HeatMap.tsx'
+import { HeatMap, Outline, projectionFor, taipeiIn, type Transit } from './ui/HeatMap.tsx'
 import { Travellers, MODE_COLOURS, addBatches, type Track } from './ui/Travellers.tsx'
 import { MODES } from './sim/city.ts'
 import type { FromWorker, WorkerError, ToWorker, Level, Trips } from './sim/worker.ts'
@@ -65,6 +65,7 @@ export function App() {
   // The run whose frames are on the screen. After a switch of level the old picture stays (frozen) until the first
   // frame of the new run comes, so the map does not go black while the new run loads.
   const [onScreen, setOnScreen] = useState<{ level: Level; runStart: number }>()
+  const [pop, setPop] = useState<Map<string, number>>()
   // The run that loads; the frozen dots (the dots of one run, at one minute).
   const next = useRef<{ level: Level; runStart: number }>(), frozen = useRef<{ run: number; minute: number }>()
   const [nodes, setNodes] = useState<string[]>([])
@@ -115,6 +116,12 @@ export function App() {
     getJson('calendar.json').then(setCal).catch(err => setLoadError(String(err)))
     getJson('villages2-topo.json').then(setVillages).catch(err => setLoadError(String(err)))
     getJson('transit.json').then(setTransit).catch(err => setLoadError(String(err)))
+    // Residents by town for the labels of the outline; the worker loads the same file, so it is usually in the cache.
+    getJson('villages2.json').then((vs: { town: string; pop: number }[]) => {
+      const m = new Map<string, number>()
+      for (const v of vs) m.set(v.town, (m.get(v.town) ?? 0) + v.pop)
+      setPop(m)
+    }).catch(() => {}) // only the outline labels miss it
     const w = new Worker(new URL('./sim/worker.ts', import.meta.url), { type: 'module' })
     w.onmessage = (e: MessageEvent<FromWorker | WorkerError>) => {
       if ('error' in e.data) { if (e.data.start === started.current) setRunError(e.data.error); return }
@@ -206,6 +213,20 @@ export function App() {
     return out
   }, [history, homes, colourBy, rateWindow])
   const ready = projection && villages && s && nodes.length === s.counts.length
+  // The map fades in from the blurred outline at its first frame; one animation frame later, so the start state paints.
+  const [revealed, setRevealed] = useState(false), [faded, setFaded] = useState(false)
+  useEffect(() => {
+    if (!ready || revealed) return
+    const raf = requestAnimationFrame(() => setRevealed(true))
+    return () => cancelAnimationFrame(raf)
+  }, [!!ready, revealed])
+  // The outline goes when the fade ends: the cells of 里 do not cover every part of the towns, and the blurs would
+  // stay. The time is the transition in index.html; with reduced motion there is no fade, so it goes at once.
+  useEffect(() => {
+    if (!revealed) return
+    const timer = setTimeout(() => setFaded(true), matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : 600)
+    return () => clearTimeout(timer)
+  }, [revealed])
   // After the render that shows new trips (a new run or a new dot density), the older ones go.
   useEffect(() => { for (const id of dotRuns.current.keys()) if (id < tripsId) dotRuns.current.delete(id) }, [tripsId])
   // The new run starts when the map of its first frame is on the screen, or at the deadline. The effect depends on
@@ -295,10 +316,14 @@ export function App() {
   return (
     <div style={{ position: 'fixed', inset: 0, overflow: 'hidden', background: '#211d1d' }}>
       <div style={{ position: 'absolute', left: box.x, top: box.y, width: box.w, height: box.h, overflow: 'hidden' }}>
+      {/* The blurred outline is under the map until the map has faded in, once, at the first frame. */}
+      {!faded && towns && projection && <Outline towns={towns} proj={projection} view={view} pop={pop} />}
+      <div className="reveal" style={{ position: 'absolute', inset: 0, opacity: revealed ? 1 : 0, filter: revealed ? 'none' : 'blur(8px)' }}>
       {ready && <>
         <HeatMap towns={towns} villages={villages} level={onScreen?.level ?? level} nodes={nodes} counts={s.counts} perAgent={PER_AGENT} proj={projection} transit={transit} show={show} rate={rate} speed={speed} view={view} />
         {dots && dotTrips && <Travellers tracks={dotRun!.tracks} trips={dotTrips} clock={clock} onFps={setFps} byMode={byMode} view={view} />}
       </>}
+      </div>
       {/* Always there, so a screen reader reads the change. */}
       {/* In the bottom right of the map, left of the panels on a desktop. */}
       <div role="status" style={{ position: 'absolute', right: box.w - fit.x - fit.w + 16, bottom: 16, color: '#fff', pointerEvents: 'none' }}>
