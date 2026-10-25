@@ -14,8 +14,6 @@ on:
 
 permissions:
   contents: read
-  pages: write
-  id-token: write
 
 # One publish at a time. A deploy that has started runs to its end (as in GitHub's Pages starter workflow);
 # a newer push waits for it. Each ref has its own group: a group keeps only one pending run and cancels the
@@ -56,6 +54,10 @@ jobs:
     needs: build
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
+    # Only the deploy gets the Pages permissions, so the build of a pull request cannot publish.
+    permissions:
+      pages: write
+      id-token: write
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
