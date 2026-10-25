@@ -80,6 +80,9 @@ const events = fc.array(fc.oneof(
   fc.record({ gap: ms(2 * FRAME_MS), load: ms(20 * FRAME_MS), delay: ms(50) }),
 ), { maxLength: 200 })
 
+// ponytail: the test models the clock code of the message handlers in App.tsx and worker.ts (respeed on a change of
+// speed and on a new run, the since check, the hold while a world loads); it does not run them. A change there must be
+// made here too. To test the handlers themselves, move their clock code into functions in pace.ts that both call.
 test('the clock of the page never goes back in a run, for any timing of callbacks, messages, changes of speed and new runs', () => {
   fc.assert(fc.property(events, es => {
     let now = 0, model = 0, seen = -Infinity
