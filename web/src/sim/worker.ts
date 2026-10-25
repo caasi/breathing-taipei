@@ -4,6 +4,7 @@ import { kindAt, WORKDAY, type Calendar } from './calendar.ts'
 import { drawNames, nameOf, type People } from './people.ts'
 import { evenPick, type SimEvent } from './events.ts'
 import { mulberry32 } from './rng.ts'
+import { pacer } from './pace.ts'
 import { cityFrom, MODES } from './city.ts'
 import { networks, readRoutes, tripPaths, type Batch, type Routes } from './paths.ts'
 
@@ -88,9 +89,10 @@ function* bothPaths(trips: Trips, coords: [number, number][], graphs: Awaited<ty
 }
 
 const frame = () => {
-  if (!w) return
-  const t = performance.now()
-  advance(w, hoursPerSec * 60 / FPS)
+  const t = performance.now(), n = pace(t)
+  // No step, no message: the same minute again would move the extrapolated clock of the page back.
+  if (!w || !n) return
+  for (let k = 0; k < n; k++) advance(w, hoursPerSec * 60 / FPS)
   extra.replans = replans(w)
   const c = counts(w, MODES.length)
   const ms = performance.now() - t
@@ -108,6 +110,7 @@ const frame = () => {
   postMessage(msg)
   extra = {}
 }
+const pace = pacer(1000 / FPS, performance.now())
 setInterval(frame, 1000 / FPS)
 
 let drawn = 0 // the latest draw; a routes file that arrives after a newer draw is not applied to the old one
