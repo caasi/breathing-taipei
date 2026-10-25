@@ -88,7 +88,7 @@ test('the clock of the page never goes back in a run, for any timing of callback
     let now = 0, model = 0, seen = -Infinity
     // since: the change of speed (or new run) that the clock uses. run: the run of the world; loaded: when it is ready.
     let worker: Clock = { minute: 0, at: 0, perMs: PER_MS }, workerSince = 0, workerRun = 0, loaded = 0
-    let firstFrame = false, speedInLoad = false // the next frame is the first of a run; a change of speed came during its load
+    let firstFrame = false, speedBeforeFirst = false // the next frame is the first of a run; a change of speed came before it
     let page: Clock = { ...worker }, pageSince = 0, pageModel = 0, pageRun = 0 // pageModel: the model minute of the last message
     // Messages in flight. Each way keeps its order, so a message never arrives before an earlier one of the same way.
     const inbox: { at: number; run: () => void }[] = []
@@ -111,7 +111,7 @@ test('the clock of the page never goes back in a run, for any timing of callback
         lastToWorker = Math.max(lastToWorker, now + e.delay)
         inbox.push({ at: lastToWorker, run: () => {
           respeed(worker, sent.minute, model, sent.at, sent.perMs); workerSince = sent.at
-          if (now < loaded) speedInLoad = true
+          if (firstFrame) speedBeforeFirst = true
         } })
       } else if ('load' in e) {
         respeed(page, 0, 0, now, page.perMs)
@@ -119,14 +119,14 @@ test('the clock of the page never goes back in a run, for any timing of callback
         pageModel = 0; pageSince = at; seen = -Infinity
         lastToWorker = Math.max(lastToWorker, now + e.delay)
         inbox.push({ at: lastToWorker, run: () => {
-          model = 0; workerRun = run; loaded = now + load; firstFrame = true; speedInLoad = false
+          model = 0; workerRun = run; loaded = now + load; firstFrame = true; speedBeforeFirst = false
           respeed(worker, 0, 0, at, worker.perMs); workerSince = at
         } })
       } else {
         if (now < loaded) continue // the worker sends no frame while the world loads
         worker.minute = clockAt(worker, now); worker.at = now
         // The clock waited during the load, so the first frame of the run is at most the cap ahead of minute 0.
-        if (firstFrame && !speedInLoad) expect(worker.minute).toBeLessThanOrEqual(MAX_FRAMES * FRAME_MS * worker.perMs + 1e-9)
+        if (firstFrame && !speedBeforeFirst) expect(worker.minute).toBeLessThanOrEqual(MAX_FRAMES * FRAME_MS * worker.perMs + 1e-9)
         firstFrame = false
         const step = worker.perMs * FRAME_MS
         model += stepsTo(worker.minute, model, step) * step
