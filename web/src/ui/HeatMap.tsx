@@ -109,7 +109,7 @@ export function HeatMap({ towns, villages, level, nodes, counts, perAgent, proj,
   </>, [geo, show])
 
   const byTown = new Map<string, number>()
-  // Between a switch of 區 and 里 and the worker's new run, a cell can miss its node (-1): it counts as empty.
+  // A cell with no node (-1) counts as empty.
   geo.cells.forEach(c => byTown.set(c.town, (byTown.get(c.town) ?? 0) + (counts[c.node] ?? 0)))
   const colours = new Uint8Array(geo.cells.length * 3)
   geo.cells.forEach((c, k) => {
@@ -128,3 +128,4 @@ export function HeatMap({ towns, villages, level, nodes, counts, perAgent, proj,
     </div>
   )
 }
+

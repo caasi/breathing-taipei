@@ -62,10 +62,18 @@ export function App() {
   // A switch of level starts a new model, on the day that the clock shows, so the date goes on.
   const [dayOffset, setDayOffset] = useState(0)
   const runStart = startDay === undefined ? undefined : startDay + dayOffset
+  // The run whose frames are on the screen. After a switch of level the old picture stays (frozen) until the first
+  // frame of the new run comes, so the map does not go black while the new run loads.
+  const [onScreen, setOnScreen] = useState<{ level: Level; runStart: number }>()
+  // The run that loads; the frozen dots (the dots of one run, at one minute).
+  const next = useRef<{ level: Level; runStart: number }>(), frozen = useRef<{ run: number; minute: number }>()
   const [nodes, setNodes] = useState<string[]>([])
-  // Replans write into the arrays in place, so the trips are a ref; a new trips object asks for a render.
-  const trips = useRef<Trips>()
-  const [, setTripsId] = useState(0)
+  // The dot trips by id, each with the tracks of its dots. Replans and routes write into them in place, so they are a
+  // ref; a new id asks for a render. Render reads the entry of the committed id, so it never pairs trips with the
+  // tracks of other trips, also when a click renders before the update of a new id.
+  // run: the start of the run that made the trips.
+  const dotRuns = useRef(new Map<number, { trips: Trips; tracks: { current: (Track | undefined)[] }; run: number }>()), lastDots = useRef(0)
+  const [tripsId, setTripsId] = useState(0)
   const [s, setS] = useState<FromWorker>()
   // Display settings belong to this viewer, so they stay in this browser; the policies (usePolicies) are in the URL.
   const policies = usePolicies()
@@ -76,7 +84,6 @@ export function App() {
   const every = dot / PER_AGENT
   const [rateWindow, setRateWindow] = useStored('window', 30, oneOf(WINDOWS))
   const [routed, setRouted] = useState(0)
-  const tracks = useRef<(Track | undefined)[]>([])
   const unplaced = useRef<Batch[]>([])
   const [dots, setDots] = useStored('dots', true, bool, fromBool)
   const [byMode, setByMode] = useStored('mode', false, bool, fromBool)
@@ -114,22 +121,22 @@ export function App() {
       const m = e.data
       // Frames of an earlier run can still be on their way after a start (also the first frame of a run that a quick
       // second switch replaced); their day and nodes would be read with the new start and level.
-      if (m.start !== undefined) { if (m.start !== started.current) return; shown.current = m.start }
+      if (m.start !== undefined) { if (m.start !== started.current) return; shown.current = m.start; setOnScreen(next.current) }
       else if (shown.current !== started.current) return
       if (m.nodes) setNodes(m.nodes)
       // The first frame of a run (it has coords) starts the history and the events again. The updaters keep only
       // these values, not the message.
       const fresh = m.coords !== undefined, events = m.events, entry = { t: m.day * 1440 + m.minute, counts: m.counts }
       if (m.homes) setHomes(m.homes)
-      if (m.trips) { tracks.current = []; unplaced.current = [] }
+      if (m.trips) { dotRuns.current.set(++lastDots.current, { trips: m.trips, tracks: { current: [] }, run: shown.current }); setTripsId(lastDots.current); unplaced.current = [] }
       if (fresh || events?.length) setPersonal(p => [...(fresh ? [] : p), ...(events ?? [])].slice(-KEEP_EVENTS))
       setHistory(h => record(fresh ? [] : h, entry, KEEP))
-      if (m.trips) { trips.current = m.trips; setTripsId(n => n + 1) }
       // The dots read the arrays every frame, so new plans are written into them in place.
-      const t = trips.current, r = m.replans
+      // New plans and routes are for the newest trips, also before a render shows them.
+      const dots = dotRuns.current.get(lastDots.current), t = dots?.trips, r = m.replans
       if (t && r) r.k.forEach((k, j) => { t.dest[k] = r.dest[j]; t.dep[k] = r.dep[j]; t.dur1[k] = r.dur1[j]; t.ret[k] = r.ret[j]; t.dur2[k] = r.dur2[j] })
       // The worker sends each batch once; keep the ones that arrive before the map projection exists.
-      if (m.paths?.length) proj.current ? addBatches(tracks.current, m.paths, proj.current) : unplaced.current.push(...m.paths)
+      if (dots && m.paths?.length) proj.current ? addBatches(dots.tracks.current, m.paths, proj.current) : unplaced.current.push(...m.paths)
       if (m.routed !== undefined) setRouted(m.routed)
       // A clock from before the latest change of speed would take the clock of the page back.
       const l = last.current, model = m.day * 1440 + m.minute
@@ -149,9 +156,15 @@ export function App() {
     // The new world starts at minute 0, and both clocks stand there until the page has drawn the first frame. The page
     // is busy while it builds the new run; a clock that ran then would jump when the page draws again.
     const l = last.current, now = performance.now(), since = performance.timeOrigin + now
+    // The dots of the old run stay where they are; a second switch before the new run shows keeps the same picture.
+    // The dots on the screen freeze at the time of the frame on the screen, so they agree with the map and the clock. A
+    // second switch before the new run shows keeps the same freeze.
+    const on = dotRuns.current.get(tripsId)
+    if (on && frozen.current?.run !== on.run) frozen.current = { run: on.run, minute: l.model }
     respeed(l, 0, 0, now, 0); l.model = 0; l.since = since
     waitRef.current = ++started.current; deadline.current = now + READY_MS
-    setS(undefined); setRunError(undefined); setWaiting(started.current)
+    next.current = { level, runStart }
+    setRunError(undefined); setWaiting(started.current)
     post({ type: 'init', perAgent: PER_AGENT, seed: 42, level, startDay: runStart, start: started.current, at: since })
   }, [level, runStart])
   // The page clock goes on at the speed from now, and the worker clock follows it from the same time.
@@ -176,10 +189,12 @@ export function App() {
   const proj = useRef(projection)
   proj.current = projection
   useEffect(() => {
-    if (projection && unplaced.current.length) { addBatches(tracks.current, unplaced.current, projection); unplaced.current = [] }
+    const dots = dotRuns.current.get(lastDots.current)
+    if (projection && dots && unplaced.current.length) { addBatches(dots.tracks.current, unplaced.current, projection); unplaced.current = [] }
   }, [projection])
   // The worker posts up to 30 times a second while the clock runs; between posts the dots move on the extrapolated clock.
-  const clock = () => clockAt(last.current, performance.now())
+  // Dots of a frozen run stand at its minute; the dots of the next run, once shown, follow the clock.
+  const clock = () => { const f = frozen.current; return f && dotRun?.run === f.run ? f.minute : clockAt(last.current, performance.now()) }
   // Change per hour over the last rateWindow minutes, as a share of the node's residents.
   const rate = useMemo(() => {
     const h = history
@@ -191,6 +206,8 @@ export function App() {
     return out
   }, [history, homes, colourBy, rateWindow])
   const ready = projection && villages && s && nodes.length === s.counts.length
+  // After the render that shows new trips (a new run or a new dot density), the older ones go.
+  useEffect(() => { for (const id of dotRuns.current.keys()) if (id < tripsId) dotRuns.current.delete(id) }, [tripsId])
   // The new run starts when the map of its first frame is on the screen, or at the deadline. The effect depends on
   // whether the map is ready, not on each frame.
   const drawn = !!ready && shown.current === waiting
@@ -207,14 +224,16 @@ export function App() {
   const taipei = useMemo(() => projection && taipeiIn(towns, projection), [projection])
   const { kind, box, fit, view } = useMemo(() => layoutFor(size.w, size.h, taipei), [size, taipei]), phone = kind !== 'desktop', titleSize = phone ? 20 : 28
   const road = s ? Array.from(s.road) : []
-  const date = cal && runStart !== undefined ? dateText(cal, runStart + (s?.day ?? 0)) : undefined
-  const dayLabel = useMemo(() => (day: number) => (cal && runStart !== undefined ? dateText(cal, runStart + day).roc : ''), [cal, runStart])
-  const dotTrips = trips.current
+  // Before the first frame no run is on the screen, and its day is 0 of the selected start.
+  const shownStart = onScreen?.runStart ?? runStart
+  const date = cal && shownStart !== undefined ? dateText(cal, shownStart + (s?.day ?? 0)) : undefined
+  const dayLabel = useMemo(() => (day: number) => (cal && shownStart !== undefined ? dateText(cal, shownStart + day).roc : ''), [cal, shownStart])
+  const dotRun = dotRuns.current.get(tripsId), dotTrips = dotRun?.trips
   const nowMinute = s ? s.day * 1440 + Math.floor(s.minute) : 0
   const list = useMemo(() => {
-    const events = cal && runStart !== undefined && s ? withPublic(personal, cal, runStart, nowMinute, MAX_EVENTS) : personal
+    const events = cal && shownStart !== undefined && s ? withPublic(personal, cal, shownStart, nowMinute, MAX_EVENTS) : personal
     return { now: nowMinute, events }
-  }, [cal, runStart, personal, !s, nowMinute])
+  }, [cal, shownStart, personal, !s, nowMinute])
   const placeOf = useMemo(() => {
     const byCode = new Map<string, { town: string; village: string }>()
     for (const g of villages?.objects.villages.geometries ?? []) byCode.set(g.properties.VILLCODE, { town: g.properties.TOWNNAME, village: g.properties.VILLNAME })
@@ -227,7 +246,7 @@ export function App() {
   const settings = <>
     <h2 style={H2}>顯示</h2>
     <p>{SPEEDS.map(v => <button key={v} onClick={() => setSpeed(v)} style={{ marginRight: 4, fontWeight: v === speed ? 'bold' : 'normal' }}>{v === 0 ? '暫停' : `${v}x`}</button>)}
-      <span style={{ marginLeft: 12 }}>{(['district', 'village'] as Level[]).map(l => <button key={l} onClick={() => { if (l !== level) { setDayOffset(o => o + (s?.day ?? 0)); setS(undefined); setLevel(l) } }}
+      <span style={{ marginLeft: 12 }}>{(['district', 'village'] as Level[]).map(l => <button key={l} onClick={() => { if (l !== level) { if (onScreen && startDay !== undefined) setDayOffset(onScreen.runStart - startDay + (s?.day ?? 0)); setLevel(l) } }}
         style={{ marginRight: 4, fontWeight: l === level ? 'bold' : 'normal' }}>{l === 'district' ? '區' : '里'}</button>)}</span>
       <br /><small>切換區、里會從當天 00:00 重新模擬。</small></p>
     <p><label><input type="checkbox" checked={dots} onChange={() => setDots(!dots)} />路上的人</label>，1 點 = {every * PER_AGENT} 人：
@@ -277,8 +296,8 @@ export function App() {
     <div style={{ position: 'fixed', inset: 0, overflow: 'hidden', background: '#211d1d' }}>
       <div style={{ position: 'absolute', left: box.x, top: box.y, width: box.w, height: box.h, overflow: 'hidden' }}>
       {ready && <>
-        <HeatMap towns={towns} villages={villages} level={level} nodes={nodes} counts={s.counts} perAgent={PER_AGENT} proj={projection} transit={transit} show={show} rate={rate} speed={speed} view={view} />
-        {dots && dotTrips && <Travellers tracks={tracks} trips={dotTrips} clock={clock} onFps={setFps} byMode={byMode} view={view} />}
+        <HeatMap towns={towns} villages={villages} level={onScreen?.level ?? level} nodes={nodes} counts={s.counts} perAgent={PER_AGENT} proj={projection} transit={transit} show={show} rate={rate} speed={speed} view={view} />
+        {dots && dotTrips && <Travellers tracks={dotRun!.tracks} trips={dotTrips} clock={clock} onFps={setFps} byMode={byMode} view={view} />}
       </>}
       {/* Always there, so a screen reader reads the change. */}
       {/* In the bottom right of the map, left of the panels on a desktop. */}
