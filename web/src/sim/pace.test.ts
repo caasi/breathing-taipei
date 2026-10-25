@@ -9,7 +9,7 @@ const run = (gaps: number[]) => {
   let c: Clock = { minute: 0, at: 0, perMs: PER_MS }, model = 0
   return gaps.map(gap => {
     const now = c.at + gap
-    c = { ...c, minute: clockAt(c, now), at: now }
+    c.minute = clockAt(c, now); c.at = now
     const n = stepsTo(c.minute, model, STEP)
     model += n * STEP
     return n
@@ -87,10 +87,10 @@ test('the clock of the page never goes back, for any timing of callbacks, messag
         lastToWorker = Math.max(lastToWorker, now + e.delay)
         inbox.push({ at: lastToWorker, run: () => { worker = respeed(sent.minute, model, sent.at, sent.perMs); workerSince = sent.at } })
       } else {
-        worker = { ...worker, minute: clockAt(worker, now), at: now }
+        worker.minute = clockAt(worker, now); worker.at = now
         const step = worker.perMs * FRAME_MS
         model += stepsTo(worker.minute, model, step) * step
-        const sent = { clock: worker, model, since: workerSince }
+        const sent = { clock: structuredClone(worker), model, since: workerSince } // postMessage copies the clock
         lastToPage = Math.max(lastToPage, now + e.delay)
         inbox.push({ at: lastToPage, run: () => { pageModel = sent.model; if (sent.since === pageSince) page = sent.clock } })
       }

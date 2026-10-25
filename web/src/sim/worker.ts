@@ -93,7 +93,7 @@ function* bothPaths(trips: Trips, coords: [number, number][], graphs: Awaited<ty
 
 const frame = () => {
   const t = performance.now(), step = hoursPerSec * 60 / FPS
-  clock = { ...clock, minute: clockAt(clock, t), at: t }
+  clock.minute = clockAt(clock, t); clock.at = t
   if (!w) return
   for (let k = stepsTo(clock.minute, w.day * 1440 + w.minute, step); k > 0; k--) advance(w, step)
   extra.replans = replans(w)

@@ -121,7 +121,8 @@ export function App() {
       if (m.routed !== undefined) setRouted(m.routed)
       // A clock from before the latest change of speed would take the clock of the page back.
       const l = last.current, model = m.day * 1440 + m.minute
-      last.current = m.since === l.since ? { ...l, minute: m.clock, at: m.at - performance.timeOrigin, model } : { ...l, model }
+      if (m.since === l.since) { l.minute = m.clock; l.at = m.at - performance.timeOrigin }
+      l.model = model
       setS(m)
     }
     // A throw in the worker's frame loop (routing, counting) reaches the page through onerror.
@@ -134,13 +135,14 @@ export function App() {
   useEffect(() => {
     if (runStart === undefined) return
     // The new world starts at minute 0. A change of speed while it loads must not carry the clock of the old run into it.
-    last.current = { ...last.current, minute: 0, at: performance.now(), model: 0 }
+    const l = last.current
+    l.minute = 0; l.at = performance.now(); l.model = 0
     setS(undefined); setRunError(undefined); post({ type: 'init', perAgent: PER_AGENT, seed: 42, level, startDay: runStart, start: ++started.current })
   }, [level, runStart])
   useEffect(() => {
     const l = last.current, now = performance.now(), since = performance.timeOrigin + now
     const c = respeed(clockAt(l, now), l.model, now, speed * 60 / 1000)
-    last.current = { ...c, model: l.model, since }
+    Object.assign(l, c); l.since = since
     post({ type: 'speed', hoursPerSec: speed, minute: c.minute, at: since })
   }, [speed])
 
