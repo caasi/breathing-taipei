@@ -1,6 +1,6 @@
 import { useMemo } from 'react'
 import { geoArea, geoMercator, geoPath, type GeoProjection } from 'd3-geo'
-import { feature } from 'topojson-client'
+import { feature, mesh } from 'topojson-client'
 import type { FeatureCollection, Geometry } from 'geojson'
 import { Fills } from './Fills.tsx'
 import { MAP_SIZE, svgTransform, type Rect, type View } from './view.ts'
@@ -29,6 +29,11 @@ const rateColour = (perHour: number) => {
   return BASE.map((v, i) => v + (to[i] - v) * f)
 }
 const BACKGROUND = [0x21, 0x1d, 0x1d]
+// The background of the map box. Much darker than the land, so that the sea does not look like land.
+export const SEA = '#0c0f13'
+// The same as BACKGROUND, the colour that the fills of 新北 are faded toward, so a faded cell shows almost no edge against
+// the land around it.
+const LAND = `rgb(${BACKGROUND.join(', ')})`
 // 新北 is drawn faded so the eye stays on Taipei.
 const NEW_TAIPEI_OPACITY = 0.45
 
@@ -41,7 +46,8 @@ const EARTH_KM2 = 6371 * 6371
 const features = (topo: any, key: string) =>
   (feature(topo, topo.objects[key]) as unknown as FeatureCollection<Geometry, any>).features
 const VIEW = new Set(['台北市', '新北市板橋區', '新北市三重區', '新北市中和區', '新北市永和區', '新北市新莊區', '新北市新店區', '新北市蘆洲區'])
-const cityTowns = (towns: any) => features(towns, 'towns').filter(f => ['台北市', '新北市'].includes(f.properties.COUNTYNAME))
+const CITIES = ['台北市', '新北市']
+const cityTowns = (towns: any) => features(towns, 'towns').filter(f => CITIES.includes(f.properties.COUNTYNAME))
 
 export const projectionFor = (towns: any): GeoProjection => {
   const fit = cityTowns(towns).filter(f => VIEW.has(f.properties.COUNTYNAME) || VIEW.has(f.properties.COUNTYNAME + f.properties.TOWNNAME))
@@ -127,6 +133,22 @@ export function HeatMap({ towns, villages, level, nodes, counts, perAgent, proj,
       </g></svg>
     </div>
   )
+}
+
+/** All counties of Taiwan as land, under the outline and the map; only the borders of the other counties show. */
+export function Land({ towns, proj, view }: { towns: any; proj: GeoProjection; view: View }) {
+  // As the fixed SVG of the map: the paths are built once, and the view stays outside the memo.
+  const paths = useMemo(() => {
+    const path = geoPath(proj), city = (g: any) => CITIES.includes(g.properties.COUNTYNAME)
+    // One line for all borders, so an edge that two counties share is not drawn twice and darker than the coast. No edge
+    // of the two cities: the town borders of the map draw those.
+    const borders = mesh(towns, towns.objects.counties, (a: any, b: any) => !(city(a) || city(b)))
+    return <>
+      {features(towns, 'counties').map((f, k) => <path key={k} d={path(f) ?? ''} fill={LAND} />)}
+      <path d={path(borders) ?? ''} fill="none" stroke="#fff" strokeOpacity={0.12} strokeWidth={1} />
+    </>
+  }, [towns, proj])
+  return <svg style={SVG}><g transform={svgTransform(view)}>{paths}</g></svg>
 }
 
 /**

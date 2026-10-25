@@ -4,6 +4,10 @@ This file lists the changes that a user of the site can see, for each version. T
 
 ## [Unreleased]
 
+### Added
+
+- The map shows the other counties around Taipei and New Taipei, and the sea in a darker colour.
+
 ## [0.1.5] - 2026-10-26
 
 ### Fixed
