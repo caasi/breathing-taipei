@@ -11,6 +11,7 @@ import { layoutFor, PANEL } from './ui/view.ts'
 import { dateText, indexOf, todayInTaipei, type Calendar } from './sim/calendar.ts'
 import { Events, Policies, usePolicies, MAX_EVENTS } from './ui/Dashboard.tsx'
 import { nextAfter, withPublic, type SimEvent } from './sim/events.ts'
+import { clockAt } from './sim/pace.ts'
 import { hhmm, H2 } from './ui/format.ts'
 
 const SPEEDS = [0, 1, 2, 4, 8]
@@ -117,7 +118,7 @@ export function App() {
       // The worker sends each batch once; keep the ones that arrive before the map projection exists.
       if (m.paths?.length) proj.current ? addBatches(tracks.current, m.paths, proj.current) : unplaced.current.push(...m.paths)
       if (m.routed !== undefined) setRouted(m.routed)
-      last.current = { ...last.current, minute: m.day * 1440 + m.minute, at: performance.now() }
+      last.current = { ...last.current, minute: m.day * 1440 + m.minute + m.lead, at: m.at - performance.timeOrigin }
       setS(m)
     }
     // A throw in the worker's frame loop (routing, counting) reaches the page through onerror.
@@ -141,7 +142,7 @@ export function App() {
     if (projection && unplaced.current.length) { addBatches(tracks.current, unplaced.current, projection); unplaced.current = [] }
   }, [projection])
   // The worker posts about 30 times a second; between posts the dots move on the extrapolated clock.
-  const clock = () => { const l = last.current; return l.minute + (performance.now() - l.at) / 1000 * l.speed * 60 }
+  const clock = () => { const l = last.current; return clockAt(l.minute, l.at, l.speed * 60 / 1000, performance.now()) }
   // Change per hour over the last rateWindow minutes, as a share of the node's residents.
   const rate = useMemo(() => {
     const h = history.current
@@ -160,7 +161,7 @@ export function App() {
   const road = s ? Array.from(s.road) : []
   const date = cal && runStart !== undefined ? dateText(cal, runStart + (s?.day ?? 0)) : undefined
   const dayLabel = useMemo(() => (day: number) => (cal && runStart !== undefined ? dateText(cal, runStart + day).roc : ''), [cal, runStart])
-  // The worker posts about 30 times a second, and at any speed above a pause the simulated minute changes on each post.
+  // The worker posts about 30 times a second, and at any speed above a pause the simulated minute changes on nearly each post.
   // The list changes only when the clock passes the time of its next event, a new event comes, or a new day starts,
   // so it is built again then and not on every post.
   const nowMinute = s ? s.day * 1440 + Math.floor(s.minute) : 0, newest = personal.current.at(-1)?.id

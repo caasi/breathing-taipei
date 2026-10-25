@@ -4,7 +4,7 @@ import { kindAt, WORKDAY, type Calendar } from './calendar.ts'
 import { drawNames, nameOf, type People } from './people.ts'
 import { evenPick, type SimEvent } from './events.ts'
 import { mulberry32 } from './rng.ts'
-import { pacer } from './pace.ts'
+import { FPS, pacer } from './pace.ts'
 import { cityFrom, MODES } from './city.ts'
 import { networks, readRoutes, tripPaths, type Batch, type Routes } from './paths.ts'
 
@@ -27,9 +27,10 @@ export type FromWorker = {
   start?: number; nodes?: string[]; homes?: Uint32Array; coords?: [number, number][]; trips?: Trips; replans?: Replans; paths?: Batch[]; routed?: number
   minute: number; day: number; counts: Uint32Array; road: Uint32Array; away: number; ms: number
   events?: SimEvent[] // personal events of plans made since the last message
+  lead: number // simulated minutes of real time that the model has not stepped yet; the page starts its clock from minute + lead
+  at: number // performance.timeOrigin + performance.now() of the callback, the time at which minute + lead holds
 }
 
-const FPS = 30
 const EVENTS_PER_DAY = 48
 // Every plan is simulated; the stream shows a few of the everyday ones (to work, home all day) and more of the rarer
 // ones (out on a day off, away from the two cities), as the user asked. Indexed by dest (WORK, PLAY, GONE, STAY).
@@ -89,10 +90,9 @@ function* bothPaths(trips: Trips, coords: [number, number][], graphs: Awaited<ty
 }
 
 const frame = () => {
-  const t = performance.now(), n = pace(t)
-  // No step, no message: the same minute again would move the extrapolated clock of the page back.
-  if (!w || !n) return
-  for (let k = 0; k < n; k++) advance(w, hoursPerSec * 60 / FPS)
+  const t = performance.now(), { steps, lead } = pace(t), step = hoursPerSec * 60 / FPS
+  if (!w) return
+  for (let k = 0; k < steps; k++) advance(w, step)
   extra.replans = replans(w)
   const c = counts(w, MODES.length)
   const ms = performance.now() - t
@@ -105,12 +105,12 @@ const frame = () => {
     if (b.done) { pending = undefined; break }
     paths.push(b.value); routed += b.value.ks.length
   }
-  const msg: FromWorker = { ...extra, paths, routed, minute: w.minute, day: w.day, counts: c.nodes, road: c.road, away: c.away, ms, events: newEvents }
+  const msg: FromWorker = { ...extra, paths, routed, minute: w.minute, day: w.day, counts: c.nodes, road: c.road, away: c.away, ms, events: newEvents, lead: lead * step, at: performance.timeOrigin + t }
   newEvents = []
   postMessage(msg)
   extra = {}
 }
-const pace = pacer(1000 / FPS, performance.now())
+const pace = pacer(performance.now())
 setInterval(frame, 1000 / FPS)
 
 let drawn = 0 // the latest draw; a routes file that arrives after a newer draw is not applied to the old one
