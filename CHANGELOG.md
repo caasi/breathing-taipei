@@ -4,6 +4,26 @@ This file lists the changes that a user of the site can see, for each version. T
 
 ## [Unreleased]
 
+## [0.1.5] - 2026-10-26
+
+### Fixed
+
+- On a slow device the simulation ran slower than its speed setting. It now keeps its speed setting while the simulation gets at least about 7.5 updates a second (#1, #15, #16).
+- The dots no longer jump back after a change of speed or a pause (#15, #16).
+- After a switch between district and village level, the shown time no longer jumps (about 13 simulated hours at 8x). A new run now waits until the page has drawn its first frame, for up to 5 seconds (#18).
+- The knobs of the policy icon now turn orange with the open button (#19).
+
+### Changed
+
+- The simulation stops while the tab is hidden, and goes on when the tab shows again (#18).
+- On a pause, the shown time moves on to the time of the dots, which can be ahead of it (at 8x, usually up to about 16 simulated minutes) (#16).
+- A switch between district and village level keeps the old picture until the new run shows, so the map no longer goes black (#19).
+
+### Added
+
+- A turning icon at the bottom right of the map shows from the first paint until a run starts (#18, #19).
+- Before the first frame, the map shows a blurred outline of the districts, and the map fades in at the first frame (#19).
+
 ## [0.1.4] - 2026-10-24
 
 ### Changed
@@ -75,7 +95,8 @@ The first public version.
 - A placeholder policy panel. Its settings do not change the simulation yet.
 - Publishing to GitHub Pages by a workflow on each push to `main`.
 
-[Unreleased]: https://github.com/caasi/breathing-taipei/compare/v0.1.4...HEAD
+[Unreleased]: https://github.com/caasi/breathing-taipei/compare/v0.1.5...HEAD
+[0.1.5]: https://github.com/caasi/breathing-taipei/compare/v0.1.4...v0.1.5
 [0.1.4]: https://github.com/caasi/breathing-taipei/compare/v0.1.3...v0.1.4
 [0.1.3]: https://github.com/caasi/breathing-taipei/compare/v0.1.2...v0.1.3
 [0.1.2]: https://github.com/caasi/breathing-taipei/compare/v0.1.1...v0.1.2
