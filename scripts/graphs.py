@@ -166,7 +166,8 @@ for x in ways:
 # then runs only the way's way. ponytail: PAIR_M, NEAR_M, the 30 degrees and the 137 degrees (2.4 rad) of "the other
 # way" are guesses; a one-way pair of two streets with different
 # names closer than a grid cell can still merge into one edge and make it one-way.
-PAIR_M, NEAR_M, OWC = 60, 30, 0.0005
+# PAIR_M is the grid of the streets (about 120 m): two carriageways closer than that are one edge.
+PAIR_M, NEAR_M, OWC = 120, 30, 0.0005
 def metres(a, b):
     return 1000 * km(a, b)
 oneways = []
@@ -192,21 +193,35 @@ def gap(p, a, b):
 def paired(k):
     """A segment of a divided road: a segment of the same name runs the other way within PAIR_M of its middle."""
     a, b, name = oneways[k]
-    # Segments are indexed by their middle; a long one can have its middle far off, so look 4 cells (about 200 m) away.
+    # Segments are indexed by their middle; a long one can have its middle far off, so look 6 cells (about 300 m) away.
     return any(oneways[j][2] == name and gap(mid(a, b), *oneways[j][:2]) <= PAIR_M and turn(heading(a, b), heading(*oneways[j][:2])) > 2.4
-               for j in near(mid(a, b), 4) if j != k)
+               for j in near(mid(a, b), 6) if j != k)
 alone = {k for k in range(len(oneways)) if not paired(k)}
 streets_one = 0
 for a in list(road.adj):
     for b in list(road.adj[a]):
         if a > b or road.cls.get((a, b)) or (a, b) in road.one or (b, a) in road.one: continue
         p, h = mid(road.xy[a], road.xy[b]), heading(road.xy[a], road.xy[b])
-        best = min(((metres(p, mid(*oneways[k][:2])), k) for k in near(p, 1) if k in alone), default=None)
+        best = min(((gap(p, *oneways[k][:2]), k) for k in near(p, 4) if k in alone), default=None)
         if not best or best[0] > NEAR_M: continue
         d = turn(h, heading(*oneways[best[1]][:2]))
         if d < math.pi / 6: road.one.add((a, b)); streets_one += 1
         elif d > 5 * math.pi / 6: road.one.add((b, a)); streets_one += 1
-print("one-way streets:", len(alone), "of", len(oneways), "OSM one-way segments alone;", streets_one, "street steps made one-way")
+# The streets here are only those of the bus routes, so the small streets that give a one-way street its way back can be
+# missing. A one-way street step from a to b stays one-way only when b still reaches a by another way; else it is
+# two-way again, so that no node is cut off.
+def reaches(src, dst, skip):
+    seen, todo = {src}, [src]
+    while todo:
+        u = todo.pop()
+        if u == dst: return True
+        for w in road.adj[u]:
+            if w not in seen and (w, u) not in road.one and {u, w} != skip: seen.add(w); todo.append(w)
+    return False
+undone = 0
+for a, b in [s for s in road.one if not road.cls.get(s)]:
+    if not reaches(b, a, {a, b}): road.one.discard((a, b)); undone += 1; streets_one -= 1
+print("one-way streets:", len(alone), "of", len(oneways), "OSM one-way segments alone;", streets_one, "street steps made one-way;", undone, "two-way again, for a way back")
 
 nodes, edges, _ = contract(road)
 dump(sys.argv[7] + "/road-graph.json", nodes, edges)

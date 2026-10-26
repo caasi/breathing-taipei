@@ -20,8 +20,8 @@ The extra time is the time on the road over the time on the road with no jam, su
 
 | Peak | TomTom | Model | |
 |---|---|---|---|
-| Morning, trips that leave from 07:00 to 09:59 | 64.6% | 64.9% | The fit target of `CAPACITY` |
-| Evening, trips that leave from 17:00 to 19:59 | 92% | 30.5% | Not matched |
+| Morning, trips that leave from 07:00 to 09:59 | 64.6% | 64.8% | The fit target of `CAPACITY` |
+| Evening, trips that leave from 17:00 to 19:59 | 92% | 30.2% | Not matched |
 
 TomTom does not give the hours of its rush hours (KNOWN-ISSUES.md). The other sources also say that the evening is slower than the morning. 聯合報 gave the mean speed of 34 main roads of 台北市 in the spring of 2026: 21.6 km/h at the morning peak and 18.4 km/h at the evening peak ([聯合報, 2026-09-09](https://udn.com/news/story/7323/9744004)). In the model, the evening is faster than the morning.
 
@@ -32,9 +32,9 @@ For a road section, the slowness at a peak is the median of its speed at night (
 | Peak | Source | Median | 90th percentile | 99th percentile | Most |
 |---|---|---|---|---|---|
 | Morning | TDX | 1.06 | 1.41 | 2.49 | 3.62 |
-| Morning | Model | 1.13 | 1.61 | 2.74 | 3.20 |
+| Morning | Model | 1.14 | 1.56 | 2.70 | 3.24 |
 | Evening | TDX | 1.10 | 1.49 | 2.81 | 3.71 |
-| Evening | Model | 1.12 | 1.46 | 2.38 | 3.29 |
+| Evening | Model | 1.12 | 1.47 | 2.28 | 3.29 |
 
 The model is a little slower than TDX in the morning. `BETA` and `MOST` were chosen to make these spreads match (DATA.md). The TDX speeds are mostly from vehicle detectors at one point of a road, so they leave out the wait at traffic lights. The slowness of the model leaves it out too.
 
@@ -44,23 +44,23 @@ These roads jam at the peaks in the news of 2026. The table gives the slowness o
 
 | Road | News | Model, morning | Model, evening |
 |---|---|---|---|
-| 堤頂大道 | 內科, [自由時報, 2026-08-16](https://news.ltn.com.tw/news/politics/breakingnews/5542049) | 1.53 (102 of 495) | 1.39 (120 of 519) |
-| 國道1號 | 內湖 to 東湖, [壹蘋, 2024-12-17](https://news.nextapple.com/life/20241217/8739F70DC238E402DB822D8E3B2BDAFB) | 2.55 (15) | 3.27 (2) |
-| 承德路 | Afternoon peak, 臺北市政府交通局, report of 115年7月 | 2.05 (47) | 1.37 (129) |
-| 洲美快速道路 | Entry ramp, 臺北市政府交通局, report of 115年7月 | 1.43 (129) | 1.56 (71) |
-| 舊宗路 | 內科, [Entropy Clinic, 重新檢討「內湖很塞」](https://entropyclinic.substack.com/p/9a2) | 1.70 (74) | 2.28 (26) |
-| 環東大道 | 國3 at 環東大道, a jam of the 2026 Lunar New Year (a search result; no weekday source) | 1.26 (227) | 2.28 (18) |
-| 中興橋 | [自由時報, 2026-10-15](https://news.ltn.com.tw/news/life/breakingnews/5606731) | 1.47 (123) | 1.48 (100) |
-| 港墘路 | 內科, 自由時報, 2026-08-16 | 1.44 (128) | 1.43 (108) |
-| 重慶北路四段 | To 國1, 臺北市政府交通局, report of 115年7月 | 1.18 (305) | 1.14 (314) |
-| 中華路二段 | [聯合報, 2026-01-20](https://udn.com/news/story/7323/9276593) | 1.28 (194) | 1.36 (131) |
-| 木柵路 | 臺北市道安會報, 2026-06 (a search result; the record was not read) | 1.75 (68) | 1.64 (58) |
-| 瑞光路 | 臺北市道安會報, 2026-06 | 1.26 (233) | 1.16 (288) |
-| 中正路 | 臺北市道安會報, 2026-06; the model has many roads of this name, and the table takes the slowest | 1.25 (243) | 1.16 (287) |
-| 至善路 | 臺北市道安會報, 2026-06 | 1.24 (251) | 1.25 (206) |
-| 華翠大橋 | 聯合報, 2026-01-20 | 1.26 (217) | 1.12 (361) |
-| 民權東路六段 | 內科, Entropy Clinic | 1.23 (256) | 1.19 (251) |
-| 重陽橋 | 自由時報, 2026-10-15 | 1.18 (299) | 1.14 (300) |
+| 堤頂大道 | 內科, [自由時報, 2026-08-16](https://news.ltn.com.tw/news/politics/breakingnews/5542049) | 1.53 (105 of 498) | 1.35 (137 of 521) |
+| 國道1號 | 內湖 to 東湖, [壹蘋, 2024-12-17](https://news.nextapple.com/life/20241217/8739F70DC238E402DB822D8E3B2BDAFB) | 2.60 (15) | 3.25 (2) |
+| 承德路 | Afternoon peak, 臺北市政府交通局, report of 115年7月 | 2.05 (53) | 2.28 (24) |
+| 洲美快速道路 | Entry ramp, 臺北市政府交通局, report of 115年7月 | 1.43 (129) | 1.34 (146) |
+| 舊宗路 | 內科, [Entropy Clinic, 重新檢討「內湖很塞」](https://entropyclinic.substack.com/p/9a2) | 1.74 (73) | 1.63 (60) |
+| 環東大道 | 國3 at 環東大道, a jam of the 2026 Lunar New Year (a search result; no weekday source) | 2.28 (26) | 2.28 (13) |
+| 中興橋 | [自由時報, 2026-10-15](https://news.ltn.com.tw/news/life/breakingnews/5606731) | 1.47 (122) | 1.42 (110) |
+| 港墘路 | 內科, 自由時報, 2026-08-16 | 1.44 (127) | 1.43 (109) |
+| 重慶北路四段 | To 國1, 臺北市政府交通局, report of 115年7月 | 1.18 (311) | 1.16 (292) |
+| 中華路二段 | [聯合報, 2026-01-20](https://udn.com/news/story/7323/9276593) | 1.28 (193) | 1.36 (133) |
+| 木柵路 | 臺北市道安會報, 2026-06 (a search result; the record was not read) | 1.75 (70) | 1.64 (59) |
+| 瑞光路 | 臺北市道安會報, 2026-06 | 1.26 (227) | 1.16 (290) |
+| 中正路 | 臺北市道安會報, 2026-06; the model has many roads of this name, and the table takes the slowest | 1.33 (172) | 1.21 (238) |
+| 至善路 | 臺北市道安會報, 2026-06 | 1.24 (251) | 1.24 (214) |
+| 華翠大橋 | 聯合報, 2026-01-20 | 1.28 (192) | 1.12 (368) |
+| 民權東路六段 | 內科, Entropy Clinic | 1.23 (255) | 1.19 (252) |
+| 重陽橋 | 自由時報, 2026-10-15 | 1.18 (304) | 1.14 (305) |
 | 艋舺大道 | 聯合報, 2026-01-20 | 1.56 (91) | 1.19 (250) |
 | 台北橋 | 自由時報, 2026-10-15 | Not found | Not found |
 
