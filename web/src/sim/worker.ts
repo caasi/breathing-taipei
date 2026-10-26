@@ -132,10 +132,10 @@ let stepWithTraffic = stepper(JAM_MINUTES, world => takeTrafficNow(world))
 const takeTrafficNow = (world: World) => {
   if (!use || !grid || !live) return
   const onRoad: number[] = []
-  const cells = takeTraffic(world, use, load, live, (i, e) => onRoad.push(i, e)), next = levels(load, grid, cells, new Uint8Array(load.length))
+  const buckets = takeTraffic(world, use, load, live, (i, e) => onRoad.push(i, e)), next = levels(load, grid, buckets, new Uint8Array(load.length))
   // The jam events need the traffic with the layer off too; the page gets the levels only while it shows them.
   const changed = next.some((v, e) => v !== jam[e])
-  jam = next; lastCells = cellMax(grid, cells)
+  jam = next; lastCells = cellMax(grid, buckets)
   if (trafficOn && changed) { extra.traffic = next; extra.cells = lastCells }
   const stuck: number[] = []
   for (let k = 0; k < onRoad.length; k += 2) if (next[onRoad[k + 1]] >= JAM_FROM) stuck.push(k)

@@ -247,7 +247,7 @@ export const take = (w: World, use: RoadUse, load: Float32Array, live: Live, onR
  * Per edge: 0 for an edge with no traveller, else 1 + the level of its bucket (levelsOf) on 1 to 255. The map draws
  * the flow only on roads in use, and the colour follows those roads and not the square of the cell.
  */
-export const levels = (load: ArrayLike<number>, grid: Grid, cells: Uint8Array, out: Uint8Array) => {
-  for (let e = 0; e < out.length; e++) out[e] = load[e] > 0 ? 1 + Math.round(cells[grid.cellOf[e]] * 254 / 255) : 0
+export const levels = (load: ArrayLike<number>, grid: Grid, buckets: Uint8Array, out: Uint8Array) => {
+  for (let e = 0; e < out.length; e++) out[e] = load[e] > 0 ? 1 + Math.round(buckets[grid.cellOf[e]] * 254 / 255) : 0
   return out
 }
