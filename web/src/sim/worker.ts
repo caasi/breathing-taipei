@@ -9,7 +9,7 @@ import { cityFrom, MODES } from './city.ts'
 import { networks, readRoutes, roadNode, tripPaths, type Batch, type Routes } from './paths.ts'
 import type { GraphJson } from './route.ts'
 import { workNodes } from './jobs.ts'
-import { gridOf, levels, liveOf, roadUse, stepper, take as takeTraffic, type Grid, type Live, type RoadUse } from './traffic.ts'
+import { cellMax, gridOf, levels, liveOf, roadUse, stepper, take as takeTraffic, type Grid, type Live, type RoadUse } from './traffic.ts'
 
 export type Level = 'district' | 'village'
 export type ToWorker =
@@ -34,8 +34,8 @@ export type FromWorker = {
   minute: number; day: number; counts: Uint32Array; road: Uint32Array; away: number; ms: number
   events?: SimEvent[] // personal events of plans made since the last message
   traffic?: Uint8Array // per road edge: 0 no traveller, 1 (free) to 255 (slowest) (traffic.ts levels); sent when it changes
-  cells?: Uint8Array // per cell of the traffic, in the order of cellKeys, sent with traffic
-  cellKeys?: Int32Array // the key of each bucket (traffic.ts gridOf; -1 for a named road), sent once a run
+  cells?: Uint8Array // per cell of the traffic, the level of its slowest bucket, in the order of cellKeys, sent with traffic
+  cellKeys?: Int32Array // the key of each cell of the traffic (traffic.ts gridOf keys), sent once a run
   clock: number; at: number // the clock (pace.ts) shows minute `clock` at `at` (performance.timeOrigin + performance.now())
   since: number // the `at` of the change of speed that the clock uses; the page takes the clock only from its latest change
 }
@@ -135,8 +135,8 @@ const takeTrafficNow = (world: World) => {
   const cells = takeTraffic(world, use, load, live, (i, e) => onRoad.push(i, e)), next = levels(load, grid, cells, new Uint8Array(load.length))
   // The jam events need the traffic with the layer off too; the page gets the levels only while it shows them.
   const changed = next.some((v, e) => v !== jam[e])
-  jam = next; lastCells = cells
-  if (trafficOn && changed) { extra.traffic = next; extra.cells = cells }
+  jam = next; lastCells = cellMax(grid, cells)
+  if (trafficOn && changed) { extra.traffic = next; extra.cells = lastCells }
   const stuck: number[] = []
   for (let k = 0; k < onRoad.length; k += 2) if (next[onRoad[k + 1]] >= JAM_FROM) stuck.push(k)
   onLate?.()

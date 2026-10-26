@@ -5,7 +5,7 @@ import { init, now, type City } from './core.ts'
 import { cityFrom } from './city.ts'
 import { networks } from './paths.ts'
 import { workNodes } from './jobs.ts'
-import { extraTime, gridOf, levels, stepper } from './traffic.ts'
+import { cellKey, cellMax, extraTime, gridOf, levels, stepper } from './traffic.ts'
 import type { GraphJson } from './route.ts'
 
 const pub = (f: string) => JSON.parse(readFileSync(new URL(`../../public/${f}`, import.meta.url), 'utf8'))
@@ -26,16 +26,27 @@ test('the stepper takes each boundary once, at the same times for any steps', ()
   }))
 })
 
+test('the two carriageways of a one-way road are apart, and a two-way road is one bucket', () => {
+  // A cell with one named road: a carriageway each way (edges 0 and 1, one-way) and a two-way street (edges 2 and 3).
+  const road: GraphJson = { lon: [121.5001, 121.5021, 121.5001, 121.5021], lat: [25.0001, 25.0001, 25.0002, 25.0002],
+    edges: [[0, 1, 200, [], 1, 1], [1, 0, 200, [], 1, 1], [2, 3, 200, []], [3, 2, 200, []]] }
+  const grid = gridOf(road, [0, 0, 1, 1])
+  expect(grid.cellOf[0]).not.toBe(grid.cellOf[1])
+  expect(grid.cellOf[2]).toBe(grid.cellOf[3])
+})
+
 test('every bucket has the lanes of its class, also a named road (real data)', () => {
   const road: GraphJson = pub('road-graph.json'), grid = gridOf(road, pub('road-names.json').edge)
   road.edges.forEach(([, , , , cls = 0], e) => expect(grid.lanes[grid.cellOf[e]]).toBe([1, 3, 2, 0.5][cls]))
 })
 
-test('every bucket key a dot can read is unique, and a named road counts at most the width of a cell', () => {
+test('each cell key a dot can read is unique and holds the slowest bucket of its cell, and a named road counts at most the width of a cell', () => {
   const road: GraphJson = pub('road-graph.json'), names = pub('road-names.json'), grid = gridOf(road, names.edge)
-  const keys = Array.from(grid.keys).filter(k => k >= 0)
-  expect(new Set(keys).size).toBe(keys.length)
-  grid.keys.forEach((k, b) => { if (k < 0) expect(grid.km[b]).toBeLessThanOrEqual(0.55) })
+  expect(new Set(grid.keys).size).toBe(grid.keys.length)
+  const buckets = Uint8Array.from(grid.km, (_, b) => (b * 37) % 256), max = cellMax(grid, buckets)
+  buckets.forEach((v, b) => expect(max[grid.cellIn[b]]).toBeGreaterThanOrEqual(v))
+  road.edges.forEach(([a, b], e) => expect(grid.keys[grid.cellIn[grid.cellOf[e]]]).toBe(cellKey((road.lon[a] + road.lon[b]) / 2, (road.lat[a] + road.lat[b]) / 2)))
+  road.edges.forEach((_, e) => { if (names.edge[e] >= 0) expect(grid.km[grid.cellOf[e]]).toBeLessThanOrEqual(0.55) })
 })
 
 test('a level is 0 on an edge with no traveller, else 1 to 255, and the travel time is at most 4 times the free time', () => {

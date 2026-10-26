@@ -114,30 +114,35 @@ export const loadNow = (w: World, use: RoadUse, out: Float32Array, onRoad?: (age
 const LANES = [1, 3, 2, 0.5]
 
 /**
- * A bucket is one named road (road-names.json), or the roads with no name, of one class in one cell: the bucket of each
- * edge, and the km and lanes of each bucket. A named road on its own keeps a main road from being thinned out by the
+ * A bucket is one named road (road-names.json), or the roads with no name, of one class in one cell, and for a one-way
+ * edge one of the two headings, so that the two carriageways of a road are apart: the bucket of each edge, and the km
+ * and lanes of each bucket. A named road on its own keeps a main road from being thinned out by the
  * small streets of its cell (瑞光路 had 10 to 210 people at 09:00 against 4 to 12 km of streets in its cells).
+ * keys: the key of each cell that holds a bucket (cellKey), and cellIn: the index in keys of the cell of each bucket.
  */
-export type Grid = { cellOf: Int32Array; km: Float64Array; lanes: Float64Array; keys: Int32Array }
-/**
- * The key of the cell that holds a point. The key of a bucket of roads with no name is 4 x the key of its cell + its
- * class, which is unique; a bucket of a named road has the key -1, as a dot (Travellers.tsx) cannot tell its road.
- */
+export type Grid = { cellOf: Int32Array; km: Float64Array; lanes: Float64Array; keys: Int32Array; cellIn: Int32Array }
+/** The key of the cell that holds a point. */
 // From 121°E and 24°N, so that 4 times the key fits in an Int32Array.
 export const cellKey = (lon: number, lat: number) => Math.floor((lon - 121) / CELL) * 10_000 + Math.floor((lat - 24) / CELL)
 export const gridOf = (road: GraphJson, name: ArrayLike<number> = []): Grid => {
-  const ids = new Map<string, number>(), key: number[] = [], lanes: number[] = []
-  const cellOf = Int32Array.from(road.edges, ([a, b, , , cls = 0], e) => {
-    const k = 4 * cellKey((road.lon[a] + road.lon[b]) / 2, (road.lat[a] + road.lat[b]) / 2) + cls, id = `${k}:${name[e] ?? -1}`
-    if (!ids.has(id)) { ids.set(id, ids.size); key.push((name[e] ?? -1) < 0 ? k : -1); lanes.push(LANES[cls]) }
+  const ids = new Map<string, number>(), cells = new Map<number, number>(), cellIn: number[] = [], lanes: number[] = []
+  const cellOf = Int32Array.from(road.edges, ([a, b, , , cls = 0, one], e) => {
+    // A heading in [-45°, 135°) or the other half, from the first node to the second.
+    const heading = one ? (Math.atan2(road.lat[b] - road.lat[a], road.lon[b] - road.lon[a]) + Math.PI / 4 + 2 * Math.PI) % (2 * Math.PI) < Math.PI ? ':+' : ':-' : ''
+    const c = cellKey((road.lon[a] + road.lon[b]) / 2, (road.lat[a] + road.lat[b]) / 2), id = `${4 * c + cls}:${name[e] ?? -1}${heading}`
+    if (!ids.has(id)) {
+      ids.set(id, ids.size); lanes.push(LANES[cls])
+      if (!cells.has(c)) cells.set(c, cells.size)
+      cellIn.push(cells.get(c)!)
+    }
     return ids.get(id)!
   })
-  const km = new Float64Array(ids.size), keys = Int32Array.from(key)
+  const km = new Float64Array(ids.size)
   road.edges.forEach(([, , m], e) => (km[cellOf[e]] += m / 1000))
   // ponytail: a named road counts at most the width of a cell (ACROSS km). Its edges in one cell can add up to much more,
   // from the shapes of many bus routes and from small roads near it that took its name (瑞光路: 7.9 km in one cell).
-  if (name.length) ids.forEach((b, id) => { if (!id.endsWith(':-1')) km[b] = Math.min(km[b], ACROSS) })
-  return { cellOf, km, lanes: Float64Array.from(lanes), keys }
+  if (name.length) ids.forEach((b, id) => { if (!/:-1(:[+-])?$/.test(id)) km[b] = Math.min(km[b], ACROSS) })
+  return { cellOf, km, lanes: Float64Array.from(lanes), keys: Int32Array.from(cells.keys()), cellIn: Int32Array.from(cellIn) }
 }
 
 /** People on the road of each bucket. */
@@ -158,6 +163,17 @@ export const extraTime = (people: number, km: number, capacity = CAPACITY) => Ma
 /** Per bucket, the travel time over free time. */
 export const slowness = (load: ArrayLike<number>, grid: Grid, capacity = CAPACITY) =>
   Float64Array.from(cellLoad(load, grid), (p, c) => 1 + extraTime(p, grid.km[c], capacity * grid.lanes[c]))
+
+/**
+ * Per cell of grid.keys, the level of its slowest bucket: what a dot in the cell shows (Travellers.tsx). ponytail: a dot
+ * cannot tell its road, so a dot on a side street of a jammed main road shows the jam; most road travellers of a cell
+ * are on its main roads.
+ */
+export const cellMax = (grid: Grid, buckets: Uint8Array) => {
+  const out = new Uint8Array(grid.keys.length)
+  buckets.forEach((v, b) => { if (v > out[grid.cellIn[b]]) out[grid.cellIn[b]] = v })
+  return out
+}
 
 /** Per bucket, 0 (free) to 255 (SLOWEST or slower). */
 export const cellLevels = (load: ArrayLike<number>, grid: Grid, capacity = CAPACITY) =>
