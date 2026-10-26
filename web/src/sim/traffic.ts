@@ -1,4 +1,4 @@
-import { where, now, ROAD, PLAY, type World } from './core.ts'
+import { where, now, ROAD, PLAY, GONE, type World } from './core.ts'
 import { ROAD_MODES } from './paths.ts'
 import type { GraphJson } from './route.ts'
 
@@ -37,7 +37,8 @@ export const loadNow = (w: World, use: RoadUse, out: Float32Array, onRoad?: (age
   const t = now(w)
   for (let j = 0; j < w.movers.length; j++) {
     const i = w.movers[j]
-    if (where(w, i, t) !== ROAD) continue
+    // A trip out of the two cities has no path on the map (its plan goes from home to home).
+    if (w.dest[i] === GONE || where(w, i, t) !== ROAD) continue
     const es = w.dest[i] === PLAY ? use.play[j] : use.work[j]
     if (!es) continue
     const out1 = t < w.dep[i] + w.dur1[i], p = out1 ? (t - w.dep[i]) / w.dur1[i] : 1 - (t - w.ret[i]) / w.dur2[i]
