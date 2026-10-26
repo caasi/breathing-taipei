@@ -1,0 +1,85 @@
+import { where, now, ROAD, PLAY, type World } from './core.ts'
+import { ROAD_MODES } from './paths.ts'
+import type { GraphJson } from './route.ts'
+
+// BPR (Bureau of Public Roads, 1964): time on a road = free time x (1 + ALPHA (volume / capacity)^BETA).
+const ALPHA = 0.15, BETA = 4
+// ponytail: one capacity for every cell, in people per km of road, fitted so that the morning peak of 台北市 has the
+// TomTom congestion level (scripts/traffic.ts, DATA.md "Figures in the code"). Real roads differ in lanes.
+export const CAPACITY = 37
+// ponytail: the road load is taken over cells of CELL degrees (about 1 km) and the people per km of road in a cell stand
+// in for the flow of BPR. Every trip takes one shortest path, so per edge only a few edges carried any load, with a
+// travel time up to 25 times the free time; a cell spreads it over the roads nearby. Use flows per hour on each edge
+// when trips get more than one path and edges get capacities of their own.
+const CELL = 0.01
+// Free speed / speed at which an edge shows orange, red and dark red, as on a map app; chosen by eye.
+const SLOWER = [1 / 0.7, 1 / 0.5, 1 / 0.3]
+
+/** The road path of each mover (by its index in w.movers) to work and to its day-off place, with cumulative metres. */
+export type RoadUse = { work: (Uint16Array | undefined)[]; play: (Uint16Array | undefined)[]; cum: Map<Uint16Array, Float32Array> }
+
+/** pathOf gives the edges from one node to another, or undefined when there is no road path (same road node, no route). */
+export const roadUse = (w: World, pathOf: (from: number, to: number) => Uint16Array | undefined, metres: ArrayLike<number>): RoadUse => {
+  const cum = new Map<Uint16Array, Float32Array>()
+  const path = (from: number, to: number, mode: number) => {
+    const es = ROAD_MODES.has(mode) ? pathOf(from, to) : undefined
+    if (es && !cum.has(es)) { const c = new Float32Array(es.length); let s = 0; es.forEach((e, j) => (c[j] = s += metres[e])); cum.set(es, c) }
+    return es
+  }
+  const work = Array.from(w.movers, i => path(w.home[i], w.work[i], w.mode[i]))
+  const play = Array.from(w.movers, i => path(w.home[i], w.play[i], w.playMode[i]))
+  return { work, play, cum }
+}
+
+/** Real people on each edge now: each road traveller is on the edge at its share of the trip. */
+export const loadNow = (w: World, use: RoadUse, out: Float32Array) => {
+  out.fill(0)
+  const t = now(w)
+  for (let j = 0; j < w.movers.length; j++) {
+    const i = w.movers[j]
+    if (where(w, i, t) !== ROAD) continue
+    const es = w.dest[i] === PLAY ? use.play[j] : use.work[j]
+    if (!es) continue
+    const out1 = t < w.dep[i] + w.dur1[i], p = out1 ? (t - w.dep[i]) / w.dur1[i] : 1 - (t - w.ret[i]) / w.dur2[i]
+    const c = use.cum.get(es)!, d = p * c[c.length - 1]
+    let lo = 0, hi = c.length - 1
+    while (lo < hi) { const m = (lo + hi) >> 1; if (c[m] < d) lo = m + 1; else hi = m }
+    out[es[lo]] += w.city.perAgent
+  }
+  return out
+}
+
+/** The cell of each edge (by the middle of its ends) and the km of road in each cell. */
+export type Grid = { cellOf: Int32Array; km: Float64Array }
+export const gridOf = (road: GraphJson): Grid => {
+  const ids = new Map<string, number>()
+  const cellOf = Int32Array.from(road.edges, ([a, b]) => {
+    const k = `${Math.floor((road.lon[a] + road.lon[b]) / 2 / CELL)},${Math.floor((road.lat[a] + road.lat[b]) / 2 / CELL)}`
+    return ids.get(k) ?? ids.set(k, ids.size).get(k)!
+  })
+  const km = new Float64Array(ids.size)
+  road.edges.forEach(([, , m], e) => (km[cellOf[e]] += m / 1000))
+  return { cellOf, km }
+}
+
+/** People on the road of each cell. */
+export const cellLoad = (load: ArrayLike<number>, grid: Grid) => {
+  const out = new Float64Array(grid.km.length)
+  for (let e = 0; e < load.length; e++) out[grid.cellOf[e]] += load[e]
+  return out
+}
+
+/** Extra time over free flow, as a share of the free time, for `people` on `km` of road. */
+export const extraTime = (people: number, km: number, capacity = CAPACITY) => ALPHA * (people / km / capacity) ** BETA
+
+/** 0 (free or light), 1 (orange), 2 (red) or 3 (dark red) per edge: the level of its cell, on an edge that has load. */
+export const levels = (load: ArrayLike<number>, grid: Grid, out: Uint8Array, capacity = CAPACITY) => {
+  const cells = cellLoad(load, grid), level = new Uint8Array(cells.length)
+  cells.forEach((p, c) => {
+    const slower = 1 + extraTime(p, grid.km[c], capacity)
+    while (level[c] < SLOWER.length && slower >= SLOWER[level[c]]) level[c]++
+  })
+  // An edge with no traveller stays clear, so the colour follows the roads in use and not the square of the cell.
+  for (let e = 0; e < out.length; e++) out[e] = load[e] > 0 ? level[grid.cellOf[e]] : 0
+  return out
+}

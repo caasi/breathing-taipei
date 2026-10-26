@@ -112,6 +112,21 @@ Note: The data.gov.tw entry for the Taipei shape file was not found. The license
 - The night-time groups (`SHIFTS`, `VISITS`) make the same trips on every day.
 - A commuter who is away for the day leaves and comes back at the hours of the day-off trips inside its home district. No source gives the hours of trips out of the two cities.
 
+`web/src/sim/traffic.ts` (the traffic layer) uses these figures and guesses:
+
+- The travel time on a road comes from the BPR function (Bureau of Public Roads): free time x (1 + 0.15 (volume / capacity)^4). The values 0.15 and 4 are the usual defaults. They are the same for every road.
+- The source of 0.15 and 4 is not confirmed. Only secondary sources were found (searched on 2026-10-26), and they do not agree:
+  - Most sources give the year 1964 and the *Traffic Assignment Manual* of the Bureau of Public Roads. The manual itself was not found.
+  - A report of the U.S. Department of Transportation says that the Bureau fitted a polynomial to the speed-flow curves of freeways in the *Highway Capacity Manual* of 1965 (https://rosap.ntl.bts.gov/view/dot/40540/dot_40540_DS1.pdf). This does not agree with the year 1964.
+  - One source says that the Bureau used road surveys and regression. It does not say how the two values were chosen.
+  - With 0.15, the travel time at capacity is 1.15 times the free time (a speed of about 87% of the free speed). So 0.15 can be a value that was set, not a value that was fitted.
+  - To confirm the source, read the *Traffic Assignment Manual* (1964), or the reviews by Sheffi or Branston that cite it.
+- Later work changed the curve: the *Highway Capacity Manual* of 1994 made the speed-flow curve flatter, and one source gives 0.05 and 10 for urban trunk roads (MDPI Applied Sciences 13(24):13318).
+- `CAPACITY`, 37 people per km of road in a cell: fitted by `scripts/traffic.ts`. On the workday 2026-10-27 (seed 42, 10 people per agent, village level), the extra travel time of the people on the roads of the cells of 台北市, from 07:00 to 09:45, is 64.6%. This is the morning congestion level of 台北市 in the TomTom Traffic Index 2025 (https://www.tomtom.com/traffic-index/city/taipei/, read on 2026-10-26). It is a scale factor, not a physical capacity: the road graph has only the shapes of bus routes, and the load holds only the agents of the model.
+- With this capacity, the evening level (17:00 to 19:45) is 10.9%. TomTom gives 92% for the evening. The model has fewer people on the road in the evening than in the morning, and it has no trips such as school runs or shopping.
+- The cell of the road load (`CELL`, 0.01 degrees, about 1 km): a guess. Each trip takes one shortest path, so on single edges only about 3,000 of the 29,404 edges had any load, and a few of them showed 14 to 25 times the free time (measured on 2026-10-26). The people per km of road in a cell stand in for the flow of BPR.
+- The levels on the map (orange, red, dark red at 1/0.7, 1/0.5 and 1/0.3 times the free time) are chosen by eye.
+
 ## Processing
 
 - `od2.json`: Built by `scripts/od.py` from source A, with the exit positions of source B, the district boundaries of source F, and the days off of source K. Each station goes to the district that holds the mean position of its exits. Each day of the month is a workday (20 days in September 2026), a Saturday off with no holiday (4 days), or a Sunday or holiday (6 days: the Sundays, 中秋 on 9/25 and 教師節 on 9/28). A Saturday that is a holiday (2027-02-06, 春節) counts as a holiday; September 2026 has none, so `od2.json` is the same either way. Trips are added up per district and divided by the number of days of that kind. Until 2026-10-24 the file had only the workday, and it counted 9/25 and 9/28 as workdays (the mean of all 22 Monday-to-Friday days).

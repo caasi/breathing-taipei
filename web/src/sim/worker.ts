@@ -6,7 +6,9 @@ import { evenPick, type SimEvent } from './events.ts'
 import { mulberry32 } from './rng.ts'
 import { FPS, clockAt, respeed, stepsTo, type Clock } from './pace.ts'
 import { cityFrom, MODES } from './city.ts'
-import { networks, readRoutes, tripPaths, type Batch, type Routes } from './paths.ts'
+import { networks, readRoutes, roadNode, routeKey, tripPaths, type Batch, type Routes } from './paths.ts'
+import type { GraphJson } from './route.ts'
+import { gridOf, levels, loadNow, roadUse, type Grid, type RoadUse } from './traffic.ts'
 
 export type Level = 'district' | 'village'
 export type ToWorker =
@@ -29,6 +31,7 @@ export type FromWorker = {
   start?: number; nodes?: string[]; homes?: Uint32Array; coords?: [number, number][]; trips?: Trips; replans?: Replans; paths?: Batch[]; routed?: number
   minute: number; day: number; counts: Uint32Array; road: Uint32Array; away: number; ms: number
   events?: SimEvent[] // personal events of plans made since the last message
+  traffic?: Uint8Array // per road edge: 0 free, 1 orange, 2 red, 3 dark red (traffic.ts); sent when it changes
   clock: number; at: number // the clock (pace.ts) shows minute `clock` at `at` (performance.timeOrigin + performance.now())
   since: number // the `at` of the change of speed that the clock uses; the page takes the clock only from its latest change
 }
@@ -43,13 +46,17 @@ let every = 20
 let hoursPerSec = 0, lastHours = 0 // lastHours: the last speed that was not a pause
 const clock: Clock = { minute: 0, at: performance.now(), perMs: 0 }
 let since = 0, owed = false // owed: the page has no frame yet with the clock of the latest change of speed
-let extra: Pick<FromWorker, 'start' | 'nodes' | 'homes' | 'coords' | 'trips' | 'replans'> = {}
+let extra: Pick<FromWorker, 'start' | 'nodes' | 'homes' | 'coords' | 'trips' | 'replans' | 'traffic'> = {}
 let pending: Generator<Batch> | undefined
 let newEvents: SimEvent[] = []
 let eventId = 0
 let routed = 0
 let idx = new Uint32Array(0) // agent of each sampled trip
 let sentDep = new Int32Array(0) // departure last sent for each sampled trip; a new plan always changes it
+let use: RoadUse | undefined, grid: Grid | undefined, load = new Float32Array(0), jam = new Uint8Array(0)
+let jamSlot = -1, jamAt = -Infinity
+// The traffic is taken once per 15 simulated minutes and at most every 250 ms: one take costs 7 to 15 ms on a desktop.
+const JAM_MINUTES = 15, JAM_MS = 250
 const data = Promise.all(['od2.json', 'villages2.json', 'signal.json', 'road-graph.json', 'mrt-graph.json', 'night.json', 'calendar.json', 'people.json'].map(getJson))
 const net = data.then(([, , , road, mrt]) => networks(road, mrt))
 // Made by `pnpm routes` before dev and build; without it (or for another road graph) the worker routes every road trip itself.
@@ -120,6 +127,12 @@ const frame = () => {
     if (b.done) { pending = undefined; break }
     paths.push(b.value); routed += b.value.ks.length
   }
+  const slot = Math.floor((w.day * 1440 + w.minute) / JAM_MINUTES)
+  if (use && grid && slot !== jamSlot && performance.now() - jamAt >= JAM_MS) {
+    jamSlot = slot; jamAt = performance.now()
+    const next = levels(loadNow(w, use, load), grid, new Uint8Array(load.length))
+    if (next.some((v, e) => v !== jam[e])) { jam = next; extra.traffic = next }
+  }
   const msg: FromWorker = { ...extra, paths, routed, minute: w.minute, day: w.day, counts: c.nodes, road: c.road, away: c.away, ms, events: newEvents, clock: clock.minute, at: performance.timeOrigin + t, since }
   newEvents = []
   owed = false
@@ -139,6 +152,17 @@ const draw = (world: World, graphs: Awaited<typeof net>) => {
   routes.then(known => { if (thisDraw === drawn) pending = bothPaths(trips, coords, graphs, known) }, () => {})
   return trips
 }
+// Every road traveller of the run, on the paths of the routes file. Without the file there is no traffic.
+const traffic = (world: World, graphs: Awaited<typeof net>, roadJson: GraphJson) => {
+  use = undefined; jamSlot = -1; jam = new Uint8Array(0)
+  routes.then(known => {
+    if (!known || world !== w) return
+    const node = new Map<number, number>(), at = (v: number) => node.get(v) ?? node.set(v, roadNode(graphs, coords, v)).get(v)!
+    const metres = Float32Array.from(roadJson.edges, e => e[2])
+    load = new Float32Array(metres.length); grid = gridOf(roadJson)
+    use = roadUse(world, (a, b) => known.get(routeKey(at(a), at(b))), metres)
+  }, () => {})
+}
 onmessage = async (e: MessageEvent<ToWorker>) => {
   const m = e.data
   if (m.type === 'speed') {
@@ -157,7 +181,7 @@ onmessage = async (e: MessageEvent<ToWorker>) => {
   // Any failure while starting (loading, building the city, sampling) goes to the page.
   // The async handler would otherwise reject without a message, and onerror does not see a rejection.
   try {
-    const [[od2, villages, signal, , , night, cal, people], graphs] = await Promise.all([data, net])
+    const [[od2, villages, signal, roadJson, , night, cal, people], graphs] = await Promise.all([data, net])
     const c = cityFrom({ ...od2, villages, signal, night }, m.perAgent, m.level, day => kindAt(cal as Calendar, m.startDay + day))
     w = init(c.city, m.seed)
     const world = w, districtOf = Array.from(w.home, h => (m.level === 'village' ? villages[h].town : c.nodes[h]))
@@ -186,6 +210,7 @@ onmessage = async (e: MessageEvent<ToWorker>) => {
     // The plans under way at day 0 were made during init, which calls no onPlan: pass them through the same filter.
     for (const i of w.movers) w.onPlan(i)
     coords = c.coords
+    traffic(w, graphs, roadJson)
     extra = { start: m.start, nodes: c.nodes, homes: Uint32Array.from(c.city.homes), coords: c.coords, trips: draw(w, graphs) }
   } catch (err) {
     w = undefined

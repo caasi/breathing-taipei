@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { HeatMap, Land, Outline, SEA, projectionFor, taipeiIn, type Transit } from './ui/HeatMap.tsx'
 import { Travellers, MODE_COLOURS, addBatches, type Track } from './ui/Travellers.tsx'
+import type { GraphJson } from './sim/route.ts'
 import { MODES } from './sim/city.ts'
 import type { FromWorker, WorkerError, ToWorker, Level, Trips } from './sim/worker.ts'
 import { getJson } from './load.ts'
@@ -16,7 +17,7 @@ import { hhmm, H2 } from './ui/format.ts'
 
 const SPEEDS = [0, 1, 2, 4, 8]
 const EVERY = [2, 5, 10, 20, 50]
-const LAYERS: [string, string][] = [['mrt', '捷運'], ['lrt', '輕軌'], ['tra', '台鐵'], ['hsr', '高鐵'], ['airport', '機場'], ['highway', '國道與快速道路']]
+const LAYERS: [string, string][] = [['traffic', '路況'], ['mrt', '捷運'], ['lrt', '輕軌'], ['tra', '台鐵'], ['hsr', '高鐵'], ['airport', '機場'], ['highway', '國道與快速道路']]
 const PER_AGENT = 10
 // Plans are made ahead of their departure, so the newest events are not all shown yet: keep more than the list shows.
 const KEEP_EVENTS = 3 * MAX_EVENTS
@@ -57,6 +58,8 @@ export function App() {
   const [towns, setTowns] = useState<any>()
   const [villages, setVillages] = useState<any>()
   const [transit, setTransit] = useState<Transit>()
+  const [roads, setRoads] = useState<GraphJson>()
+  const [traffic, setTraffic] = useState<Uint8Array>()
   const [cal, setCal] = useState<Calendar>()
   // Day 0 of the run is the day the page opens, in Taiwan.
   const startDay = useMemo(() => cal && indexOf(cal, todayInTaipei()), [cal])
@@ -117,6 +120,8 @@ export function App() {
     getJson('calendar.json').then(setCal).catch(err => setLoadError(String(err)))
     getJson('villages2-topo.json').then(setVillages).catch(err => setLoadError(String(err)))
     getJson('transit.json').then(setTransit).catch(err => setLoadError(String(err)))
+    // The worker loads the same file, so it is usually in the cache. Without it, only the traffic is missing.
+    getJson('road-graph.json').then(setRoads).catch(() => {})
     // Residents by town for the labels of the outline; the worker loads the same file, so it is usually in the cache.
     getJson('villages2.json').then((vs: { town: string; pop: number }[]) => {
       const m = new Map<string, number>()
@@ -136,6 +141,7 @@ export function App() {
       // these values, not the message.
       const fresh = m.coords !== undefined, events = m.events, entry = { t: m.day * 1440 + m.minute, counts: m.counts }
       if (m.homes) setHomes(m.homes)
+      if (fresh || m.traffic) setTraffic(m.traffic)
       if (m.trips) { dotRuns.current.set(++lastDots.current, { trips: m.trips, tracks: { current: [] }, run: shown.current }); setTripsId(lastDots.current); unplaced.current = [] }
       if (fresh || events?.length) setPersonal(p => [...(fresh ? [] : p), ...(events ?? [])].slice(-KEEP_EVENTS))
       setHistory(h => record(fresh ? [] : h, entry, KEEP))
@@ -322,7 +328,7 @@ export function App() {
       {!faded && towns && projection && <Outline towns={towns} proj={projection} view={view} pop={pop} />}
       <div className="reveal" style={{ position: 'absolute', inset: 0, opacity: revealed ? 1 : 0, filter: revealed ? 'none' : 'blur(8px)' }}>
       {ready && <>
-        <HeatMap towns={towns} villages={villages} level={onScreen?.level ?? level} nodes={nodes} counts={s.counts} perAgent={PER_AGENT} proj={projection} transit={transit} show={show} rate={rate} speed={speed} view={view} />
+        <HeatMap towns={towns} villages={villages} level={onScreen?.level ?? level} nodes={nodes} counts={s.counts} perAgent={PER_AGENT} proj={projection} transit={transit} show={show} rate={rate} road={roads} traffic={traffic} speed={speed} view={view} />
         {dots && dotTrips && <Travellers tracks={dotRun!.tracks} trips={dotTrips} clock={clock} onFps={setFps} byMode={byMode} view={view} />}
       </>}
       </div>
