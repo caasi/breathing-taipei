@@ -77,3 +77,8 @@ for (let k = 0; k < 16 && Math.abs(got.morning - MORNING.level) > 0.005; k++) {
 }
 console.log(`capacity ${capacity.toFixed(1)} PCU per km of street (CAPACITY is ${CAPACITY})`)
 console.log(`with it: morning ${(100 * got.morning).toFixed(1)}% (TomTom ${(100 * MORNING.level).toFixed(1)}%), evening ${(100 * got.evening).toFixed(1)}% (TomTom ${(100 * EVENING.level).toFixed(1)}%)`)
+// The capacity is searched within CAPACITY / 4 to CAPACITY x 4; a level out of reach there is a miss, not a fit.
+if (Math.abs(got.morning - MORNING.level) > 0.005) {
+  console.error(`the morning level is not within 0.5 points of TomTom: do not use this capacity`)
+  process.exitCode = 1
+}
