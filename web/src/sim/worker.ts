@@ -62,7 +62,7 @@ let sentDep = new Int32Array(0), sentDur1 = new Uint16Array(0), sentDur2 = new U
 let use: RoadUse | undefined, grid: Grid | undefined, live: Live | undefined, load = new Float32Array(0), jam = new Uint8Array(0)
 let trafficOn = false, lastCells = new Uint8Array(0), jamRng = mulberry32(0)
 // ponytail: the traffic is taken at each boundary of 15 simulated minutes (a guess; scripts/traffic.ts fits with the
-// same step), whatever the speed, so a seed gives the same run at any speed. One take costs 7 to 26 ms at the morning peak in Node on an i7-7700 (2026-10-27), so at 8x (32 takes a second) it is the main cost.
+// same step), whatever the speed, so a seed gives the same run at any speed, from the take after the routes file has loaded. One take costs 7 to 26 ms at the morning peak in Node on an i7-7700 (2026-10-27), so at 8x (32 takes a second) it is the main cost.
 const JAM_MINUTES = 15
 // A jam event comes from a road traveller on an edge at least this slow (traffic.ts levels: 1 + 254 x the colour level
 // of levelsOf; red from 0.43, 2 times the free time; angry from 0.75, 2.75 times). ponytail: at most one jam event a take, and one a day for each character; by eye.
@@ -254,17 +254,19 @@ onmessage = async (e: MessageEvent<ToWorker>) => {
         dest, mode: play ? world.playMode[i] : world.mode[i], group }
       newEvents.push({ ...e, id: `a${++eventId}` })
       // A shown trip also shows its way home, so the stream follows one character through the day.
-      if (dest === WORK || play) { const b = { ...e, id: `a${++eventId}`, t: world.ret[i], back: true }; newEvents.push(b); backs.set(i, b) }
+      if (dest === WORK || play) { const b = { ...e, id: `a${++eventId}`, t: world.ret[i], back: true }; newEvents.push(b); backs.set(i, b); planned.set(i, b.t) }
     }
     // A jam on the way can make a character reach work after its usual leaving time, so it leaves later (core.ts
     // stretch). The way home is sent again with the same id, the new time, how late, and the temper of the character.
-    const backs = new Map<number, Extract<SimEvent, { kind: 'personal' }>>()
+    // planned: the leaving time of the plan with no jam, which can already be past the drawn time (core.ts trip).
+    const backs = new Map<number, Extract<SimEvent, { kind: 'personal' }>>(), planned = new Map<number, number>()
     onLate = () => backs.forEach((b, i) => {
       // Once the character has left, a jam on the way home moves its start (core.ts stretch), not the leaving time.
       if (now(world) >= world.ret[i]) { backs.delete(i); return }
       if (world.ret[i] === b.t) return
-      // How late against the planned time; back to the plain way home when the jam eases in time.
-      const minutes = world.ret[i] - world.leave[i]
+      // How late the jam made it; back to the plain way home when the jam eases in time. ponytail: the temper splits the
+      // late at 0.55 into angry and blank, as the jam events do; by eye.
+      const minutes = world.ret[i] - planned.get(i)!
       const next = minutes > 0 ? { ...b, t: world.ret[i], late: minutes, mood: temperOf(i) < 0.55 ? 'angry' as const : 'blank' as const }
         : { ...b, t: world.ret[i], late: undefined, mood: undefined }
       newEvents.push(next); backs.set(i, next)

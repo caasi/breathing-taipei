@@ -62,7 +62,7 @@ export type World = {
   dep: Int32Array // minute (since 00:00 of day 0) the agent leaves home; before 0 for a night shift that started on day -1
   dur1: Uint16Array // minutes on the way to work
   ret: Int32Array // minute the agent leaves work
-  leave: Int32Array // minute the agent planned to leave work; ret is later only while a jam makes it arrive later
+  leave: Int32Array // minute the agent planned to leave work; ret is later when the trip arrives later (also with no jam)
   dur2: Uint16Array
   movers: Uint32Array // agents whose work node or day-off place differs from home; the others never leave
   stayers: Uint32Array // per node, agents who never leave
