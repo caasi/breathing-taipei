@@ -5,7 +5,7 @@ import { init, now, type City } from './core.ts'
 import { cityFrom } from './city.ts'
 import { networks } from './paths.ts'
 import { workNodes } from './jobs.ts'
-import { cellKey, cellMax, extraTime, gridOf, levels, slowerOn, stepper, type Live } from './traffic.ts'
+import { cellKey, cellMax, extraTime, MOST, gridOf, levels, slowerOn, stepper, type Live } from './traffic.ts'
 import type { GraphJson } from './route.ts'
 
 const pub = (f: string) => JSON.parse(readFileSync(new URL(`../../public/${f}`, import.meta.url), 'utf8'))
@@ -49,13 +49,17 @@ test('each cell key a dot can read is unique and holds the slowest bucket of its
   road.edges.forEach((_, e) => { if (names.edge[e] >= 0) expect(grid.km[grid.cellOf[e]]).toBeLessThanOrEqual(0.55) })
 })
 
-test('a level is 0 on an edge with no traveller, else 1 to 255, and the travel time is at most 4 times the free time', () => {
+test('a level is 0 on an edge with no traveller, else 1 to 255, and the travel time stays at most MOST times the free time and grows with the load', () => {
   fc.assert(fc.property(fc.array(fc.nat(500), { minLength: 1, maxLength: 30 }), loads => {
     const road: GraphJson = { lon: loads.map((_, i) => 121.5 + i * 0.01), lat: loads.map(() => 25), edges: loads.slice(1).map((_, i) => [i, i + 1, 200, []]) }
     const grid = gridOf(road), load = loads.slice(1), cells = Uint8Array.from(grid.km, () => 200)
     const out = levels(load, grid, cells, new Uint8Array(load.length))
     load.forEach((p, e) => (p > 0 ? expect(out[e]).toBeGreaterThanOrEqual(1) : expect(out[e]).toBe(0)))
-    for (const p of loads) expect(1 + extraTime(p * 1000, 0.1)).toBeLessThanOrEqual(4)
+    for (const p of loads) {
+      expect(1 + extraTime(p * 1000, 0.1)).toBeLessThanOrEqual(MOST)
+      // A larger load, where the bent curve is still not flat in floating point, is a slower road.
+      if (extraTime(p * 1000, 0.1) < MOST - 1.01) expect(extraTime(p * 1000 + 1, 0.1)).toBeGreaterThan(extraTime(p * 1000, 0.1))
+    }
   }))
 })
 

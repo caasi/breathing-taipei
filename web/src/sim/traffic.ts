@@ -7,7 +7,7 @@ import { freeTime, type GraphJson } from './route.ts'
 const ALPHA = 0.15, BETA = 4
 // ponytail: one capacity for every cell, in passenger car units (PCU) per km of road, fitted so that the morning peak of 台北市 has the
 // TomTom congestion level (scripts/traffic.ts, DATA.md "Figures in the code"). Real roads differ in lanes.
-export const CAPACITY = 72
+export const CAPACITY = 101
 // ponytail: the road load is taken over cells of CELL degrees (about 500 m) and the PCU per km of road in a cell stand
 // in for the flow of BPR. Every trip takes one shortest path, so per edge only a few edges carried any load, with a
 // travel time up to 25 times the free time; a cell spreads it over the roads nearby. Use flows per hour on each edge
@@ -169,13 +169,18 @@ export const cellLoad = (load: ArrayLike<number>, grid: Grid) => {
   return out
 }
 
-// ponytail: the most travel time over free time; a guess. BPR grows without limit past capacity, which it overstates
-// (DATA.md). Before the limit, a few ramps at 10 to 25 times the free time carried the bucket mean that the fit then
-// matched, and left the main streets free.
-const MOST = 4
+// ponytail: the travel time over free time that a road comes near but never reaches. BPR grows without limit past
+// capacity, which it overstates (DATA.md): 39 times at 4 times the capacity. 堤頂大道 from 民權東路 to 內湖路 took
+// about 6.4 times the free time of the model at the morning peak of 2002, and 3.9 times after a fix (DATA.md); a
+// bucket can be slower than the mean of a road. A guess from that one road.
+export const MOST = 8
 
-/** Extra time over free flow, as a share of the free time, for a load of `pcu` on `km` of road (at most MOST - 1). */
-export const extraTime = (pcu: number, km: number, capacity = CAPACITY) => Math.min(MOST - 1, ALPHA * (pcu / km / capacity) ** BETA)
+/**
+ * Extra time over free flow, as a share of the free time, for a load of `pcu` on `km` of road: BPR, bent smoothly
+ * under MOST - 1 (tanh), so it still grows with the load near the top and a smaller load always gives a faster road.
+ */
+export const extraTime = (pcu: number, km: number, capacity = CAPACITY) =>
+  (MOST - 1) * Math.tanh(ALPHA * (pcu / km / capacity) ** BETA / (MOST - 1))
 
 /** Per bucket, the travel time over free time. */
 export const slowness = (load: ArrayLike<number>, grid: Grid, capacity = CAPACITY) =>
