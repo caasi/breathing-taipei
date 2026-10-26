@@ -27,45 +27,45 @@ TomTom does not give the hours of its rush hours (KNOWN-ISSUES.md). The other so
 
 ## Spread of the slowness of the roads
 
-For a road section, the slowness at a peak is the median of its speed at night (01:00 to 04:59) over the median of its speed at the peak. It is the number of times longer a trip on that section takes. TDX gives it for 684 sections of 臺北市 over 6 weekdays of 2026-10 (DATA.md, source P). The model gives it for the named buckets of 台北市 in one day that have a traveller at the peak. So the two sets are not chosen the same way: TDX takes the sections with a detector, and the model the named roads in use.
+For a road section, the slowness at a peak is the median of its speed at night (01:00 to 04:59) over the median of its speed at the peak. It is the number of times longer a trip on that section takes. TDX gives it for 684 sections of 臺北市 over 6 weekdays of 2026-10 (DATA.md, source P). The model gives it for the named buckets of 台北市 in one day that have a traveller at one take of the peak or more; the median is over all the takes of the peak, a take with no traveller counting as free, as a detector gives a speed at every minute. So the two sets of roads are not chosen the same way: TDX takes the sections with a detector, and the model the named roads in use.
 
 | Peak | Source | Median | 90th percentile | 99th percentile | Most |
 |---|---|---|---|---|---|
 | Morning | TDX | 1.06 | 1.41 | 2.49 | 3.62 |
-| Morning | Model | 1.14 | 1.56 | 2.70 | 3.24 |
+| Morning | Model | 1.02 | 1.40 | 2.57 | 3.24 |
 | Evening | TDX | 1.10 | 1.49 | 2.81 | 3.71 |
-| Evening | Model | 1.12 | 1.47 | 2.28 | 3.29 |
+| Evening | Model | 1.01 | 1.31 | 2.25 | 3.29 |
 
-The model is a little slower than TDX in the morning. `BETA` and `MOST` were chosen to make these spreads match (DATA.md). The TDX speeds are mostly from vehicle detectors at one point of a road, so they leave out the wait at traffic lights. The slowness of a bucket in the model has no term for the lights either: they are in the free time of a trip.
+The model is close to TDX in the morning, and a little freer in the evening. `BETA` and `MOST` were chosen to make these spreads match (DATA.md). The TDX speeds are mostly from vehicle detectors at one point of a road, so they leave out the wait at traffic lights. The slowness of a bucket in the model has no term for the lights either: they are in the free time of a trip.
 
 ## Hotspots
 
-These roads jam at the peaks in the news of 2026. The table gives the slowness of the slowest bucket of the road at the peak in the model, and its rank among the named roads of 台北市 in use (1 is the slowest).
+These roads jam at the peaks in the news of 2026. The table gives the slowness of the slowest bucket of the road at the peak in the model (the median over the takes of the peak, as above), and its rank among the named roads of 台北市 in use (1 is the slowest).
 
 | Road | News | Model, morning | Model, evening |
 |---|---|---|---|
-| 堤頂大道 | 內科, [自由時報, 2026-08-16](https://news.ltn.com.tw/news/politics/breakingnews/5542049) | 1.53 (105 of 498) | 1.35 (137 of 521) |
-| 國道1號 | 內湖 to 東湖, [壹蘋, 2024-12-17](https://news.nextapple.com/life/20241217/8739F70DC238E402DB822D8E3B2BDAFB) | 2.60 (15) | 3.25 (2) |
-| 承德路 | Afternoon peak, 臺北市政府交通局, report of 115年7月 | 2.05 (53) | 2.28 (24) |
-| 洲美快速道路 | Entry ramp, 臺北市政府交通局, report of 115年7月 | 1.43 (129) | 1.34 (146) |
-| 舊宗路 | 內科, [Entropy Clinic, 重新檢討「內湖很塞」](https://entropyclinic.substack.com/p/9a2) | 1.74 (73) | 1.63 (60) |
-| 環東大道 | 國3 at 環東大道, a jam of the 2026 Lunar New Year (a search result; no weekday source) | 2.28 (26) | 2.28 (13) |
-| 中興橋 | [自由時報, 2026-10-15](https://news.ltn.com.tw/news/life/breakingnews/5606731) | 1.47 (122) | 1.42 (110) |
-| 港墘路 | 內科, 自由時報, 2026-08-16 | 1.44 (127) | 1.43 (109) |
-| 重慶北路四段 | To 國1, 臺北市政府交通局, report of 115年7月 | 1.18 (311) | 1.16 (292) |
-| 中華路二段 | [聯合報, 2026-01-20](https://udn.com/news/story/7323/9276593) | 1.28 (193) | 1.36 (133) |
-| 木柵路 | 臺北市道安會報, 2026-06 (a search result; the record was not read) | 1.75 (70) | 1.64 (59) |
-| 瑞光路 | 臺北市道安會報, 2026-06 | 1.26 (227) | 1.16 (290) |
-| 中正路 | 臺北市道安會報, 2026-06; the model has many roads of this name, and the table takes the slowest | 1.33 (172) | 1.21 (238) |
-| 至善路 | 臺北市道安會報, 2026-06 | 1.24 (251) | 1.24 (214) |
-| 華翠大橋 | 聯合報, 2026-01-20 | 1.28 (192) | 1.12 (368) |
-| 民權東路六段 | 內科, Entropy Clinic | 1.23 (255) | 1.19 (252) |
-| 重陽橋 | 自由時報, 2026-10-15 | 1.18 (304) | 1.14 (305) |
-| 艋舺大道 | 聯合報, 2026-01-20 | 1.56 (91) | 1.19 (250) |
+| 堤頂大道 | 內科, [自由時報, 2026-08-16](https://news.ltn.com.tw/news/politics/breakingnews/5542049) | 1.53 (71 of 498) | 1.36 (88 of 521) |
+| 國道1號 | 內湖 to 東湖, [壹蘋, 2024-12-17](https://news.nextapple.com/life/20241217/8739F70DC238E402DB822D8E3B2BDAFB) | 2.60 (11) | 3.27 (2) |
+| 承德路 | Afternoon peak, 臺北市政府交通局, report of 115年7月 | 1.31 (111) | 1.37 (81) |
+| 洲美快速道路 | Entry ramp, 臺北市政府交通局, report of 115年7月 | 1.12 (216) | 1.14 (188) |
+| 舊宗路 | 內科, [Entropy Clinic, 重新檢討「內湖很塞」](https://entropyclinic.substack.com/p/9a2) | 1.74 (52) | 1.63 (41) |
+| 環東大道 | 國3 at 環東大道, a jam of the 2026 Lunar New Year (a search result; no weekday source) | 1.26 (138) | 1.27 (111) |
+| 中興橋 | [自由時報, 2026-10-15](https://news.ltn.com.tw/news/life/breakingnews/5606731) | 1.47 (79) | 1.42 (71) |
+| 港墘路 | 內科, 自由時報, 2026-08-16 | 1.44 (82) | 1.43 (70) |
+| 重慶北路四段 | To 國1, 臺北市政府交通局, report of 115年7月 | 1.18 (176) | 1.16 (171) |
+| 中華路二段 | [聯合報, 2026-01-20](https://udn.com/news/story/7323/9276593) | 1.28 (124) | 1.36 (87) |
+| 木柵路 | 臺北市道安會報, 2026-06 (a search result; the record was not read) | 1.75 (50) | 1.64 (40) |
+| 瑞光路 | 臺北市道安會報, 2026-06 | 1.26 (134) | 1.16 (169) |
+| 中正路 | 臺北市道安會報, 2026-06; the model has many roads of this name, and the table takes the slowest | 1.12 (217) | 1.16 (168) |
+| 至善路 | 臺北市道安會報, 2026-06 | 1.19 (168) | 1.24 (131) |
+| 華翠大橋 | 聯合報, 2026-01-20 | 1.28 (122) | 1.03 (281) |
+| 民權東路六段 | 內科, Entropy Clinic | 1.17 (180) | 1.13 (194) |
+| 重陽橋 | 自由時報, 2026-10-15 | 1.08 (260) | 1.00 (331) |
+| 艋舺大道 | 聯合報, 2026-01-20 | 1.00 (323) | 1.00 (322) |
 | 台北橋 | 自由時報, 2026-10-15 | Not found | Not found |
 
-- The 國道, 承德路, 舊宗路 and 環東大道 jam in the model. 堤頂大道 is only a little slow since a bucket counts at least 0.1 km: its slowest bucket was a short one.
-- The bridges from 新北 to the west (重陽橋, 台北橋, 華翠大橋) are almost free; 艋舺大道 is a little slow in the morning. Their traffic comes from 三重, 蘆洲, 新莊 and 板橋, and from other counties, and the model has no commuters from other counties ([#21](https://github.com/caasi/breathing-taipei/issues/21)).
+- The 國道, 舊宗路 and 木柵路 jam in the model. 承德路 and 環東大道 are slow at part of the peak only, so their median over the whole peak is low. 堤頂大道 is only a little slow since a bucket counts at least 0.1 km: its slowest bucket was a short one.
+- The bridges from 新北 to the west (重陽橋, 台北橋, 華翠大橋) are almost free; so is 艋舺大道. Their traffic comes from 三重, 蘆洲, 新莊 and 板橋, and from other counties, and the model has no commuters from other counties ([#21](https://github.com/caasi/breathing-taipei/issues/21)).
 - 中正路 and 至善路, near the works of the MRT 環狀線, are almost free: the model has no road works.
 - 瑞光路 is only a little slow. A trip is placed along its whole path, so nothing waits at the end of the trip; that needs a queue model ([#25](https://github.com/caasi/breathing-taipei/issues/25)).
 - 台北橋 has no name of its own in `road-names.json`. Not checked: the OSM way of the bridge probably carries the name of its road.

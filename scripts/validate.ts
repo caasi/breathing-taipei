@@ -6,8 +6,10 @@
  *   node --experimental-strip-types scripts/validate.ts
  *
  * It runs the model as scripts/traffic.ts does (seed 42, 10 people per agent, village level, the workday 2026-10-27,
- * a take every 15 minutes from 00:15). The slowness of a bucket at a peak is the median of its takes from 07:00 to
- * 09:59 (am) or 17:00 to 19:59 (pm); a hotspot is a road name, and its level the highest of its buckets at the peak.
+ * a take every 15 minutes from 00:15). The slowness of a bucket at a peak is the median of all its takes from 07:00 to
+ * 09:59 (am) or 17:00 to 19:59 (pm), a take with no traveller counting as free (1), for the buckets that have a
+ * traveller at a take of that peak, as a detector of TDX gives a speed at every minute of the peak; a hotspot is a road
+ * name, and its level the highest of its buckets at the peak.
  * The per-trip levels against TomTom are printed by scripts/traffic.ts.
  */
 import { readFileSync } from 'node:fs'
@@ -46,15 +48,21 @@ road.edges.forEach(([a]: number[], e: number) => {
 })
 
 const load = new Float32Array(road.edges.length), peaks = { am: new Map<number, number[]>(), pm: new Map<number, number[]>() }
+const used = { am: new Set<number>(), pm: new Set<number>() }
 for (let slot = 0; slot < 96; slot++) {
   advance(w, 15)
   take(w, use, load, live)
   const h = Math.floor(now(w) / 60), k = h >= 7 && h < 10 ? 'am' : h >= 17 && h < 20 ? 'pm' : undefined
-  if (k) cellLoad(load, grid).forEach((p, b) => { if (p && taipei[b] && nameOf[b]) (peaks[k].get(b) ?? peaks[k].set(b, []).get(b)!).push(live.slower[b]) })
+  if (k) cellLoad(load, grid).forEach((p, b) => {
+    if (!taipei[b] || !nameOf[b]) return
+    const xs = peaks[k].get(b) ?? []
+    xs.push(live.slower[b]); if (p) used[k].add(b)
+    peaks[k].set(b, xs)
+  })
 }
 const median = (xs: number[]) => xs.slice().sort((a, b) => a - b)[xs.length >> 1]
 for (const k of ['am', 'pm'] as const) {
-  const bucket = new Map([...peaks[k]].map(([b, xs]) => [b, median(xs)]))
+  const bucket = new Map([...peaks[k]].filter(([b]) => used[k].has(b)).map(([b, xs]) => [b, median(xs)]))
   const rs = [...bucket.values()].sort((a, b) => a - b), q = (x: number) => rs[Math.min(rs.length - 1, Math.floor(x * rs.length))].toFixed(2)
   console.log(`${k}: ${rs.length} named buckets of 台北市, p50 ${q(0.5)} p90 ${q(0.9)} p99 ${q(0.99)} max ${rs[rs.length - 1].toFixed(2)}`)
   const road = new Map<string, number>()
