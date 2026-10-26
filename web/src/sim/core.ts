@@ -253,7 +253,8 @@ export const advance = (w: World, minutes: number) => {
 /**
  * A jam: the leg that agent i is on now ends at minute `arrive` instead (at least the next minute, at most MAX_LEG from
  * now), and the agent is where it is now. The leg is drawn again through the share of it that the agent has done, so its
- * start moves too, into the past. A later arrival at work can make the agent leave work later (never before it
+ * start moves too, into the past. A leg is at most MAX_LEG long: a longer one keeps the share done and ends earlier
+ * than asked. A later arrival at work can make the agent leave work later (never before it
  * arrives). The agent moves to the bucket of its new minute home, so it stays in exactly one bucket. An agent that is not
  * on the road does not change.
  */
@@ -263,9 +264,11 @@ export const stretch = (w: World, i: number, arrive: number) => {
   const start = out ? w.dep[i] : w.ret[i], dur = out ? w.dur1[i] : w.dur2[i], p = (t - start) / dur
   const to = Math.min(Math.floor(t) + MAX_LEG, Math.max(Math.floor(t) + 1, Math.round(arrive)))
   if (to === start + dur) return
-  // At least to - t, so the new start is not after now.
-  const d = Math.min(MAX_LEG, Math.ceil((to - t) / (1 - p))), s = to - d
-  if (out) { w.dep[i] = s; w.dur1[i] = d; w.ret[i] = Math.max(w.ret[i], to) } else { w.ret[i] = s; w.dur2[i] = d }
+  // At least to - t, so the new start is not after now. At MAX_LEG, the start that keeps the share done, but the leg
+  // ends after this minute.
+  const want = Math.ceil((to - t) / (1 - p)), d = Math.min(MAX_LEG, want)
+  const s = d === want ? to - d : Math.max(Math.round(t - p * d), Math.floor(t) + 1 - d)
+  if (out) { w.dep[i] = s; w.dur1[i] = d; w.ret[i] = Math.max(w.ret[i], s + d) } else { w.ret[i] = s; w.dur2[i] = d }
   const next = w.ret[i] + w.dur2[i]
   if (next === end) return
   const old = w.due[end % RING]

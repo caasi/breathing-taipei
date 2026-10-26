@@ -181,7 +181,7 @@ describe('core properties', () => {
   })
 
   test('a jam moves the end of the leg under way, the agent stays where it is, and in exactly the bucket of its new minute home', () => {
-    fc.assert(fc.property(cityArb, fc.nat(1000), fc.integer({ min: 1, max: 3 * 1440 }), fc.double({ min: 0, max: 300, noNaN: true }), (city, seed, minutes, later) => {
+    fc.assert(fc.property(cityArb, fc.nat(1000), fc.integer({ min: 1, max: 3 * 1440 }), fc.double({ min: 0, max: 900, noNaN: true }), (city, seed, minutes, later) => {
       const w = run(city, seed, minutes), t = now(w)
       // Per agent on the road: which leg, the share of it done, and the end asked for.
       const share = (i: number) => (t < w.dep[i] + w.dur1[i] ? [0, (t - w.dep[i]) / w.dur1[i]] : [1, (t - w.ret[i]) / w.dur2[i]])
@@ -199,9 +199,11 @@ describe('core properties', () => {
         expect(where(w, i, t)).toBe(ROAD)
         const [back, p, to] = a, [back2, p2] = share(i), d = back ? w.dur2[i] : w.dur1[i]
         expect(back2).toBe(back)
-        expect((back ? w.ret[i] : w.dep[i]) + d).toBe(to)
-        // The share done moves by less than a minute of the new leg (whole minutes), unless the leg hit MAX_LEG.
-        if (d < 600) expect(Math.abs(p2 - p)).toBeLessThanOrEqual(1 / d + 1e-9)
+        // The leg ends where asked, or earlier at MAX_LEG (600 minutes).
+        if (d < 600) expect((back ? w.ret[i] : w.dep[i]) + d).toBe(to)
+        else expect((back ? w.ret[i] : w.dep[i]) + d).toBeLessThanOrEqual(to)
+        // The share done moves by less than a minute of the new leg (whole minutes).
+        expect(Math.abs(p2 - p)).toBeLessThanOrEqual(1 / d + 1e-9)
       }
       advance(w, 1440)
       const c = counts(w, MODES.length)
