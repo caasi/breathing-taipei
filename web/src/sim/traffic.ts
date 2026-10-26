@@ -5,10 +5,10 @@ import { freeTime, type GraphJson } from './route.ts'
 
 // BPR (Bureau of Public Roads, 1964): time on a road = free time x (1 + ALPHA (volume / capacity)^BETA).
 const ALPHA = 0.15, BETA = 4
-// ponytail: one capacity for every cell, in people per km of road, fitted so that the morning peak of 台北市 has the
+// ponytail: one capacity for every cell, in passenger car units (PCU) per km of road, fitted so that the morning peak of 台北市 has the
 // TomTom congestion level (scripts/traffic.ts, DATA.md "Figures in the code"). Real roads differ in lanes.
 export const CAPACITY = 184
-// ponytail: the road load is taken over cells of CELL degrees (about 500 m) and the people per km of road in a cell stand
+// ponytail: the road load is taken over cells of CELL degrees (about 500 m) and the PCU per km of road in a cell stand
 // in for the flow of BPR. Every trip takes one shortest path, so per edge only a few edges carried any load, with a
 // travel time up to 25 times the free time; a cell spreads it over the roads nearby. Use flows per hour on each edge
 // when trips get more than one path and edges get capacities of their own.
@@ -19,6 +19,10 @@ const SLOWEST = 1 / 0.3
 // fastest route. A guess. A scooter always takes the streets-only variant. A bus keeps its fixed route (the fastest
 // variant stands in for it), and a jam still slows it.
 const NAV = 0.6
+// ponytail: the road space of one traveller of each mode (city.ts MODES), in PCU: a vehicle's PCU over the people in it.
+// A bus is 2 PCU with 20 riders, a scooter 0.4 PCU with 1.2 riders, a car 1 PCU with 1.4 riders; all guesses. So a
+// move from car to bus frees road space, and a bus lane has a load to take off the other lanes.
+export const PCU = [0, 2 / 20, 0.4 / 1.2, 1 / 1.4, 0, 0]
 
 /**
  * The road paths of each mover j (its index in w.movers), with their cumulative free time (route.ts freeTime, which
@@ -78,7 +82,7 @@ const slowerOn = (es: Uint16Array, live: Live) => {
 }
 
 /**
- * Real people on each edge now: each road traveller is on the edge at its share of the trip. When a trip is first seen
+ * The road load on each edge now, in PCU: each road traveller is on the edge at its share of the trip. When a trip is first seen
  * on the road, it takes its variant by the slowness of `live` then, and its leg takes that much longer (core.ts
  * slowDown), so a jam keeps more people on the road. onRoad gets each traveller and its edge.
  */
@@ -102,7 +106,7 @@ export const loadNow = (w: World, use: RoadUse, out: Float32Array, onRoad?: (age
     const c = use.cum.get(es)!, d = p * c[c.length - 1]
     let lo = 0, hi = c.length - 1
     while (lo < hi) { const m = (lo + hi) >> 1; if (c[m] < d) lo = m + 1; else hi = m }
-    out[es[lo]] += w.city.perAgent
+    out[es[lo]] += w.city.perAgent * PCU[leg ? w.playMode[i] : w.mode[i]]
     onRoad?.(i, es[lo])
   }
   return out
@@ -145,7 +149,7 @@ export const gridOf = (road: GraphJson, name: ArrayLike<number> = []): Grid => {
   return { cellOf, km, lanes: Float64Array.from(lanes), keys: Int32Array.from(cells.keys()), cellIn: Int32Array.from(cellIn) }
 }
 
-/** People on the road of each bucket. */
+/** The load (PCU) on the road of each bucket. */
 export const cellLoad = (load: ArrayLike<number>, grid: Grid) => {
   const out = new Float64Array(grid.km.length)
   for (let e = 0; e < load.length; e++) out[grid.cellOf[e]] += load[e]
@@ -157,8 +161,8 @@ export const cellLoad = (load: ArrayLike<number>, grid: Grid) => {
 // main streets free.
 const MOST = 4
 
-/** Extra time over free flow, as a share of the free time, for `people` on `km` of road (at most MOST - 1). */
-export const extraTime = (people: number, km: number, capacity = CAPACITY) => Math.min(MOST - 1, ALPHA * (people / km / capacity) ** BETA)
+/** Extra time over free flow, as a share of the free time, for a load of `pcu` on `km` of road (at most MOST - 1). */
+export const extraTime = (pcu: number, km: number, capacity = CAPACITY) => Math.min(MOST - 1, ALPHA * (pcu / km / capacity) ** BETA)
 
 /** Per bucket, the travel time over free time. */
 export const slowness = (load: ArrayLike<number>, grid: Grid, capacity = CAPACITY) =>
