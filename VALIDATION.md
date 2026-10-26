@@ -4,7 +4,7 @@
 
 The model aims to be reasonable, not exact: the present state must match what people in Taipei know, so that a policy has a believable baseline. A policy run keeps the constants of the baseline and does not refit them (DATA.md, "Figures in the code").
 
-All model figures below are from the app's run: seed 42, 10 people per agent, village level, the workday 2026-10-27, a take of the traffic every 15 minutes from 00:15. They were measured on 2026-10-27 with `BETA` 1, `MOST` 4, `CAPACITY` 15.7 buckets of at least 0.1 km (`SHORTEST`), and the one-way streets of OSM.
+All model figures below are from the app's run: seed 42, 10 people per agent, village level, the workday 2026-10-27, a take of the traffic every 15 minutes from 00:15. They were measured on 2026-10-27 with `BETA` 1, `MOST` 4, `CAPACITY` 15.7, buckets of at least 0.1 km (`SHORTEST`), and the one-way streets of OSM.
 
 ## How to get the figures again
 
@@ -27,7 +27,7 @@ TomTom does not give the hours of its rush hours (KNOWN-ISSUES.md). The other so
 
 ## Spread of the slowness of the roads
 
-For a road section, the slowness at a peak is the median of its speed at night (01:00 to 04:59) over the median of its speed at the peak. It is the number of times longer a trip on that section takes. TDX gives it for 684 sections of 臺北市 over 6 weekdays of 2026-10 (DATA.md, source P). The model gives it for the named buckets of 台北市 in one day.
+For a road section, the slowness at a peak is the median of its speed at night (01:00 to 04:59) over the median of its speed at the peak. It is the number of times longer a trip on that section takes. TDX gives it for 684 sections of 臺北市 over 6 weekdays of 2026-10 (DATA.md, source P). The model gives it for the named buckets of 台北市 in one day that have a traveller at the peak. So the two sets are not chosen the same way: TDX takes the sections with a detector, and the model the named roads in use.
 
 | Peak | Source | Median | 90th percentile | 99th percentile | Most |
 |---|---|---|---|---|---|

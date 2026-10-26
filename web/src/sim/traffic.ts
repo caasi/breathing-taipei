@@ -145,7 +145,7 @@ const LANES = [1, 3, 2, 0.5]
  */
 export type Grid = { cellOf: Int32Array; km: Float64Array; lanes: Float64Array; keys: Int32Array; cellIn: Int32Array }
 /** The key of the cell that holds a point. */
-// From 121°E and 24°N, so that 4 times the key fits in an Int32Array.
+// From 121°E and 24°N, so that a key fits in an Int32Array.
 export const cellKey = (lon: number, lat: number) => Math.floor((lon - 121) / CELL) * 10_000 + Math.floor((lat - 24) / CELL)
 export const gridOf = (road: GraphJson, name: ArrayLike<number> = []): Grid => {
   const ids = new Map<string, number>(), cells = new Map<number, number>(), cellIn: number[] = [], lanes: number[] = []

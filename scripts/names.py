@@ -9,7 +9,7 @@ Usage:
 
 road-names.json: {"names": [...], "edge": [...]}, where edge[e] is the index of the name of edge e of road-graph.json,
 or -1 when no named road of its class lies within MAX_M of the middle of the edge (a lane, or a road with no name).
-A street edge takes only a street name, so a viaduct over it does not name it; a 國道 edge takes only a 國道. A
+A street edge takes only a street name or the name of a 快速道路 at street level, so a viaduct over it does not name it; a 國道 edge takes only a 國道. A
 快速道路 that is a bridge, a viaduct or a tunnel (or on a layer above 0) names only 快速道路 edges: a street under
 市民大道高架道路 or beside 象山隧道 is not that road. A river bridge of a street (華中橋) still names the street.
 """
