@@ -12,15 +12,26 @@ export type Graph = {
 // ponytail: free speeds over the speed of a street, for the class of an edge (street, 國道 80, 快速道路 60, ramp 40 km/h
 // against 25 on a street); a guess, so that routes take the fast roads. The weight of an edge is its time in metres of street.
 export const FASTER = [1, 80 / 25, 60 / 25, 40 / 25]
+// ponytail: the mean wait at a traffic light, in metres of street at 25 km/h (30 s, a guess), at each street node where 3
+// or more edges meet; half of it goes to each edge that ends there, so the time of an edge does not depend on its way.
+export const SIGNAL = 25 / 3.6 * 30
+
+/** The free time of each edge, in metres of street: its length over its speed, and half a traffic light at each end where streets meet. */
+export const freeTime = (j: GraphJson) => {
+  const deg = new Int32Array(j.lon.length)
+  for (const [a, b] of j.edges) { deg[a]++; deg[b]++ }
+  return Float64Array.from(j.edges, ([a, b, metres, , cls = 0]) =>
+    metres / FASTER[cls] + (cls ? 0 : ((deg[a] >= 3 ? 1 : 0) + (deg[b] >= 3 ? 1 : 0)) * SIGNAL / 2))
+}
 
 export const graphFrom = (j: GraphJson): Graph => {
-  const n = j.lon.length, deg = new Int32Array(n + 1), street = new Uint8Array(n)
+  const n = j.lon.length, deg = new Int32Array(n + 1), street = new Uint8Array(n), time = freeTime(j)
   for (const [a, b] of j.edges) { deg[a + 1]++; deg[b + 1]++ }
   for (let i = 0; i < n; i++) deg[i + 1] += deg[i]
   const fill = deg.slice(0, n), m = deg[n]
   const to = new Int32Array(m), w = new Float64Array(m), edge = new Int32Array(m), owner = new Int32Array(m)
-  j.edges.forEach(([a, b, metres, , cls = 0], e) => {
-    const d = metres / FASTER[cls]
+  j.edges.forEach(([a, b, , , cls = 0], e) => {
+    const d = time[e]
     if (!cls) street[a] = street[b] = 1
     owner[fill[a]] = a; to[fill[a]] = b; w[fill[a]] = d; edge[fill[a]++] = e
     owner[fill[b]] = b; to[fill[b]] = a; w[fill[b]] = d; edge[fill[b]++] = e

@@ -1,12 +1,12 @@
 import { where, now, slowDown, ROAD, PLAY, GONE, type World } from './core.ts'
 import { ROAD_MODES, VARIANTS } from './paths.ts'
-import { FASTER, type GraphJson } from './route.ts'
+import { freeTime, type GraphJson } from './route.ts'
 
 // BPR (Bureau of Public Roads, 1964): time on a road = free time x (1 + ALPHA (volume / capacity)^BETA).
 const ALPHA = 0.15, BETA = 4
 // ponytail: one capacity for every cell, in people per km of road, fitted so that the morning peak of 台北市 has the
 // TomTom congestion level (scripts/traffic.ts, DATA.md "Figures in the code"). Real roads differ in lanes.
-export const CAPACITY = 266
+export const CAPACITY = 219
 // ponytail: the road load is taken over cells of CELL degrees (about 500 m) and the people per km of road in a cell stand
 // in for the flow of BPR. Every trip takes one shortest path, so per edge only a few edges carried any load, with a
 // travel time up to 25 times the free time; a cell spreads it over the roads nearby. Use flows per hour on each edge
@@ -19,16 +19,17 @@ const SLOWEST = 1 / 0.3
 const NAV = 0.6, SCOOTER = 2
 
 /**
- * The road paths of each mover j (its index in w.movers), with cumulative metres: path (2j + leg) x VARIANTS + v is the
+ * The road paths of each mover j (its index in w.movers), with their cumulative free time (route.ts freeTime, which
+ * holds the traffic lights), so a traveller is placed by time and waits longer where streets meet: path (2j + leg) x VARIANTS + v is the
  * variant v (paths.ts) of its trip to work (leg 0) or to its day-off place (leg 1); a variant that the routes do not
  * hold repeats variant 0. pick and since: the variant of the trip under way, and the minute that trip started.
  */
 export type RoadUse = { paths: (Uint16Array | undefined)[]; cum: Map<Uint16Array, Float32Array>; pick: Int8Array; since: Int32Array }
 
 /** pathOf gives the edges of a variant of agent i's trip (leg 0 to work, 1 to its day-off place), or undefined when the routes do not hold it. */
-export const roadUse = (w: World, pathOf: (agent: number, leg: number, variant: number) => Uint16Array | undefined, metres: ArrayLike<number>): RoadUse => {
+export const roadUse = (w: World, pathOf: (agent: number, leg: number, variant: number) => Uint16Array | undefined, time: ArrayLike<number>): RoadUse => {
   const cum = new Map<Uint16Array, Float32Array>(), n = w.movers.length, paths: (Uint16Array | undefined)[] = new Array(2 * n * VARIANTS)
-  const add = (es: Uint16Array) => { if (!cum.has(es)) { const c = new Float32Array(es.length); let s = 0; es.forEach((e, j) => (c[j] = s += metres[e])); cum.set(es, c) } }
+  const add = (es: Uint16Array) => { if (!cum.has(es)) { const c = new Float32Array(es.length); let s = 0; es.forEach((e, j) => (c[j] = s += time[e])); cum.set(es, c) } }
   w.movers.forEach((i, j) => [w.mode[i], w.playMode[i]].forEach((mode, leg) => {
     if (!ROAD_MODES.has(mode)) return
     const first = pathOf(i, leg, 0)
@@ -43,7 +44,7 @@ export const roadUse = (w: World, pathOf: (agent: number, leg: number, variant: 
 /** What a driver who follows the live traffic weighs a path by: the free time of each edge, and the slowness of its bucket. */
 export type Live = { grid: Grid; time: Float64Array; slower: Float64Array }
 export const liveOf = (road: GraphJson, grid: Grid): Live => ({
-  grid, time: Float64Array.from(road.edges, ([, , m, , cls = 0]) => m / FASTER[cls]), slower: new Float64Array(grid.km.length).fill(1),
+  grid, time: freeTime(road), slower: new Float64Array(grid.km.length).fill(1),
 })
 
 const choose = (w: World, use: RoadUse, i: number, base: number, mode: number, live?: Live) => {

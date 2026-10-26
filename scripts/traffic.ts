@@ -47,8 +47,8 @@ roadJson.edges.forEach(([a]: number[], e: number) => {
 
 const run = (capacity: number) => {
   const c = cityFrom(data, PER_AGENT, 'village', day => kindAt(cal, start + day)), w = init(c.city, SEED)
-  const use = roadUse(w, (i, leg, v) => routes.get(routeKey(at(w.home[i]), leg ? at(w.play[i]) : workAt(i, w.work[i]), v)), metres)
   const live = liveOf(roadJson, grid)
+  const use = roadUse(w, (i, leg, v) => routes.get(routeKey(at(w.home[i]), leg ? at(w.play[i]) : workAt(i, w.work[i]), v)), live.time)
   const load = new Float32Array(metres.length), sums = new Map<number, [number, number]>() // hour -> [people x extra, people]
   for (let slot = 0; slot < 96; slot++, advance(w, 15)) {
     take(w, use, load, live, undefined, capacity)

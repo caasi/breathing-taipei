@@ -187,7 +187,7 @@ const traffic = (world: World, graphs: Awaited<typeof net>, roadJson: GraphJson,
     const metres = Float32Array.from(roadJson.edges, e => e[2])
     load = new Float32Array(metres.length); grid = gridOf(roadJson, roadNames.edge); live = liveOf(roadJson, grid); extra.cellKeys = grid.keys
     const workAt = workNodes(graphs, coords, village)
-    use = roadUse(world, (i, leg, v) => known.get(routeKey(at(world.home[i]), leg ? at(world.play[i]) : workAt(i, world.work[i]), v)), metres)
+    use = roadUse(world, (i, leg, v) => known.get(routeKey(at(world.home[i]), leg ? at(world.play[i]) : workAt(i, world.work[i]), v)), live.time)
   }, () => {})
 }
 onmessage = async (e: MessageEvent<ToWorker>) => {
