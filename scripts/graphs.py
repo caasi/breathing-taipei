@@ -14,7 +14,9 @@ Usage:
 Output per graph: kept nodes (degree != 2) and edges whose geometry holds the merged degree-2 points.
 road-lines.json has, for each edge of road-graph.json in the same order, the bus shape points that the edge stands
 for (lon, lat, ...), not snapped to the grid: the map draws these, and routing uses the snapped graph.
-A road edge has a fifth value, its class, when it is not a street: 1 國道, 2 快速道路, 3 a ramp or a link to the streets."""
+A road edge has a fifth value, its class, when it is not a street: 1 國道, 2 快速道路, 3 a ramp or a link to the streets.
+A one-way edge (OSM `oneway`; a 國道 and its ramps are one-way unless tagged otherwise) has a sixth value, 1, and runs
+from its first node to its second; its fifth value is then given also for a street (0)."""
 import gzip, json, math, re, csv, collections, sys
 
 if __name__ == "__main__" and len(sys.argv) != 7:
@@ -26,17 +28,19 @@ def km(a, b):
     return 6371 * math.hypot(x, y)
 
 class Graph:
-    def __init__(s, grid): s.grid, s.idx, s.xy, s.adj, s.raw, s.cls = grid, {}, [], collections.defaultdict(dict), {}, {}
+    def __init__(s, grid): s.grid, s.idx, s.xy, s.adj, s.raw, s.cls, s.one = grid, {}, [], collections.defaultdict(dict), {}, {}, set()
     def add(s, p):
         s.xy.append(p); return len(s.xy) - 1
     def node(s, p):
         k = (round(p[0] / s.grid), round(p[1] / s.grid))
         if k not in s.idx: s.idx[k] = s.add((k[0] * s.grid, k[1] * s.grid))
         return s.idx[k]
-    def link(s, a, b, d=None, cls=0):
+    def link(s, a, b, d=None, cls=0, one=False):
+        """Joins a and b; with `one`, only a to b may be driven (s.one)."""
         if a == b: return
         d = km(s.xy[a], s.xy[b]) if d is None else d; s.adj[a][b] = s.adj[b][a] = d
         if cls: s.cls[(a, b)] = s.cls[(b, a)] = cls
+        if one: s.one.add((a, b))
     def line(s, pts):
         ns = [s.node(p) for p in pts]
         for a, b in zip(ns, ns[1:]): s.link(a, b)
@@ -79,10 +83,17 @@ def contract(g, keep_extra=()):
                 d += g.adj[cur][nxt]; prev, cur = cur, nxt
             seen.add((a, b0)); seen.add((cur, geom[-1] if geom else a))
             if a < cur or (a == cur and geom):
+                chain = [a, *geom, cur]
+                # A chain is one-way when a step of it is; it is turned to run the legal way. ponytail: a chain with
+                # steps both ways (bad data) stays two-way, counted in `mixed`.
+                ways = {1 if (p, q) in g.one else -1 for p, q in zip(chain, chain[1:]) if (p, q) in g.one or (q, p) in g.one}
+                if ways == {-1, 1}: contract.mixed += 1
+                if ways == {-1}: chain.reverse()
                 # ponytail: the class of the first step names the whole edge; a chain that changes class is rare.
-                edges.append((remap[a], remap[cur], d, [g.xy[p] for p in geom], [a, *geom, cur], g.cls.get((a, b0), 0)))
+                edges.append((remap[chain[0]], remap[chain[-1]], d, [g.xy[p] for p in chain[1:-1]], chain, g.cls.get((a, b0), 0), len(ways) == 1))
     nodes = [g.xy[v] for v in sorted(keep)]
     return nodes, edges, remap
+contract.mixed = 0
 
 def simplify(pts, a, b, tol=2e-4):
     """Douglas-Peucker on the in-between points of an edge running from a to b (tol in degrees, ~20 m)."""
@@ -102,9 +113,9 @@ def simplify(pts, a, b, tol=2e-4):
     return [p for p, k in zip(full, keep) if k][1:-1]
 
 def dump(path, nodes, edges, extra=None):
-    edges = [(a, b, d, simplify(geom, nodes[a], nodes[b]), cls) for a, b, d, geom, _, cls in edges]
+    edges = [(a, b, d, simplify(geom, nodes[a], nodes[b]), cls, one) for a, b, d, geom, _, cls, one in edges]
     out = {"lon": [round(p[0], 5) for p in nodes], "lat": [round(p[1], 5) for p in nodes],
-           "edges": [[a, b, round(d * 1000), [round(c, 5) for p in geom for c in p]] + ([cls] if cls else []) for a, b, d, geom, cls in edges]}
+           "edges": [[a, b, round(d * 1000), [round(c, 5) for p in geom for c in p]] + ([cls, 1] if one else [cls] if cls else []) for a, b, d, geom, cls, one in edges]}
     if extra: out.update(extra)
     json.dump(out, open(path, "w"), ensure_ascii=False, separators=(",", ":"))
 
@@ -120,6 +131,10 @@ for f in sys.argv[1:3]:
 # at shared OSM nodes. They meet the streets at the end of a ramp or of a road that ends among streets, and a 快速道路
 # that is not a bridge or a tunnel also meets them at each of its points that falls in a cell of a street.
 CLASS = {"motorway": 1, "trunk": 2, "motorway_link": 3, "trunk_link": 3}
+def oneway(t):
+    """1 when only the way's own order may be driven, -1 when only the reverse, 0 when both."""
+    o = t.get("oneway", "yes" if t["highway"] in ("motorway", "motorway_link") else "no")
+    return 1 if o in ("yes", "1", "true") else -1 if o == "-1" else 0
 ways = [x for x in json.load(open(sys.argv[5]))["elements"] if x["type"] == "way"]
 uses, osm = collections.Counter(n for x in ways for n in set(x["nodes"])), {}
 def street(p, reach):
@@ -130,8 +145,9 @@ def street(p, reach):
 for x in ways:
     t = x["tags"]; pts = [(g["lon"], g["lat"]) for g in x["geometry"]]
     ns = [osm[n] if n in osm else osm.setdefault(n, road.add(p)) for n, p in zip(x["nodes"], pts)]
+    way = oneway(t)
     for a, b, pa, pb in zip(ns, ns[1:], pts, pts[1:]):
-        if a != b: road.link(a, b, cls=CLASS[t["highway"]]); road.raw.setdefault((a, b), [pa, pb]); road.raw.setdefault((b, a), [pb, pa])
+        if a != b: road.link(*((b, a) if way < 0 else (a, b)), cls=CLASS[t["highway"]], one=way != 0); road.raw.setdefault((a, b), [pa, pb]); road.raw.setdefault((b, a), [pb, pa])
     at_grade = t["highway"] == "trunk" and not t.get("bridge") and not t.get("tunnel")
     for i, (n, p) in enumerate(zip(x["nodes"], pts)):
         end = i in (0, len(pts) - 1) and uses[n] == 1
@@ -141,12 +157,12 @@ for x in ways:
 nodes, edges, _ = contract(road)
 dump(sys.argv[6] + "/road-graph.json", nodes, edges)
 lines = []
-for *_, chain, _cls in edges:
+for *_, chain, _cls, _one in edges:
     pts = [p for a, b in zip(chain, chain[1:]) for p in road.raw[(a, b)]]
     pts = [pts[0]] + simplify(pts[1:-1], pts[0], pts[-1], 2e-5) + [pts[-1]]  # ~2 m
     lines.append([round(c, 5) for p in pts for c in p])
 json.dump(lines, open(sys.argv[6] + "/road-lines.json", "w"), separators=(",", ":"))
-print("road:", len(road.xy), "points ->", len(nodes), "nodes,", len(edges), "edges")
+print("road:", len(road.xy), "points ->", len(nodes), "nodes,", len(edges), "edges,", sum(e[6] for e in edges), "one-way;", contract.mixed, "with steps both ways")
 
 # --- MRT: OSM lines (Taipei Metro and Circular line), joined through station nodes ---
 LINE = {"文湖": "BR", "淡水信義": "R", "新北投": "R", "松山新店": "G", "小碧潭": "G", "中和新蘆": "O", "板南": "BL", "環狀": "Y"}

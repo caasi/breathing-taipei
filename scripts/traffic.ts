@@ -15,7 +15,7 @@ import { readFileSync } from 'node:fs'
 import { init, advance } from '../web/src/sim/core.ts'
 import { cityFrom } from '../web/src/sim/city.ts'
 import { kindAt, indexOf, type Calendar } from '../web/src/sim/calendar.ts'
-import { networks, readRoutes, roadNode, routeKey } from '../web/src/sim/paths.ts'
+import { networks, readRoutes, roadNode } from '../web/src/sim/paths.ts'
 import { CAPACITY, cellLoad, extraTime, gridOf, liveOf, roadUse, take } from '../web/src/sim/traffic.ts'
 import { workNodes } from '../web/src/sim/jobs.ts'
 
@@ -48,7 +48,7 @@ roadJson.edges.forEach(([a]: number[], e: number) => {
 const run = (capacity: number) => {
   const c = cityFrom(data, PER_AGENT, 'village', day => kindAt(cal, start + day)), w = init(c.city, SEED)
   const live = liveOf(roadJson, grid)
-  const use = roadUse(w, (i, leg, v) => routes.get(routeKey(at(w.home[i]), leg ? at(w.play[i]) : workAt(i, w.work[i]), v)), live.time)
+  const use = roadUse(w, routes, (i, leg) => [at(w.home[i]), leg ? at(w.play[i]) : workAt(i, w.work[i])], live.time)
   const load = new Float32Array(metres.length), sums = new Map<number, [number, number]>() // hour -> [people x extra, people]
   for (let slot = 0; slot < 96; slot++, advance(w, 15)) {
     take(w, use, load, live, undefined, capacity)

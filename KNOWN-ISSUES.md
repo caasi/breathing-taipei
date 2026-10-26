@@ -24,6 +24,10 @@
 - **What:** 臺北市政府主計處 lists an indicator 「內湖科技園區員工人數」 in its important statistics. The agent found the name of the indicator, but not the figures. It can be in the statistics database (https://tsis.dbas.gov.taipei/statis/webMain.aspx?k=tpemain). Not checked.
 - **What the project uses instead:** 166,322 employees at the end of 108 (2019), from 臺北市產業發展局 (checked).
 
+## Limits of the model that are known
+
+- **A dot goes home along its way there, reversed.** The road load of a trip home follows its own path, which the one-way 國道, 快速道路 and ramps can make different (`roadUse` in `web/src/sim/traffic.ts`). The dot of that trip on the map draws the way there backwards. At the scale of the map the two ways are usually the two carriageways of one road, about 30 m apart. Not measured: how many dots take another ramp or road home.
+
 ## Sources that the project cites but did not read
 
 - **The 1964 *Traffic Assignment Manual* of the Bureau of Public Roads**, the usual source of the BPR values 0.15 and 4 (`web/src/sim/traffic.ts`). It was not found online. DATA.md ("Figures in the code") gives what the secondary sources say, and where they do not agree.

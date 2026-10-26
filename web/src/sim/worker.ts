@@ -6,7 +6,7 @@ import { evenPick, type Mood, type SimEvent } from './events.ts'
 import { mulberry32 } from './rng.ts'
 import { FPS, clockAt, respeed, stepsTo, type Clock } from './pace.ts'
 import { cityFrom, MODES } from './city.ts'
-import { networks, readRoutes, roadNode, routeKey, tripPaths, type Batch, type Routes } from './paths.ts'
+import { networks, readRoutes, roadNode, tripPaths, type Batch, type Routes } from './paths.ts'
 import type { GraphJson } from './route.ts'
 import { workNodes } from './jobs.ts'
 import { gridOf, levels, liveOf, roadUse, stepper, take as takeTraffic, type Grid, type Live, type RoadUse } from './traffic.ts'
@@ -198,7 +198,7 @@ const traffic = (world: World, graphs: Awaited<typeof net>, roadJson: GraphJson,
     const metres = Float32Array.from(roadJson.edges, e => e[2])
     load = new Float32Array(metres.length); grid = gridOf(roadJson, roadNames.edge); live = liveOf(roadJson, grid); extra.cellKeys = grid.keys
     const workAt = workNodes(graphs, coords, village)
-    use = roadUse(world, (i, leg, v) => known.get(routeKey(at(world.home[i]), leg ? at(world.play[i]) : workAt(i, world.work[i]), v)), live.time)
+    use = roadUse(world, known, (i, leg) => [at(world.home[i]), leg ? at(world.play[i]) : workAt(i, world.work[i])], live.time)
   }, () => {})
 }
 onmessage = async (e: MessageEvent<ToWorker>) => {

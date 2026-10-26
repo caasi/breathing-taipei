@@ -2,7 +2,7 @@ import { expect, test } from 'vitest'
 import { existsSync, readFileSync } from 'node:fs'
 import { init } from './core.ts'
 import { cityFrom } from './city.ts'
-import { KNOWN_BATCH, networks, readRoutes, ROAD_MODES, roadNode, routeKey, tripPaths, writeRoutes, type Batch } from './paths.ts'
+import { KNOWN_BATCH, networks, pathIn, readRoutes, ROAD_MODES, roadNode, routeKey, tripPaths, writeRoutes, type Batch } from './paths.ts'
 import { edgesTo, tree } from './route.ts'
 
 const pub = (f: string) => JSON.parse(readFileSync(new URL(`../../public/${f}`, import.meta.url), 'utf8'))
@@ -64,4 +64,28 @@ test.skipIf(!existsSync(bin))('the routes file in web/public matches the road gr
       && Number.isFinite(tree(net.road, at(w.home[i])).dist[at(to[i])])).length
     expect({ level, work: missing(w.work, w.mode), play: missing(w.play, w.playMode) }).toEqual({ level, work: 0, play: 0 })
   }
+}, 60_000)
+
+test.skipIf(!existsSync(bin))('every path of the routes file, and every way back that the worker reverses, drives a one-way edge only its own way (real data)', () => {
+  const road = pub('road-graph.json'), net = networks(road, pub('mrt-graph.json')), b = readFileSync(bin), g = net.road
+  const routes = readRoutes(new Uint16Array(b.buffer, b.byteOffset, b.byteLength / 2), g)!
+  // From node a along es: the edges driven against their one-way direction.
+  const against = (a: number, es: ArrayLike<number>) => {
+    let p = a, bad = 0
+    for (let k = 0; k < es.length; k++) {
+      const e = es[k], forward = g.from[e] === p
+      if (!forward && road.edges[e][5]) bad++
+      p = forward ? g.end[e] : g.from[e]
+    }
+    return bad
+  }
+  let bad = 0, flipped = 0
+  for (const [key, es] of routes) {
+    const v = Math.floor(key / 2 ** 32), a = Math.floor(key % 2 ** 32 / 65536), z = key % 65536
+    bad += against(a, es)
+    // traffic.ts roadUse: with no path back in the file, the way back is the way there reversed.
+    if (!routes.has(routeKey(z, a))) { flipped++; bad += against(z, pathIn(routes, a, z, v)!.slice().reverse()) }
+  }
+  expect(flipped).toBeGreaterThan(0)
+  expect(bad).toBe(0)
 }, 60_000)

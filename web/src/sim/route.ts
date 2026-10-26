@@ -1,6 +1,9 @@
 /** Shortest paths on a contracted graph whose edges carry their in-between points. */
-/** An edge: from, to, metres, in-between points, and for a road that is not a street its class (scripts/graphs.py). */
-export type GraphJson = { lon: number[]; lat: number[]; edges: [number, number, number, number[], number?][]; stations?: Record<string, number> }
+/**
+ * An edge: from, to, metres, in-between points, for a road that is not a street its class, and 1 for a one-way edge,
+ * which runs from `from` to `to` (scripts/graphs.py).
+ */
+export type GraphJson = { lon: number[]; lat: number[]; edges: [number, number, number, number[], number?, number?][]; stations?: Record<string, number> }
 export type Graph = {
   lon: Float64Array; lat: Float64Array
   street: Uint8Array // 1 for a node on a street (class 0); trips start and end only there
@@ -33,11 +36,12 @@ export const graphFrom = (j: GraphJson, lights = false): Graph => {
   for (let i = 0; i < n; i++) deg[i + 1] += deg[i]
   const fill = deg.slice(0, n), m = deg[n]
   const to = new Int32Array(m), w = new Float64Array(m), edge = new Int32Array(m), owner = new Int32Array(m)
-  j.edges.forEach(([a, b, , , cls = 0], e) => {
+  j.edges.forEach(([a, b, , , cls = 0, one], e) => {
     const d = time[e]
     if (!cls) street[a] = street[b] = 1
     owner[fill[a]] = a; to[fill[a]] = b; w[fill[a]] = d; edge[fill[a]++] = e
-    owner[fill[b]] = b; to[fill[b]] = a; w[fill[b]] = d; edge[fill[b]++] = e
+    // The slot against a one-way edge stays, so the degree of a node and the hash keep it, but tree() never takes it.
+    owner[fill[b]] = b; to[fill[b]] = a; w[fill[b]] = one ? Infinity : d; edge[fill[b]++] = e
   })
   return { lon: Float64Array.from(j.lon), lat: Float64Array.from(j.lat), street, start: deg, to, w, edge, owner,
     cls: Uint8Array.from(j.edges, e => e[4] ?? 0), metres: Float64Array.from(j.edges, e => e[2]),

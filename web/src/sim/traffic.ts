@@ -1,5 +1,5 @@
 import { advance, where, now, slowDown, ROAD, PLAY, GONE, type World } from './core.ts'
-import { ROAD_MODES, VARIANTS } from './paths.ts'
+import { pathIn, ROAD_MODES, routeKey, VARIANTS, type Routes } from './paths.ts'
 import { BUS, SCOOTER } from './city.ts'
 import { freeTime, type GraphJson } from './route.ts'
 
@@ -7,7 +7,7 @@ import { freeTime, type GraphJson } from './route.ts'
 const ALPHA = 0.15, BETA = 4
 // ponytail: one capacity for every cell, in people per km of road, fitted so that the morning peak of 台北市 has the
 // TomTom congestion level (scripts/traffic.ts, DATA.md "Figures in the code"). Real roads differ in lanes.
-export const CAPACITY = 219
+export const CAPACITY = 184
 // ponytail: the road load is taken over cells of CELL degrees (about 500 m) and the people per km of road in a cell stand
 // in for the flow of BPR. Every trip takes one shortest path, so per edge only a few edges carried any load, with a
 // travel time up to 25 times the free time; a cell spreads it over the roads nearby. Use flows per hour on each edge
@@ -22,22 +22,27 @@ const NAV = 0.6
 
 /**
  * The road paths of each mover j (its index in w.movers), with their cumulative free time (route.ts freeTime, which
- * holds the traffic lights), so a traveller is placed by time and waits longer where streets meet: path (2j + leg) x VARIANTS + v is the
- * variant v (paths.ts) of its trip to work (leg 0) or to its day-off place (leg 1); a variant that the routes do not
- * hold repeats variant 0. pick and since: the variant of the trip under way, and the minute that trip started.
+ * holds the traffic lights), so a traveller is placed by time and waits longer where streets meet: path
+ * ((2j + leg) x 2 + back) x VARIANTS + v is the variant v (paths.ts) of its trip to work (leg 0) or to its day-off
+ * place (leg 1), on the way there (back 0) or home (back 1), each listed in the order it is driven. pick and since:
+ * the variant of the trip under way, and the minute that trip started.
  */
 export type RoadUse = { paths: (Uint16Array | undefined)[]; cum: Map<Uint16Array, Float32Array>; pick: Int8Array; since: Int32Array }
 
-/** pathOf gives the edges of a variant of agent i's trip (leg 0 to work, 1 to its day-off place), or undefined when the routes do not hold it. */
-export const roadUse = (w: World, pathOf: (agent: number, leg: number, variant: number) => Uint16Array | undefined, time: ArrayLike<number>): RoadUse => {
-  const cum = new Map<Uint16Array, Float32Array>(), n = w.movers.length, paths: (Uint16Array | undefined)[] = new Array(2 * n * VARIANTS)
+/**
+ * ends gives the road nodes of agent i's trip (leg 0 to work, 1 to its day-off place). The way home is the path from
+ * the far end in `routes` when the file holds it (a one-way road made it differ), else the way there reversed.
+ */
+export const roadUse = (w: World, routes: Routes, ends: (agent: number, leg: number) => [number, number], time: ArrayLike<number>): RoadUse => {
+  const cum = new Map<Uint16Array, Float32Array>(), n = w.movers.length, paths: (Uint16Array | undefined)[] = new Array(4 * n * VARIANTS)
   const add = (es: Uint16Array) => { if (!cum.has(es)) { const c = new Float32Array(es.length); let s = 0; es.forEach((e, j) => (c[j] = s += time[e])); cum.set(es, c) } }
+  const flipped = new Map<Uint16Array, Uint16Array>(), flip = (es: Uint16Array) => flipped.get(es) ?? flipped.set(es, es.slice().reverse()).get(es)!
   w.movers.forEach((i, j) => [w.mode[i], w.playMode[i]].forEach((mode, leg) => {
     if (!ROAD_MODES.has(mode)) return
-    const first = pathOf(i, leg, 0)
+    const [a, b] = ends(i, leg), own = routes.has(routeKey(b, a))
     for (let v = 0; v < VARIANTS; v++) {
-      const es = (v ? pathOf(i, leg, v) : undefined) ?? first
-      if (es) { add(es); paths[(2 * j + leg) * VARIANTS + v] = es }
+      const there = pathIn(routes, a, b, v), back = own ? pathIn(routes, b, a, v) : there && flip(there)
+      ;[there, back].forEach((es, k) => { if (es) { add(es); paths[((2 * j + leg) * 2 + k) * VARIANTS + v] = es } })
     }
   }))
   return { paths, cum, pick: new Int8Array(n), since: new Int32Array(n).fill(-(2 ** 31)) }
@@ -85,7 +90,7 @@ export const loadNow = (w: World, use: RoadUse, out: Float32Array, onRoad?: (age
     // A trip out of the two cities has no path on the map (its plan goes from home to home).
     if (w.dest[i] === GONE || where(w, i, t) !== ROAD) continue
     const out1 = t < w.dep[i] + w.dur1[i], start = out1 ? w.dep[i] : w.ret[i], leg = w.dest[i] === PLAY ? 1 : 0
-    const base = (2 * j + leg) * VARIANTS
+    const base = ((2 * j + leg) * 2 + (out1 ? 0 : 1)) * VARIANTS
     if (use.since[j] !== start) {
       use.pick[j] = choose(w, use, i, base, leg ? w.playMode[i] : w.mode[i], live); use.since[j] = start
       const chosen = use.paths[base + use.pick[j]]
@@ -93,7 +98,7 @@ export const loadNow = (w: World, use: RoadUse, out: Float32Array, onRoad?: (age
     }
     const es = use.paths[base + use.pick[j]]
     if (!es) continue
-    const p = out1 ? (t - w.dep[i]) / w.dur1[i] : 1 - (t - w.ret[i]) / w.dur2[i]
+    const p = out1 ? (t - w.dep[i]) / w.dur1[i] : (t - w.ret[i]) / w.dur2[i]
     const c = use.cum.get(es)!, d = p * c[c.length - 1]
     let lo = 0, hi = c.length - 1
     while (lo < hi) { const m = (lo + hi) >> 1; if (c[m] < d) lo = m + 1; else hi = m }

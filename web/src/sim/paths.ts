@@ -30,10 +30,14 @@ export const networks = (road: GraphJson, mrt: GraphJson) => {
 export type Routes = Map<number, Uint16Array>
 /**
  * The variants of a road path: 0 the fastest (route.ts FASTER), 1 on streets only (a scooter cannot take a 國道 or a
- * 快速道路), 2 the shortest in metres. A file holds a variant only when it differs from the variants before it.
+ * 快速道路), 2 the shortest in metres. A file holds a variant only when it differs from the variant before it (pathIn),
+ * and a way back (b to a) only when it is not the way there reversed (traffic.ts roadUse).
  */
 export const VARIANTS = 3
 export const routeKey = (from: number, to: number, variant = 0) => (variant * 65536 + from) * 65536 + to
+/** Variant v of the path from a to b: a variant that the file leaves out is the one before it. */
+export const pathIn = <P>(routes: Map<number, P>, a: number, b: number, v: number): P | undefined =>
+  routes.get(routeKey(a, b, v)) ?? (v ? pathIn(routes, a, b, v - 1) : undefined)
 // The third word of the file, so that a file of the older layout (no variant) is not read as this one.
 const LAYOUT = 2
 export const readRoutes = (data: Uint16Array, g: Graph): Routes | undefined => {
