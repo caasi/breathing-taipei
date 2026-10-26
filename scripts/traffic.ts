@@ -17,6 +17,7 @@ import { cityFrom } from '../web/src/sim/city.ts'
 import { kindAt, indexOf, type Calendar } from '../web/src/sim/calendar.ts'
 import { networks, readRoutes, roadNode, routeKey } from '../web/src/sim/paths.ts'
 import { CAPACITY, cellLoad, extraTime, gridOf, liveOf, roadUse, take } from '../web/src/sim/traffic.ts'
+import { workNodes } from '../web/src/sim/jobs.ts'
 
 // TomTom Traffic Index 2025, 台北市: morning rush hour 64.6%, evening rush hour 92%.
 const MORNING = { level: 0.646, hours: [7, 8, 9] }, EVENING = { level: 0.92, hours: [17, 18, 19] }
@@ -25,16 +26,17 @@ const SEED = 42, PER_AGENT = 10, DAY = '2026-10-27'
 const pub = (f: string) => JSON.parse(readFileSync(new URL(`../web/public/${f}`, import.meta.url), 'utf8'))
 const data = { ...pub('od2.json'), villages: pub('villages2.json'), signal: pub('signal.json'), night: pub('night.json') }
 const cal: Calendar = pub('calendar.json'), start = indexOf(cal, DAY)
-const coords = cityFrom(data, PER_AGENT, 'village', day => kindAt(cal, start + day)).coords
+const { coords, nodes } = cityFrom(data, PER_AGENT, 'village', day => kindAt(cal, start + day))
 const roadJson = pub('road-graph.json'), net = networks(roadJson, pub('mrt-graph.json'))
 const file = readFileSync(new URL('../web/public/road-routes.bin', import.meta.url))
 const routes = readRoutes(new Uint16Array(file.buffer, file.byteOffset, file.byteLength / 2), net.road)
 if (!routes) throw new Error('road-routes.bin is missing or for another road graph: run `pnpm routes` in web/')
 const node = new Map<number, number>(), at = (v: number) => node.get(v) ?? node.set(v, roadNode(net, coords, v)).get(v)!
+const workAt = workNodes(net, coords, nodes, pub('jobs.json'))
 const metres: number[] = roadJson.edges.map((e: number[]) => e[2])
 
 // A bucket (the roads of one class in a cell) is in 台北市 when the village nearest to the first node of its first edge is.
-const villages: { town: string; lon: number; lat: number }[] = data.villages, grid = gridOf(roadJson)
+const villages: { town: string; lon: number; lat: number }[] = data.villages, grid = gridOf(roadJson, pub('road-names.json').edge)
 const taipei = new Array<boolean | undefined>(grid.km.length)
 roadJson.edges.forEach(([a]: number[], e: number) => {
   if (taipei[grid.cellOf[e]] !== undefined) return
@@ -45,7 +47,8 @@ roadJson.edges.forEach(([a]: number[], e: number) => {
 
 const run = (capacity: number) => {
   const c = cityFrom(data, PER_AGENT, 'village', day => kindAt(cal, start + day)), w = init(c.city, SEED)
-  const use = roadUse(w, (a, b, v) => routes.get(routeKey(at(a), at(b), v)), metres), live = liveOf(roadJson, grid)
+  const use = roadUse(w, (i, leg, v) => routes.get(routeKey(at(w.home[i]), leg ? at(w.play[i]) : workAt(i, w.work[i]), v)), metres)
+  const live = liveOf(roadJson, grid)
   const load = new Float32Array(metres.length), sums = new Map<number, [number, number]>() // hour -> [people x extra, people]
   for (let slot = 0; slot < 96; slot++, advance(w, 15)) {
     take(w, use, load, live, undefined, capacity)

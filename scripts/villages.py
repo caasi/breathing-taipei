@@ -15,14 +15,16 @@ Usage:
                 http://tcgmetro.blob.core.windows.net/stationod/%E8%87%BA%E5%8C%97%E6%8D%B7%E9%81%8B%E6%AF%8F%E6%97%A5%E5%88%86%E6%99%82%E5%90%84%E7%AB%99OD%E6%B5%81%E9%87%8F%E7%B5%B1%E8%A8%88%E8%B3%87%E6%96%99_202609.csv
   COMPANIES     臺北市內湖科技園區廠商名錄 (臺北市政府產業發展局, data.taipei), UTF-8 with BOM, TWD97 TM2 coordinates:
                 https://data.taipei/api/frontstage/tpeod/dataset/resource.download?rid=296acfa2-5d93-4706-ad58-e83cc951863c
-  OUT_JSON      writes villages2.json: [{"code", "town", "pop", "arrivals", "jobs", "lon", "lat"}], sorted by village code
+  OUT_JSON      writes villages2.json: [{"code", "town", "pop", "arrivals", "jobs", "lon", "lat"}], sorted by village code,
+                and jobs.json next to it: {village code: [[lon, lat, companies], ...]}, the companies of the list on a grid of
+                SPOT degrees (about 50 m), where the commuters to those villages go
 
 A village that the 2021 map does not have gives its residents to the mapped villages of its district, in
 proportion to their residents. arrivals is the trips that end at the stations in the village from 05:00 to
 11:59, summed over all days of the month. A station is at the mean position of its exits. The centre point is
 the area centroid of the outer rings. jobs is the employees of 內湖科技園區 (NEIHU_JOBS) spread over the villages of
 內湖區 by the number of its companies in each; it is 0 in the other villages."""
-import csv, json, math, sys, collections
+import csv, json, math, os, sys, collections
 from od import inside, lookup, station_points
 
 if __name__ == "__main__" and len(sys.argv) != 8:
@@ -54,6 +56,7 @@ def centroid(polys):
 # 108年底 (end of 2019), 臺北市政府產業發展局 (DATA.md, "Figures in the code"). ponytail: the newest official count found;
 # the company list gives where the companies are, not how many people each has, so each company counts the same.
 NEIHU_JOBS = 166_322
+SPOT = 0.0005
 
 def tm2(x, y):
     """TWD97 TM2 (central meridian 121°E, scale 0.9999, false easting 250 km, GRS80) to (lon, lat) in degrees."""
@@ -113,12 +116,12 @@ def main(villages_10t, tpe_pop, ntpc_pop, exits_csv, od_csv, companies, out):
         arrivals[v] += morning[s]
 
     neihu = [(code, polys) for code, polys in shapes if town_of[code] == "台北市內湖區"]
-    firms = collections.Counter()
+    firms, spots = collections.Counter(), collections.defaultdict(collections.Counter)
     with open(companies, encoding="utf-8-sig") as f:
         for row in csv.DictReader(f):
             pt = tm2(float(row["ADDR_X"]), float(row["ADDR_Y"]))
             v = next((code for code, polys in neihu if inside(pt, [r for poly in polys for r in poly])), None)
-            if v: firms[v] += 1
+            if v: firms[v] += 1; spots[v][(round(pt[0] / SPOT), round(pt[1] / SPOT))] += 1
     total = sum(firms.values())
     jobs = {v: round(NEIHU_JOBS * n / total) for v, n in firms.items()}
     print("內科 companies by village:", dict(firms.most_common()), "outside 內湖區:", sum(1 for _ in open(companies, encoding="utf-8-sig")) - 1 - total)
@@ -127,6 +130,8 @@ def main(villages_10t, tpe_pop, ntpc_pop, exits_csv, od_csv, companies, out):
     rows = [{"code": c, "town": town_of[c], "pop": round(final[c]), "arrivals": arrivals.get(c, 0), "jobs": jobs.get(c, 0),
              "lon": round(centre[c][0], 5), "lat": round(centre[c][1], 5)} for c in sorted(town_of)]
     json.dump(rows, open(out, "w", encoding="utf-8"), ensure_ascii=False)
+    places = {v: [[round(x * SPOT, 5), round(y * SPOT, 5), n] for (x, y), n in sorted(c.items())] for v, c in sorted(spots.items())}
+    json.dump(places, open(os.path.join(os.path.dirname(out), "jobs.json"), "w"), separators=(",", ":"))
 
 if __name__ == "__main__":
     main(*sys.argv[1:])

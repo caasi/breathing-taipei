@@ -6,12 +6,12 @@ import { FASTER, type GraphJson } from './route.ts'
 const ALPHA = 0.15, BETA = 4
 // ponytail: one capacity for every cell, in people per km of road, fitted so that the morning peak of 台北市 has the
 // TomTom congestion level (scripts/traffic.ts, DATA.md "Figures in the code"). Real roads differ in lanes.
-export const CAPACITY = 78
+export const CAPACITY = 260
 // ponytail: the road load is taken over cells of CELL degrees (about 500 m) and the people per km of road in a cell stand
 // in for the flow of BPR. Every trip takes one shortest path, so per edge only a few edges carried any load, with a
 // travel time up to 25 times the free time; a cell spreads it over the roads nearby. Use flows per hour on each edge
 // when trips get more than one path and edges get capacities of their own.
-const CELL = 0.005
+const CELL = 0.005, ACROSS = 0.55
 // ponytail: the travel time over free time at which the colour of a road is at its end (dark red); chosen by eye.
 const SLOWEST = 1 / 0.3
 // ponytail: the share of drivers and bus riders who follow the live traffic (a map app) when they leave; the others take
@@ -25,15 +25,15 @@ const NAV = 0.6, SCOOTER = 2
  */
 export type RoadUse = { paths: (Uint16Array | undefined)[]; cum: Map<Uint16Array, Float32Array>; pick: Int8Array; since: Int32Array }
 
-/** pathOf gives the edges of a variant from one node to another, or undefined when the routes do not hold it. */
-export const roadUse = (w: World, pathOf: (from: number, to: number, variant: number) => Uint16Array | undefined, metres: ArrayLike<number>): RoadUse => {
+/** pathOf gives the edges of a variant of agent i's trip (leg 0 to work, 1 to its day-off place), or undefined when the routes do not hold it. */
+export const roadUse = (w: World, pathOf: (agent: number, leg: number, variant: number) => Uint16Array | undefined, metres: ArrayLike<number>): RoadUse => {
   const cum = new Map<Uint16Array, Float32Array>(), n = w.movers.length, paths: (Uint16Array | undefined)[] = new Array(2 * n * VARIANTS)
   const add = (es: Uint16Array) => { if (!cum.has(es)) { const c = new Float32Array(es.length); let s = 0; es.forEach((e, j) => (c[j] = s += metres[e])); cum.set(es, c) } }
-  w.movers.forEach((i, j) => [[w.work[i], w.mode[i]], [w.play[i], w.playMode[i]]].forEach(([to, mode], leg) => {
+  w.movers.forEach((i, j) => [w.mode[i], w.playMode[i]].forEach((mode, leg) => {
     if (!ROAD_MODES.has(mode)) return
-    const first = pathOf(w.home[i], to, 0)
+    const first = pathOf(i, leg, 0)
     for (let v = 0; v < VARIANTS; v++) {
-      const es = (v ? pathOf(w.home[i], to, v) : undefined) ?? first
+      const es = (v ? pathOf(i, leg, v) : undefined) ?? first
       if (es) { add(es); paths[(2 * j + leg) * VARIANTS + v] = es }
     }
   }))
@@ -92,19 +92,27 @@ export const loadNow = (w: World, use: RoadUse, out: Float32Array, onRoad?: (age
 // not thin out the load of the streets next to them.
 const LANES = [1, 3, 2, 0.5]
 
-/** A bucket is the roads of one class in one cell: the bucket of each edge, and the km and lanes of each bucket. */
+/**
+ * A bucket is one named road (road-names.json), or the roads with no name, of one class in one cell: the bucket of each
+ * edge, and the km and lanes of each bucket. A named road on its own keeps a main road from being thinned out by the
+ * small streets of its cell (瑞光路 had 10 to 210 people at 09:00 against 4 to 12 km of streets in its cells).
+ */
 export type Grid = { cellOf: Int32Array; km: Float64Array; lanes: Float64Array; keys: Int32Array }
-/** The key of the cell that holds a point. The key of a bucket is 4 x the key of its cell + its class. */
+/** The key of the cell that holds a point. The key of a bucket is 4 x the key of its cell + its class (not unique). */
 // From 121°E and 24°N, so that 4 times the key fits in an Int32Array.
 export const cellKey = (lon: number, lat: number) => Math.floor((lon - 121) / CELL) * 10_000 + Math.floor((lat - 24) / CELL)
-export const gridOf = (road: GraphJson): Grid => {
-  const ids = new Map<number, number>()
-  const cellOf = Int32Array.from(road.edges, ([a, b, , , cls = 0]) => {
-    const k = 4 * cellKey((road.lon[a] + road.lon[b]) / 2, (road.lat[a] + road.lat[b]) / 2) + cls
-    return ids.get(k) ?? ids.set(k, ids.size).get(k)!
+export const gridOf = (road: GraphJson, name: ArrayLike<number> = []): Grid => {
+  const ids = new Map<string, number>(), key: number[] = []
+  const cellOf = Int32Array.from(road.edges, ([a, b, , , cls = 0], e) => {
+    const k = 4 * cellKey((road.lon[a] + road.lon[b]) / 2, (road.lat[a] + road.lat[b]) / 2) + cls, id = `${k}:${name[e] ?? -1}`
+    if (!ids.has(id)) { ids.set(id, ids.size); key.push(k) }
+    return ids.get(id)!
   })
-  const km = new Float64Array(ids.size), keys = Int32Array.from(ids.keys())
+  const km = new Float64Array(ids.size), keys = Int32Array.from(key)
   road.edges.forEach(([, , m], e) => (km[cellOf[e]] += m / 1000))
+  // ponytail: a named road counts at most the width of a cell (ACROSS km). Its edges in one cell can add up to much more,
+  // from the shapes of many bus routes and from small roads near it that took its name (瑞光路: 7.9 km in one cell).
+  if (name.length) ids.forEach((b, id) => { if (!id.endsWith(':-1')) km[b] = Math.min(km[b], ACROSS) })
   return { cellOf, km, lanes: Float64Array.from(keys, k => LANES[k % 4]), keys }
 }
 
@@ -115,8 +123,13 @@ export const cellLoad = (load: ArrayLike<number>, grid: Grid) => {
   return out
 }
 
-/** Extra time over free flow, as a share of the free time, for `people` on `km` of road. */
-export const extraTime = (people: number, km: number, capacity = CAPACITY) => ALPHA * (people / km / capacity) ** BETA
+// ponytail: the most travel time over free time; a guess. BPR grows without limit past capacity, which it overstates
+// (DATA.md), and a few ramps at 10 to 25 times the free time carried the mean that the fit matches, which left the
+// main streets free.
+const MOST = 4
+
+/** Extra time over free flow, as a share of the free time, for `people` on `km` of road (at most MOST - 1). */
+export const extraTime = (people: number, km: number, capacity = CAPACITY) => Math.min(MOST - 1, ALPHA * (people / km / capacity) ** BETA)
 
 /** Per bucket, the travel time over free time. */
 export const slowness = (load: ArrayLike<number>, grid: Grid, capacity = CAPACITY) =>

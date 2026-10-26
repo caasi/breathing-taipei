@@ -20,6 +20,7 @@ The app reads the files in `web/public/`. This file lists the source, the licens
 | `road-graph.json` | Road graph built from bus route shapes | G | Open Government Data License (Taipei file not confirmed) |
 | `road-lines.json` | The real shape of each edge of `road-graph.json`, for the map | G | Open Government Data License (Taipei file not confirmed) |
 | `road-names.json` | The name of each edge of `road-graph.json`, for the jam events | H | ODbL |
+| `jobs.json` | The company spots of the villages of 內湖科技園區, where their commuters go | (data.taipei) | Not checked (see `villages.py` in "Figures in the code") |
 | `mrt-graph.json` | MRT graph built from OpenStreetMap lines and station positions | B, H | ODbL 1.0 (lines) and Open Government Data License (station positions) |
 | `transit.json` | MRT, light rail, railway, high speed rail, motorway and trunk lines, stations, and airport | H | ODbL 1.0 |
 | `night.json` | Businesses of the night-time groups in each village | J, F | Open Government Data License |
@@ -118,6 +119,7 @@ Note: The data.gov.tw entry for the Taipei shape file was not found. The license
 
 - 166,322 employees at the end of 108 (2019): 臺北市政府產業發展局, 「建構臺北科技走廊，提升園區發展機能」 (https://doed.gov.taipei/News_Content.aspx?n=7A86CE12E01A9E9E&sms=F6E4BC790FC874BE&s=1183BAE25BBFB9CB), checked on 2026-10-27. No newer official count was found (KNOWN-ISSUES.md).
 - The employees are spread over the villages of 內湖區 by the number of companies of the company list in each: 2,154 in 港墘里 (63000100005), 1,600 in 63000100001, 1,365 in 63000100030, 568 in 63000100002, 3 in two other villages, and 2 outside 內湖區 (left out). Each company counts the same, which is a guess: the list has no employees. Not checked: the license of the company list. An agent search saw only 「公開」 on its data.taipei page, with no named license; `villages2.json` keeps only the counts by village.
+- The commuters to a village of the park go to one company spot each (`jobs.json`: the companies of the list on a grid of about 50 m, 286 spots), drawn by the companies of each spot and fixed by the agent (`web/src/sim/jobs.ts`); their road load ends at the street node nearest to the spot. The dots still go to the road node of the village.
 - In a district with known jobs, the known jobs take their share of the morning arrivals of the district (the OD of 05:00 to 11:59), at most all of them; the rest of the arrivals are spread as before. The model has 120,125 morning arrivals in 內湖區, fewer than 166,322, so all of them go to the villages of the park, and the other villages of 內湖區 get no commuters.
 - 台塑企業 moved about 4,600 employees to its head office at 南京東路六段380號 in 2023 (工商時報, 2023-10-23). They are not in the model: the village of the address is not known yet.
 
@@ -131,8 +133,10 @@ Note: The data.gov.tw entry for the Taipei shape file was not found. The license
   - With 0.15, the travel time at capacity is 1.15 times the free time (a speed of about 87% of the free speed). So 0.15 can be a value that was set, not a value that was fitted.
   - To confirm the source, read the *Traffic Assignment Manual* (1964), or the reviews by Sheffi or Branston that cite it.
 - Later work changed the curve: the *Highway Capacity Manual* of 1994 made the speed-flow curve flatter, and one source gives 0.05 and 10 for urban trunk roads (MDPI Applied Sciences 13(24):13318).
-- `CAPACITY`, 78 people per km of street in a cell: fitted by `scripts/traffic.ts`. On the workday 2026-10-27 (seed 42, 10 people per agent, village level), the extra travel time of the people on the roads of the cells of 台北市, from 07:00 to 09:45, is 64.6%. This is the morning congestion level of 台北市 in the TomTom Traffic Index 2025 (https://www.tomtom.com/traffic-index/city/taipei/, read on 2026-10-26). It is a scale factor, not a physical capacity: the road graph has the shapes of bus routes and the 國道 and 快速道路 of OSM, the lanes of each class are guesses (below), and the load holds only the agents of the model.
-- With this capacity, the evening level (17:00 to 19:45) is 55.1%; the fit gives a morning level of 64.3%. The routes follow the traffic, so `scripts/traffic.ts` bisects the capacity instead of one BPR step.
+- `CAPACITY`, 260 people per km of street in a bucket: fitted by `scripts/traffic.ts`. On the workday 2026-10-27 (seed 42, 10 people per agent, village level), the extra travel time of the people on the roads of the cells of 台北市, from 07:00 to 09:45, is 64.6%. This is the morning congestion level of 台北市 in the TomTom Traffic Index 2025 (https://www.tomtom.com/traffic-index/city/taipei/, read on 2026-10-26). It is a scale factor, not a physical capacity: the road graph has the shapes of bus routes and the 國道 and 快速道路 of OSM, the lanes of each class are guesses (below), and the load holds only the agents of the model.
+- With this capacity, the evening level (17:00 to 19:45) is 35.7%; the fit gives a morning level of 64.5%. The routes follow the traffic, so `scripts/traffic.ts` bisects the capacity instead of one BPR step.
+- A named road of a cell (road-names.json) is a bucket of its own, and counts at most 0.55 km (`ACROSS`, about the width of a cell; a guess): the edges of 瑞光路 in one cell added up to 7.9 km, from many bus shapes and from small roads near it that took its name. The roads with no name of each class in a cell are one bucket.
+- The travel time of a bucket is at most 4 times the free time (`MOST`, a guess). BPR grows without limit past capacity, and a few ramps at 10 to 25 times the free time carried the mean that the fit matches.
 - The roads of each class in a cell are taken apart (a bucket), with a capacity of `CAPACITY` times `LANES`: 1 for a street, 3 for a 國道, 2 for a 快速道路 and 0.5 for a ramp. These are guesses for the lanes. Before, one capacity for all roads of a cell made a cell with an interchange look free, as its many km of 國道 and ramps thinned out the load. TomTom gives 92% for the evening. The model has fewer people on the road in the evening than in the morning, and it has no trips such as school runs or shopping.
 - The cell of the road load (`CELL`, 0.005 degrees, about 500 m; it was 0.01 degrees until 2026-10-27): a guess. Each trip takes one shortest path, so on single edges only about 3,000 of the 29,404 edges had any load, and a few of them showed 14 to 25 times the free time (measured on 2026-10-26). The people per km of road in a cell stand in for the flow of BPR.
 - Jam events (`web/src/sim/worker.ts`), all by eye: at most one each take of the traffic, at most one each day for each character, from a road at red or worse (slowness 0.43). A character's temper is fixed by its index: about 55% go by the jam (angry from slowness 0.75, else stuck), 20% go blank, and on the way to work 17% work by phone and 8% take leave before noon (after noon they work by phone). Taking leave does not change the plan.
@@ -194,6 +198,7 @@ Some scripts read a file that another script writes into `web/public/`:
 | `transit.json` | `transit.py` | (none) |
 | `road-graph.json`, `road-lines.json`, `mrt-graph.json` | `graphs.py` | (none) |
 | `road-names.json` | `names.py` | `road-graph.json`, `road-lines.json` |
+| `jobs.json` | `villages.py` | (none) |
 | `calendar.json` | `days.py` | (none) |
 | `od2.json` | `od.py` | `towns.json` |
 | `people.json` | `people.py` | `villages2.json` |

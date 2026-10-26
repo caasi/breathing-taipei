@@ -17,6 +17,7 @@ import { init } from '../web/src/sim/core.ts'
 import { cityFrom } from '../web/src/sim/city.ts'
 import { networks, ROAD_MODES, roadNode, routeKey, writeRoutes } from '../web/src/sim/paths.ts'
 import { tree, edgesTo } from '../web/src/sim/route.ts'
+import { workNodes } from '../web/src/sim/jobs.ts'
 
 const SEED = 42, PER_AGENT = 10 // the app's values (web/src/App.tsx)
 const pub = (f: string) => JSON.parse(readFileSync(new URL(`../web/public/${f}`, import.meta.url), 'utf8'))
@@ -29,12 +30,16 @@ for (const level of ['village', 'district'] as const) {
   const c = cityFrom(data, PER_AGENT, level, () => 0), w = init(c.city, SEED)
   const node = new Map<number, number>()
   const at = (v: number) => node.get(v) ?? node.set(v, roadNode(net, c.coords, v)).get(v)!
-  const want = (home: number, to: number, mode: number) => {
+  const workAt = workNodes(net, c.coords, c.nodes, pub('jobs.json'))
+  const want = (home: number, b: number, mode: number) => {
     if (!ROAD_MODES.has(mode)) return
-    const a = at(home), b = at(to)
+    const a = at(home)
     if (a !== b) (wanted.get(a) ?? wanted.set(a, new Set()).get(a)!).add(b)
   }
-  for (const i of w.movers) { want(w.home[i], w.work[i], w.mode[i]); want(w.home[i], w.play[i], w.playMode[i]) }
+  // The dots go to the road node of the village; the road load goes to the company spot of the agent (jobs.ts).
+  for (const i of w.movers) {
+    want(w.home[i], at(w.work[i]), w.mode[i]); want(w.home[i], workAt(i, w.work[i]), w.mode[i]); want(w.home[i], at(w.play[i]), w.playMode[i])
+  }
 }
 const g = net.road
 // The slot weights of the variants (paths.ts VARIANTS): fastest, on streets only, shortest in metres.
