@@ -9,7 +9,7 @@ This file lists the changes that a user of the site can see, for each version. T
 - The map shows the other counties around Taipei and New Taipei, and the sea in a darker colour.
 - Traffic: the roads of the two cities, with the 國道 and 快速道路, in thin lines on the map. A slow road turns orange, red, then dark red, and glows; dashes move along the roads in use, slower where the traffic is slow. The setting `traffic` shows or hides the layer; the simulation takes the traffic in both cases.
 - Jams make trips longer. The bus, scooter and car dots take the colour of the slowest road of their place.
-- Jam events: a character stuck on a road, by the name of the road or the nearest village, gets angry, waits, goes blank, starts work by phone, or takes leave. A character that a jam made late to work also leaves work later, and the event of its way home says so.
+- Jam events: a character stuck on a road, by the name of the road or the nearest village, gets angry, waits, goes blank, starts work by phone, or asks for an hour of leave to come late. A character that a jam made late to work also leaves work later, and the event of its way home says so.
 
 ### Changed
 

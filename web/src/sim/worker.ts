@@ -267,8 +267,8 @@ onmessage = async (e: MessageEvent<ToWorker>) => {
       newEvents.push(late); backs.set(i, late)
     })
     // ponytail: a character's temper is fixed by its index; about 55% take a jam by how slow it is (angry on the slowest
-    // roads, else stuck), the rest go blank, work by phone or take leave (only on the way to work; leave only before
-    // noon). The shares are by eye. Taking leave does not change the plan yet (#2).
+    // roads, else stuck), the rest go blank, work by phone or ask for an hour of leave to come late (only on the way to
+    // work; leave only before noon). The shares are by eye. The character goes on to work, so the plan does not change.
     const { names, edge: edgeName } = roadNames as RoadNames, jammed = new Map<number, number>()
     onJam = (i, e, level) => {
       const t = world.day * 1440 + Math.floor(world.minute), today = Math.floor(t / 1440)

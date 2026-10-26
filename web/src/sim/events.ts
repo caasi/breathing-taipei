@@ -14,7 +14,7 @@ export type SimEvent =
   // A character stuck on a slow road: the road by name, or else the node nearest to it; how it takes the jam.
   | { id: string; t: number; kind: 'jam'; name: string; home: number; mode: number; road?: string; near: number; mood: Mood }
 
-/** How a character takes a jam: angry, stuck and waiting, blank (music, the window), working by phone, or taking leave. */
+/** How a character takes a jam: angry, stuck and waiting, blank (music, the window), working by phone, or an hour of leave. */
 export type Mood = 'angry' | 'stuck' | 'blank' | 'work' | 'leave'
 
 /** What a place is called: the district, and the village at village level. */
@@ -53,7 +53,7 @@ export const jamOf = (e: Extract<SimEvent, { kind: 'jam' }>, placeOf: PlaceOf) =
     case 'stuck': return bus ? `坐的公車卡在${at}，車上的人都在看錶` : `${by}卡在${at}，走走停停，只能等`
     case 'blank': return bus ? `坐的公車塞在${at}，乾脆放空看窗外` : `${by}塞在${at}，乾脆放空聽音樂`
     case 'work': return `${bus ? '坐公車' : by}塞在${at}，打開電話會議，先開始辦公`
-    case 'leave': return `${bus ? '坐公車' : by}塞在${at}，打電話請假，今天不進公司了`
+    case 'leave': return `${bus ? '坐公車' : by}塞在${at}，打電話請一小時的假，晚點再進公司`
   }
 }
 
