@@ -3,7 +3,9 @@
 Usage:
   python3 scripts/days.py OFFICE_115 OFFICE_116 LUNAR_CSV TERMS_CSV OUT_JSON
 
-  OFFICE_115, OFFICE_116  data.gov.tw 14718 (中華民國政府行政機關辦公日曆表), the files for 2026 and 2027
+  OFFICE_115, OFFICE_116  data.gov.tw 14718 (中華民國政府行政機關辦公日曆表), the files for 2026 and 2027:
+              https://www.dgpa.gov.tw/FileConversion?filename=dgpa/files/202506/a52331bd-a189-466b-b0f0-cae3062bbf74.csv&nfix=&name=115.csv
+              https://www.dgpa.gov.tw/FileConversion?filename=dgpa/files/202607/f538b1ff-ba60-4c63-9477-10db8e6612d1.csv&nfix=&name=116.csv
   LUNAR_CSV   中央氣象署 A-A0087-001 (國農曆日期對照, data.gov.tw 157677), 2022 to 2050:
               https://opendata.cwa.gov.tw/fileapi/v1/opendataapi/A-A0087-001?Authorization=rdec-key-123-45678-011121314&format=CSV
   TERMS_CSV   中央氣象署 A-A0087-003 (節氣發生日期及時刻資料, data.gov.tw 157677), 2026 to 2028:

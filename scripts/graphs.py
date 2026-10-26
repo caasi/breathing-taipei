@@ -6,7 +6,7 @@ Usage:
   TPE_SHAPES   https://tcgbusfs.blob.core.windows.net/blobbus/GetBusShape.gz
   NTPC_SHAPES  https://tcgbusfs.blob.core.windows.net/ntpcbus/GetBusShape.gz
   OSM_RAIL     Overpass JSON: way["railway"~"^(subway|rail|light_rail|monorail)$"](24.90,121.25,25.20,121.70); out tags geom;
-  EXITS_CSV    data.gov.tw 128428 (Big5)
+  EXITS_CSV    data.gov.tw 128428 (Big5): https://data.taipei/api/dataset/cfa4778c-62c1-497b-b704-756231de348b/resource/307a7f61-e302-4108-a817-877ccbfca7c1/download
   OUT_DIR      writes road-graph.json and mrt-graph.json
 
 Output per graph: kept nodes (degree != 2) and edges whose geometry holds the merged degree-2 points."""
