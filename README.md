@@ -64,6 +64,7 @@ Display settings:
 | `dots` | `1` shows the dots, `0` hides them | `1` |
 | `mode` | `1` colors the dots by mode | `0` |
 | `layers` | Comma list of `mrt`, `lrt`, `tra`, `hsr`, `airport`, `highway`. Unknown names are ignored, and a list with no known name goes back to the default. An empty list hides all layers | All except `highway` |
+| `traffic` | `1` shows the road network with the slow roads in colour, and colours the bus, scooter and car dots on slow roads. `0` hides it, and the simulation does not take the traffic | `1` |
 
 Policy settings (placeholders):
 

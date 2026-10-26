@@ -17,7 +17,10 @@ import { hhmm, H2 } from './ui/format.ts'
 
 const SPEEDS = [0, 1, 2, 4, 8]
 const EVERY = [2, 5, 10, 20, 50]
-const LAYERS: [string, string][] = [['traffic', '路況'], ['mrt', '捷運'], ['lrt', '輕軌'], ['tra', '台鐵'], ['hsr', '高鐵'], ['airport', '機場'], ['highway', '國道與快速道路']]
+const LAYERS: [string, string][] = [['mrt', '捷運'], ['lrt', '輕軌'], ['tra', '台鐵'], ['hsr', '高鐵'], ['airport', '機場'], ['highway', '國道與快速道路']]
+// The traffic has a key of its own, not a place in `layers`: a browser that stored the layers before it existed would
+// keep it off. In the panel it shows before the highways.
+const LAYER_BOXES: [string, string][] = [...LAYERS.slice(0, -1), ['traffic', '路況'], LAYERS[LAYERS.length - 1]]
 const PER_AGENT = 10
 // Plans are made ahead of their departure, so the newest events are not all shown yet: keep more than the list shows.
 const KEEP_EVENTS = 3 * MAX_EVENTS
@@ -117,6 +120,8 @@ export function App() {
   // Highways are for orientation only and compete with the area colours, so they start hidden.
   const [show, setShow] = useStored('layers', new Set(LAYERS.map(l => l[0]).filter(k => k !== 'highway')),
     setOf(LAYERS.map(l => l[0])), v => [...v].join(','))
+  const [trafficOn, setTrafficOn] = useStored('traffic', true, bool, fromBool)
+  const layers = useMemo(() => (trafficOn ? new Set([...show, 'traffic']) : show), [show, trafficOn])
   const worker = useRef<Worker>()
   const started = useRef(0), shown = useRef(0) // the latest start posted, and the start of the frames on the page
   // The start of a new run whose clock stands until the page is ready: state for the icon, a ref for the logic, so a
@@ -181,10 +186,9 @@ export function App() {
   // Declared before the start, so the first start draws with the stored density.
   useEffect(() => post({ type: 'sample', every }), [every])
   useEffect(() => {
-    const on = show.has('traffic')
-    if (!on) cellTraffic.current = undefined
-    post({ type: 'traffic', on })
-  }, [show])
+    if (!trafficOn) cellTraffic.current = undefined
+    post({ type: 'traffic', on: trafficOn })
+  }, [trafficOn])
   useEffect(() => {
     if (runStart === undefined) return
     // The new world starts at minute 0, and both clocks stand there until the page has drawn the first frame. The page
@@ -304,7 +308,7 @@ export function App() {
       style={{ marginRight: 4, fontWeight: c === colourBy ? 'bold' : 'normal' }}>{c === 'density' ? '人口密度' : '人口變化率'}</button>)}
       {colourBy === 'rate' && <span style={{ marginLeft: 8 }}>變化區間：{WINDOWS.map(v => <button key={v} onClick={() => setRateWindow(v)}
         style={{ marginRight: 4, fontWeight: v === rateWindow ? 'bold' : 'normal' }}>{v} 分</button>)}</span>}</p>
-    <p>{LAYERS.map(([k, label]) => <label key={k} style={{ marginRight: 12 }}><input type="checkbox" checked={show.has(k)} onChange={() => toggle(k)} />{label}</label>)}</p>
+    <p>{LAYER_BOXES.map(([k, label]) => <label key={k} style={{ marginRight: 12 }}><input type="checkbox" checked={layers.has(k)} onChange={() => (k === 'traffic' ? setTrafficOn(on => !on) : toggle(k))} />{label}</label>)}</p>
     <h2 style={H2}>模擬</h2>
     <div style={{ fontVariantNumeric: 'tabular-nums' }}>
     <p>台北市 {people(inTaipei)} 人，新北市 {people(n => !inTaipei(n))} 人，路上 {padded(road.reduce((a, b) => a + b, 0) * PER_AGENT, 6)} 人，外地 {padded((s?.away ?? 0) * PER_AGENT, 6)} 人</p>
@@ -348,7 +352,7 @@ export function App() {
       {!faded && towns && projection && <Outline towns={towns} proj={projection} view={view} pop={pop} />}
       <div className="reveal" style={{ position: 'absolute', inset: 0, opacity: revealed ? 1 : 0, filter: revealed ? 'none' : 'blur(8px)' }}>
       {ready && <>
-        <HeatMap towns={towns} villages={villages} level={onScreen?.level ?? level} nodes={nodes} counts={s.counts} perAgent={PER_AGENT} proj={projection} transit={transit} show={show} rate={rate} roads={roads} traffic={traffic} speed={speed} view={view} />
+        <HeatMap towns={towns} villages={villages} level={onScreen?.level ?? level} nodes={nodes} counts={s.counts} perAgent={PER_AGENT} proj={projection} transit={transit} show={layers} rate={rate} roads={roads} traffic={traffic} speed={speed} view={view} />
         {dots && dotTrips && <Travellers tracks={dotRun!.tracks} trips={dotTrips} clock={clock} byMode={byMode} traffic={cellTraffic} view={view} />}
       </>}
       </div>
