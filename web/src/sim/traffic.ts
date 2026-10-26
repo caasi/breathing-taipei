@@ -121,10 +121,10 @@ export type Grid = { cellOf: Int32Array; km: Float64Array; lanes: Float64Array; 
 // From 121°E and 24°N, so that 4 times the key fits in an Int32Array.
 export const cellKey = (lon: number, lat: number) => Math.floor((lon - 121) / CELL) * 10_000 + Math.floor((lat - 24) / CELL)
 export const gridOf = (road: GraphJson, name: ArrayLike<number> = []): Grid => {
-  const ids = new Map<string, number>(), key: number[] = []
+  const ids = new Map<string, number>(), key: number[] = [], lanes: number[] = []
   const cellOf = Int32Array.from(road.edges, ([a, b, , , cls = 0], e) => {
     const k = 4 * cellKey((road.lon[a] + road.lon[b]) / 2, (road.lat[a] + road.lat[b]) / 2) + cls, id = `${k}:${name[e] ?? -1}`
-    if (!ids.has(id)) { ids.set(id, ids.size); key.push((name[e] ?? -1) < 0 ? k : -1) }
+    if (!ids.has(id)) { ids.set(id, ids.size); key.push((name[e] ?? -1) < 0 ? k : -1); lanes.push(LANES[cls]) }
     return ids.get(id)!
   })
   const km = new Float64Array(ids.size), keys = Int32Array.from(key)
@@ -132,7 +132,7 @@ export const gridOf = (road: GraphJson, name: ArrayLike<number> = []): Grid => {
   // ponytail: a named road counts at most the width of a cell (ACROSS km). Its edges in one cell can add up to much more,
   // from the shapes of many bus routes and from small roads near it that took its name (瑞光路: 7.9 km in one cell).
   if (name.length) ids.forEach((b, id) => { if (!id.endsWith(':-1')) km[b] = Math.min(km[b], ACROSS) })
-  return { cellOf, km, lanes: Float64Array.from(keys, k => LANES[k % 4]), keys }
+  return { cellOf, km, lanes: Float64Array.from(lanes), keys }
 }
 
 /** People on the road of each bucket. */

@@ -26,6 +26,11 @@ test('the stepper takes each boundary once, at the same times for any steps', ()
   }))
 })
 
+test('every bucket has the lanes of its class, also a named road (real data)', () => {
+  const road: GraphJson = pub('road-graph.json'), grid = gridOf(road, pub('road-names.json').edge)
+  road.edges.forEach(([, , , , cls = 0], e) => expect(grid.lanes[grid.cellOf[e]]).toBe([1, 3, 2, 0.5][cls]))
+})
+
 test('every bucket key a dot can read is unique, and a named road counts at most the width of a cell', () => {
   const road: GraphJson = pub('road-graph.json'), names = pub('road-names.json'), grid = gridOf(road, names.edge)
   const keys = Array.from(grid.keys).filter(k => k >= 0)
