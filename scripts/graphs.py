@@ -51,8 +51,10 @@ class Graph:
         return ns
 
 def contract(g, keep_extra=()):
-    """Keep nodes of degree != 2 (and keep_extra); every other node becomes geometry inside an edge."""
-    keep = {v for v in range(len(g.xy)) if len(g.adj[v]) != 2} | set(keep_extra)
+    """Keep nodes of degree != 2, nodes where the class of the road changes, and keep_extra; every other node becomes
+    geometry inside an edge, so each edge has one class."""
+    changes = lambda v: len({g.cls.get((v, w), 0) for w in g.adj[v]}) > 1
+    keep = {v for v in range(len(g.xy)) if len(g.adj[v]) != 2 or changes(v)} | set(keep_extra)
     # A component made only of degree-2 nodes (a loop) has no kept node; keep one node of it,
     # or the walk below never starts there and the whole loop is lost.
     reached = set()
@@ -89,7 +91,6 @@ def contract(g, keep_extra=()):
                 ways = {1 if (p, q) in g.one else -1 for p, q in zip(chain, chain[1:]) if (p, q) in g.one or (q, p) in g.one}
                 if ways == {-1, 1}: contract.mixed += 1
                 if ways == {-1}: chain.reverse()
-                # ponytail: the class of the first step names the whole edge; a chain that changes class is rare.
                 edges.append((remap[chain[0]], remap[chain[-1]], d, [g.xy[p] for p in chain[1:-1]], chain, g.cls.get((a, b0), 0), len(ways) == 1))
     nodes = [g.xy[v] for v in sorted(keep)]
     return nodes, edges, remap

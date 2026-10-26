@@ -16,7 +16,7 @@ const GLOW_FROM = 0.15, GLOW_LEVELS = 5, GLOW_GAIN = 1.4
 // ponytail: the flow on roads in use, chosen by eye: dashes of FLOW_PERIOD device pixels move both ways (the levels
 // have no direction) at FLOW_FAST pixels a second on a free road down to FLOW_SLOW on the slowest.
 const FLOW_PERIOD = 14, FLOW_FAST = 40, FLOW_SLOW = 3
-// Edge levels sit in a texture of this width, as one row of a texel per edge (32,550 on 2026-10-27) is wider than many GPUs allow.
+// Edge levels sit in a texture of this width, as one row of a texel per edge (32,616 on 2026-10-27) is wider than many GPUs allow.
 const ROW = 1024
 const vec = (xs: number[]) => `vec${xs.length}(${xs.map(v => v.toFixed(3)).join(', ')})`
 /** GLSL that defines `vec4 ramp(float t)`, the colour and opacity of STOPS at slowness t. */
