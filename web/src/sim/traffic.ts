@@ -3,11 +3,14 @@ import { pathIn, ROAD_MODES, routeKey, VARIANTS, type Routes } from './paths.ts'
 import { ACCESS, BUS, SCOOTER } from './city.ts'
 import { freeTime, type GraphJson } from './route.ts'
 
-// BPR (Bureau of Public Roads, 1964): time on a road = free time x (1 + ALPHA (volume / capacity)^BETA).
-const ALPHA = 0.15, BETA = 4
+// BPR (Bureau of Public Roads, 1964): time on a road = free time x (1 + ALPHA (volume / capacity)^BETA). ponytail: BETA
+// is 1, not the 4 of the manual, and MOST is 4: of a grid of BETA and MOST, each with CAPACITY fitted to TomTom, these
+// gave the spread of the peak slowness of the named roads of 台北市 nearest to the TDX section speeds of 6 weekdays
+// (DATA.md "Figures in the code"). With 4, a few roads stood at the limit and the rest were free.
+const ALPHA = 0.15, BETA = 1
 // ponytail: one capacity for every cell, in passenger car units (PCU) per km of road, fitted so that the morning peak of 台北市 has the
 // TomTom congestion level (scripts/traffic.ts, DATA.md "Figures in the code"). Real roads differ in lanes.
-export const CAPACITY = 99
+export const CAPACITY = 15.7
 // ponytail: the road load is taken over cells of CELL degrees (about 500 m) and the PCU per km of road in a cell stand
 // in for the flow of BPR. Every trip takes one shortest path, so per edge only a few edges carried any load, with a
 // travel time up to 25 times the free time; a cell spreads it over the roads nearby. Use flows per hour on each edge
@@ -169,11 +172,10 @@ export const cellLoad = (load: ArrayLike<number>, grid: Grid) => {
   return out
 }
 
-// ponytail: the travel time over free time that a road comes near but never reaches. BPR grows without limit past
-// capacity, which it overstates (DATA.md): 39 times at 4 times the capacity. 堤頂大道 from 民權東路 to 內湖路 took
-// about 6.4 times the free time of the model at the morning peak of 2002, and 3.9 times after a fix (DATA.md); a
-// bucket can be slower than the mean of a road. A guess from that one road.
-export const MOST = 8
+// The travel time over free time that a road comes near but never reaches, fitted with BETA (above). BPR grows without
+// limit past capacity, which it overstates. In the TDX section speeds the slowest roads of 台北市 were 3.6 to 3.7 times
+// their night speed at the peaks, and a 國道 4.9 times (DATA.md).
+export const MOST = 4
 
 /**
  * Extra time over free flow, as a share of the free time, for a load of `pcu` on `km` of road: BPR, bent smoothly
