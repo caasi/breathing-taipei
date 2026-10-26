@@ -1,11 +1,11 @@
 import { expect, test } from 'vitest'
 import fc from 'fast-check'
-import { readFileSync } from 'node:fs'
-import { init, now, type City } from './core.ts'
+import { existsSync, readFileSync } from 'node:fs'
+import { advance, init, now, where, ROAD, type City, type World } from './core.ts'
 import { cityFrom } from './city.ts'
-import { networks } from './paths.ts'
+import { networks, readRoutes, roadNode } from './paths.ts'
 import { workNodes } from './jobs.ts'
-import { cellKey, cellMax, extraTime, MOST, gridOf, levels, slowerOn, stepper, type Live } from './traffic.ts'
+import { cellKey, cellMax, extraTime, MOST, gridOf, levels, liveOf, roadUse, slowerOn, stepper, take, type Live } from './traffic.ts'
 import type { GraphJson } from './route.ts'
 
 const pub = (f: string) => JSON.parse(readFileSync(new URL(`../../public/${f}`, import.meta.url), 'utf8'))
@@ -80,3 +80,48 @@ test('the slowness of the rest of a path counts only the part of the current edg
   expect(slowerOn([0, 1], 0, live, 0.1)).toBeCloseTo(1.4 / 1.1, 9)
   expect(slowerOn([0, 1], 0, live)).toBeCloseTo(2.5, 9)
 })
+
+// The app's run on the real data, with its routes file (made by `pnpm routes`, not in git).
+const bin = new URL('../../public/road-routes.bin', import.meta.url)
+const appRun = () => {
+  const data = { ...pub('od2.json'), villages: pub('villages2.json'), signal: pub('signal.json'), night: pub('night.json') }
+  const c = cityFrom(data, 10, 'village', () => 0), w = init(c.city, 42), road: GraphJson = pub('road-graph.json')
+  const net = networks(road, pub('mrt-graph.json')), b = readFileSync(bin)
+  const routes = readRoutes(new Uint16Array(b.buffer, b.byteOffset, b.byteLength / 2), net.road)!
+  const node = new Map<number, number>(), at = (v: number) => node.get(v) ?? node.set(v, roadNode(net, c.coords, v)).get(v)!
+  const workAt = workNodes(net, c.coords, true), grid = gridOf(road, pub('road-names.json').edge), live = liveOf(road, grid)
+  const use = roadUse(w, routes, (i, leg) => [at(w.home[i]), leg ? at(w.play[i]) : workAt(i, w.work[i])], live.time)
+  return { w, use, live, load: new Float32Array(road.edges.length) }
+}
+const plans = (w: World) => [Int32Array.from(w.dep), Uint16Array.from(w.dur1), Int32Array.from(w.ret), Uint16Array.from(w.dur2)]
+// The share of its leg that a traveller on the road has done at the minute of w.
+const share = (w: World, i: number) => {
+  const t = now(w)
+  return t < w.dep[i] + w.dur1[i] ? (t - w.dep[i]) / w.dur1[i] : (t - w.ret[i]) / w.dur2[i]
+}
+
+test.skipIf(!existsSync(bin))('with no jam, the takes of a morning change no plan (real data)', () => {
+  const a = appRun(), b = appRun()
+  for (let s = 0; s < 40; s++) { advance(a.w, 15); advance(b.w, 15); take(a.w, a.use, a.load, a.live, undefined, 1e12) }
+  expect(plans(a.w)).toEqual(plans(b.w))
+}, 120_000)
+
+test.skipIf(!existsSync(bin))('in a jam, a take keeps each traveller where it is and each agent in one bucket of the due ring (real data)', () => {
+  const { w, use, live, load } = appRun()
+  for (let s = 0; s < 36; s++) {
+    advance(w, 15)
+    const before = new Map<number, number>()
+    for (const i of w.movers) if (where(w, i) === ROAD) before.set(i, share(w, i))
+    take(w, use, load, live)
+    // Whole minutes move the share by less than a minute of the leg (core.ts stretch).
+    before.forEach((p, i) => {
+      const d = now(w) < w.dep[i] + w.dur1[i] ? w.dur1[i] : w.dur2[i]
+      expect(Math.abs(share(w, i) - p)).toBeLessThanOrEqual(1 / d + 1e-9)
+    })
+  }
+  const slot = new Map<number, number>()
+  w.due.forEach((agents, k) => agents.forEach(i => { expect(slot.has(i)).toBe(false); slot.set(i, k) }))
+  for (const i of w.movers) expect(slot.get(i)).toBe((w.ret[i] + w.dur2[i]) % w.due.length)
+  // The morning is jammed somewhere, or the test checks nothing.
+  expect(Math.max(...live.slower)).toBeGreaterThan(2)
+}, 120_000)
