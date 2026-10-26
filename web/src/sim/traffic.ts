@@ -12,8 +12,8 @@ export const CAPACITY = 37
 // travel time up to 25 times the free time; a cell spreads it over the roads nearby. Use flows per hour on each edge
 // when trips get more than one path and edges get capacities of their own.
 const CELL = 0.01
-// Free speed / speed at which an edge shows orange, red and dark red, as on a map app; chosen by eye.
-const SLOWER = [1 / 0.7, 1 / 0.5, 1 / 0.3]
+// ponytail: the travel time over free time at which the colour of a road is at its end (dark red); chosen by eye.
+const SLOWEST = 1 / 0.3
 
 /** The road path of each mover (by its index in w.movers) to work and to its day-off place, with cumulative metres. */
 export type RoadUse = { work: (Uint16Array | undefined)[]; play: (Uint16Array | undefined)[]; cum: Map<Uint16Array, Float32Array> }
@@ -72,13 +72,10 @@ export const cellLoad = (load: ArrayLike<number>, grid: Grid) => {
 /** Extra time over free flow, as a share of the free time, for `people` on `km` of road. */
 export const extraTime = (people: number, km: number, capacity = CAPACITY) => ALPHA * (people / km / capacity) ** BETA
 
-/** 0 (free or light), 1 (orange), 2 (red) or 3 (dark red) per edge: the level of its cell, on an edge that has load. */
+/** Per edge, 0 (free) to 255 (SLOWEST or slower): the slowness of its cell, on an edge that has load. */
 export const levels = (load: ArrayLike<number>, grid: Grid, out: Uint8Array, capacity = CAPACITY) => {
   const cells = cellLoad(load, grid), level = new Uint8Array(cells.length)
-  cells.forEach((p, c) => {
-    const slower = 1 + extraTime(p, grid.km[c], capacity)
-    while (level[c] < SLOWER.length && slower >= SLOWER[level[c]]) level[c]++
-  })
+  cells.forEach((p, c) => (level[c] = Math.round(255 * Math.min(1, extraTime(p, grid.km[c], capacity) / (SLOWEST - 1)))))
   // An edge with no traveller stays clear, so the colour follows the roads in use and not the square of the cell.
   for (let e = 0; e < out.length; e++) out[e] = load[e] > 0 ? level[grid.cellOf[e]] : 0
   return out

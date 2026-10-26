@@ -3,8 +3,7 @@ import { geoArea, geoMercator, geoPath, type GeoProjection } from 'd3-geo'
 import { feature, mesh } from 'topojson-client'
 import type { FeatureCollection, Geometry } from 'geojson'
 import { Fills } from './Fills.tsx'
-import { Traffic } from './Traffic.tsx'
-import type { GraphJson } from '../sim/route.ts'
+import { Traffic, type RoadLines } from './Traffic.tsx'
 import { MAP_SIZE, svgTransform, type Rect, type View } from './view.ts'
 
 export type Transit = {
@@ -67,11 +66,11 @@ type Props = {
   proj: GeoProjection; transit?: Transit; show: Set<string>
   rate?: Float32Array // when given, colour by change per hour / residents instead of density
   speed: number // simulated hours per second
-  road?: GraphJson; traffic?: Uint8Array // the slow road edges, over the lines and under the labels
+  roads?: RoadLines; traffic?: Uint8Array // the road network and its slow edges, over the lines and under the labels
   view: View
 }
 
-export function HeatMap({ towns, villages, level, nodes, counts, perAgent, proj, transit, show, rate, speed, view, road, traffic }: Props) {
+export function HeatMap({ towns, villages, level, nodes, counts, perAgent, proj, transit, show, rate, speed, view, roads, traffic }: Props) {
   // The fade runs in real time; scale it so it always spans about 30 simulated minutes, or it shows a past hour.
   const fadeSeconds = 0.5 / Math.max(1, speed)
   // Geometry is fixed per level; only the fills and the label counts change each frame.
@@ -130,7 +129,7 @@ export function HeatMap({ towns, villages, level, nodes, counts, perAgent, proj,
       <Fills cells={geo.cells} proj={proj} colours={colours} fadeSeconds={fadeSeconds} view={view} />
       {/* The view is outside the memo, so a zoom or pan step changes one attribute and leaves the paths alone. */}
       <svg style={SVG}><g transform={svgTransform(view)}>{fixed}</g></svg>
-      {show.has('traffic') && road && traffic && <Traffic road={road} proj={proj} levels={traffic} view={view} />}
+      {show.has('traffic') && roads && traffic && <Traffic lines={roads} proj={proj} levels={traffic} fadeSeconds={fadeSeconds} view={view} />}
       <svg style={SVG}><g transform={svgTransform(view)}>
         {geo.labels.map(l => <text key={l.town} x={l.xy[0]} y={l.xy[1]} textAnchor="middle" fontSize={12} fill="#fff" stroke="#211d1d" strokeWidth={3} paintOrder="stroke">
           {l.name}<tspan x={l.xy[0]} dy={14}>{((byTown.get(l.town) ?? 0) * perAgent).toLocaleString()}</tspan></text>)}

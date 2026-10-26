@@ -18,6 +18,7 @@ The app reads the files in `web/public/`. This file lists the source, the licens
 | `villages2.json` | Residents, morning MRT arrivals, and center point of each village | A, B, C, D, F | Open Government Data License (source D not confirmed) |
 | `signal.json` | Weekday daytime (07:00 to 13:00) and night population of each district | E | Open Government Data License |
 | `road-graph.json` | Road graph built from bus route shapes | G | Open Government Data License (Taipei file not confirmed) |
+| `road-lines.json` | The real shape of each edge of `road-graph.json`, for the map | G | Open Government Data License (Taipei file not confirmed) |
 | `mrt-graph.json` | MRT graph built from OpenStreetMap lines and station positions | B, H | ODbL 1.0 (lines) and Open Government Data License (station positions) |
 | `transit.json` | MRT, light rail, railway, high speed rail, motorway and trunk lines, stations, and airport | H | ODbL 1.0 |
 | `night.json` | Businesses of the night-time groups in each village | J, F | Open Government Data License |
@@ -125,7 +126,7 @@ Note: The data.gov.tw entry for the Taipei shape file was not found. The license
 - `CAPACITY`, 37 people per km of road in a cell: fitted by `scripts/traffic.ts`. On the workday 2026-10-27 (seed 42, 10 people per agent, village level), the extra travel time of the people on the roads of the cells of 台北市, from 07:00 to 09:45, is 64.6%. This is the morning congestion level of 台北市 in the TomTom Traffic Index 2025 (https://www.tomtom.com/traffic-index/city/taipei/, read on 2026-10-26). It is a scale factor, not a physical capacity: the road graph has only the shapes of bus routes, and the load holds only the agents of the model.
 - With this capacity, the evening level (17:00 to 19:45) is 10.9%. TomTom gives 92% for the evening. The model has fewer people on the road in the evening than in the morning, and it has no trips such as school runs or shopping.
 - The cell of the road load (`CELL`, 0.01 degrees, about 1 km): a guess. Each trip takes one shortest path, so on single edges only about 3,000 of the 29,404 edges had any load, and a few of them showed 14 to 25 times the free time (measured on 2026-10-26). The people per km of road in a cell stand in for the flow of BPR.
-- The levels on the map (orange, red, dark red at 1/0.7, 1/0.5 and 1/0.3 times the free time) are chosen by eye.
+- The colours of the map are chosen by eye: a free road is a faint white line, and a slow road turns orange at 1/0.7, red at 1/0.5 and dark red at 1/0.3 times the free time, with the colours between them blended.
 
 ## Processing
 
@@ -136,6 +137,7 @@ Note: The data.gov.tw entry for the Taipei shape file was not found. The license
 - `transit.json`: Built by `scripts/transit.py` from four Overpass responses (source H). Its docstring gives the queries and the colour of each line.
 - `road-graph.json` and `mrt-graph.json`: Built by `scripts/graphs.py`. Points snap to a grid of about 120 m (roads) or 10 m (MRT), and the points in one grid cell become one node. Nodes with exactly two neighbors become points inside an edge, except stations and one node of each separate loop (a component in which every node has two neighbors). The points inside each edge are simplified (Douglas-Peucker, about 20 m). Each station is a node at the mean position of its exits. It links to the nearest point of each MRT line within 350 m, at a cost of 300 m for boarding or changing lines.
 - `night.json`: Built by `scripts/night.py`. Each business of source J with an address in Taipei or New Taipei goes to a group by its industry code: early (561111 breakfast shops), food (other 5611 restaurants, 561200 food stalls, 563112, 563113, 563115 and 563199 drink shops, 563200 drink stalls), convenience (471112 to 471114), hotel (551011, 551012), and nightlife (563114 bars, 9322 karaoke, 9323 places with hostesses, 969012 saunas). It goes to a village by the 里 in its address, with 羣, 峯 and 臺 read as 群, 峰 and 台 on both sides. A business without a 里, with a 里 that source F does not have, or with a 里 written in private-use characters, is spread over the villages of its district in proportion to the businesses of its group that matched. If none of its group matched in that district, it is spread in proportion to residents (this occurs for a few small groups in some districts of New Taipei, mostly on the north coast, for example 金山區 and 萬里區, and also 五股區 and 平溪區).
+- `road-lines.json`: Built by `scripts/graphs.py` with `road-graph.json`, in the same order of edges. For each edge it holds the bus shape points that the edge stands for, not snapped to the grid: from each grid cell to the next, the points of the first shape that crosses between the two cells. The points are simplified (Douglas-Peucker, about 2 m). Routing uses `road-graph.json`; the map draws this file.
 - `road-routes.bin`: Built by `scripts/routes.ts` from `road-graph.json` and the model (seed 42, 10 people per agent, village and district level). It holds the road path between every pair of road nodes that a bus, scooter or car trip of that run uses and that the road graph connects.
 - `people.json`: Built by `scripts/people.py` from sources N and O, with the residents of `villages2.json`. A district's people outside its top 20 take the national ranking without those 20. The 300 most common surnames hold 99.6% of the people of Taiwan.
 - `calendar.json`: Built by `scripts/days.py` from sources K and L. Its docstring lists the input files and their addresses.
@@ -176,7 +178,7 @@ Some scripts read a file that another script writes into `web/public/`:
 | `villages2.json` | `villages.py` | (none) |
 | `signal.json` | `telecom.py` | (none) |
 | `transit.json` | `transit.py` | (none) |
-| `road-graph.json`, `mrt-graph.json` | `graphs.py` | (none) |
+| `road-graph.json`, `road-lines.json`, `mrt-graph.json` | `graphs.py` | (none) |
 | `calendar.json` | `days.py` | (none) |
 | `od2.json` | `od.py` | `towns.json` |
 | `people.json` | `people.py` | `villages2.json` |

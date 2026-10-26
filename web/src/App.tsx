@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { HeatMap, Land, Outline, SEA, projectionFor, taipeiIn, type Transit } from './ui/HeatMap.tsx'
 import { Travellers, MODE_COLOURS, addBatches, type Track } from './ui/Travellers.tsx'
-import type { GraphJson } from './sim/route.ts'
+import type { RoadLines } from './ui/Traffic.tsx'
 import { MODES } from './sim/city.ts'
 import type { FromWorker, WorkerError, ToWorker, Level, Trips } from './sim/worker.ts'
 import { getJson } from './load.ts'
@@ -58,7 +58,7 @@ export function App() {
   const [towns, setTowns] = useState<any>()
   const [villages, setVillages] = useState<any>()
   const [transit, setTransit] = useState<Transit>()
-  const [roads, setRoads] = useState<GraphJson>()
+  const [roads, setRoads] = useState<RoadLines>()
   const [traffic, setTraffic] = useState<Uint8Array>()
   const [cal, setCal] = useState<Calendar>()
   // Day 0 of the run is the day the page opens, in Taiwan.
@@ -131,8 +131,8 @@ export function App() {
     getJson('calendar.json').then(setCal).catch(err => setLoadError(String(err)))
     getJson('villages2-topo.json').then(setVillages).catch(err => setLoadError(String(err)))
     getJson('transit.json').then(setTransit).catch(err => setLoadError(String(err)))
-    // The worker loads the same file, so it is usually in the cache. Without it, only the traffic is missing.
-    getJson('road-graph.json').then(setRoads).catch(() => {})
+    // The real shapes of the roads, for drawing only. Without the file, only the traffic is missing.
+    getJson('road-lines.json').then(setRoads).catch(() => {})
     // Residents by town for the labels of the outline; the worker loads the same file, so it is usually in the cache.
     getJson('villages2.json').then((vs: { town: string; pop: number }[]) => {
       const m = new Map<string, number>()
@@ -339,7 +339,7 @@ export function App() {
       {!faded && towns && projection && <Outline towns={towns} proj={projection} view={view} pop={pop} />}
       <div className="reveal" style={{ position: 'absolute', inset: 0, opacity: revealed ? 1 : 0, filter: revealed ? 'none' : 'blur(8px)' }}>
       {ready && <>
-        <HeatMap towns={towns} villages={villages} level={onScreen?.level ?? level} nodes={nodes} counts={s.counts} perAgent={PER_AGENT} proj={projection} transit={transit} show={show} rate={rate} road={roads} traffic={traffic} speed={speed} view={view} />
+        <HeatMap towns={towns} villages={villages} level={onScreen?.level ?? level} nodes={nodes} counts={s.counts} perAgent={PER_AGENT} proj={projection} transit={transit} show={show} rate={rate} roads={roads} traffic={traffic} speed={speed} view={view} />
         {dots && dotTrips && <Travellers tracks={dotRun!.tracks} trips={dotTrips} clock={clock} byMode={byMode} view={view} />}
       </>}
       </div>

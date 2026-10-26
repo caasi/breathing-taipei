@@ -31,7 +31,7 @@ export type FromWorker = {
   start?: number; nodes?: string[]; homes?: Uint32Array; coords?: [number, number][]; trips?: Trips; replans?: Replans; paths?: Batch[]; routed?: number
   minute: number; day: number; counts: Uint32Array; road: Uint32Array; away: number; ms: number
   events?: SimEvent[] // personal events of plans made since the last message
-  traffic?: Uint8Array // per road edge: 0 free, 1 orange, 2 red, 3 dark red (traffic.ts); sent when it changes
+  traffic?: Uint8Array // per road edge: 0 (free) to 255 (slowest) (traffic.ts); sent when it changes
   clock: number; at: number // the clock (pace.ts) shows minute `clock` at `at` (performance.timeOrigin + performance.now())
   since: number // the `at` of the change of speed that the clock uses; the page takes the clock only from its latest change
 }

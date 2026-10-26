@@ -7,9 +7,11 @@ Usage:
   NTPC_SHAPES  https://tcgbusfs.blob.core.windows.net/ntpcbus/GetBusShape.gz
   OSM_RAIL     Overpass JSON: way["railway"~"^(subway|rail|light_rail|monorail)$"](24.90,121.25,25.20,121.70); out tags geom;
   EXITS_CSV    data.gov.tw 128428 (Big5): https://data.taipei/api/dataset/cfa4778c-62c1-497b-b704-756231de348b/resource/307a7f61-e302-4108-a817-877ccbfca7c1/download
-  OUT_DIR      writes road-graph.json and mrt-graph.json
+  OUT_DIR      writes road-graph.json, road-lines.json and mrt-graph.json
 
-Output per graph: kept nodes (degree != 2) and edges whose geometry holds the merged degree-2 points."""
+Output per graph: kept nodes (degree != 2) and edges whose geometry holds the merged degree-2 points.
+road-lines.json has, for each edge of road-graph.json in the same order, the bus shape points that the edge stands
+for (lon, lat, ...), not snapped to the grid: the map draws these, and routing uses the snapped graph."""
 import gzip, json, math, re, csv, collections, sys
 
 if __name__ == "__main__" and len(sys.argv) != 6:
@@ -21,7 +23,7 @@ def km(a, b):
     return 6371 * math.hypot(x, y)
 
 class Graph:
-    def __init__(s, grid): s.grid, s.idx, s.xy, s.adj = grid, {}, [], collections.defaultdict(dict)
+    def __init__(s, grid): s.grid, s.idx, s.xy, s.adj, s.raw = grid, {}, [], collections.defaultdict(dict), {}
     def add(s, p):
         s.xy.append(p); return len(s.xy) - 1
     def node(s, p):
@@ -33,6 +35,10 @@ class Graph:
     def line(s, pts):
         ns = [s.node(p) for p in pts]
         for a, b in zip(ns, ns[1:]): s.link(a, b)
+        # The real points from the last one in cell a to the first one in cell b; the first shape that crosses wins.
+        for i in range(len(ns) - 1):
+            a, b = ns[i], ns[i + 1]
+            if a != b and (a, b) not in s.raw: s.raw[(a, b)] = [pts[i], pts[i + 1]]; s.raw[(b, a)] = [pts[i + 1], pts[i]]
         return ns
 
 def contract(g, keep_extra=()):
@@ -68,7 +74,7 @@ def contract(g, keep_extra=()):
                 d += g.adj[cur][nxt]; prev, cur = cur, nxt
             seen.add((a, b0)); seen.add((cur, geom[-1] if geom else a))
             if a < cur or (a == cur and geom):
-                edges.append((remap[a], remap[cur], d, [g.xy[p] for p in geom]))
+                edges.append((remap[a], remap[cur], d, [g.xy[p] for p in geom], [a, *geom, cur]))
     nodes = [g.xy[v] for v in sorted(keep)]
     return nodes, edges, remap
 
@@ -90,7 +96,7 @@ def simplify(pts, a, b, tol=2e-4):
     return [p for p, k in zip(full, keep) if k][1:-1]
 
 def dump(path, nodes, edges, extra=None):
-    edges = [(a, b, d, simplify(geom, nodes[a], nodes[b])) for a, b, d, geom in edges]
+    edges = [(a, b, d, simplify(geom, nodes[a], nodes[b])) for a, b, d, geom, _ in edges]
     out = {"lon": [round(p[0], 5) for p in nodes], "lat": [round(p[1], 5) for p in nodes],
            "edges": [[a, b, round(d * 1000), [round(c, 5) for p in geom for c in p]] for a, b, d, geom in edges]}
     if extra: out.update(extra)
@@ -104,6 +110,12 @@ for f in sys.argv[1:3]:
             road.line([tuple(map(float, xy.split())) for xy in part.split(",")])
 nodes, edges, _ = contract(road)
 dump(sys.argv[5] + "/road-graph.json", nodes, edges)
+lines = []
+for *_, chain in edges:
+    pts = [p for a, b in zip(chain, chain[1:]) for p in road.raw[(a, b)]]
+    pts = [pts[0]] + simplify(pts[1:-1], pts[0], pts[-1], 2e-5) + [pts[-1]]  # ~2 m
+    lines.append([round(c, 5) for p in pts for c in p])
+json.dump(lines, open(sys.argv[5] + "/road-lines.json", "w"), separators=(",", ":"))
 print("road:", len(road.xy), "points ->", len(nodes), "nodes,", len(edges), "edges")
 
 # --- MRT: OSM lines (Taipei Metro and Circular line), joined through station nodes ---
