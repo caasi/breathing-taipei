@@ -250,7 +250,7 @@ onmessage = async (e: MessageEvent<ToWorker>) => {
       if (dest === WORK || play) { const b = { ...e, id: `a${++eventId}`, t: world.ret[i], back: true }; newEvents.push(b); backs.set(i, b) }
     }
     // A jam on the way can make a character reach work after its usual leaving time, so it leaves later (core.ts
-    // slowDown). The way home is sent again with the same id, the new time, how late, and the temper of the character.
+    // stretch). The way home is sent again with the same id, the new time, how late, and the temper of the character.
     const backs = new Map<number, Extract<SimEvent, { kind: 'personal' }>>()
     onLate = () => backs.forEach((b, i) => {
       // Once the character has left, a jam on the way home moves its start (core.ts stretch), not the leaving time.

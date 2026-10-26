@@ -163,8 +163,8 @@ export const cellLoad = (load: ArrayLike<number>, grid: Grid) => {
 }
 
 // ponytail: the most travel time over free time; a guess. BPR grows without limit past capacity, which it overstates
-// (DATA.md), and a few ramps at 10 to 25 times the free time carried the mean that the fit matches, which left the
-// main streets free.
+// (DATA.md). Before the limit, a few ramps at 10 to 25 times the free time carried the bucket mean that the fit then
+// matched, and left the main streets free.
 const MOST = 4
 
 /** Extra time over free flow, as a share of the free time, for a load of `pcu` on `km` of road (at most MOST - 1). */
