@@ -6,7 +6,7 @@ import { evenPick, type Mood, type SimEvent } from './events.ts'
 import { mulberry32 } from './rng.ts'
 import { FPS, clockAt, respeed, stepsTo, type Clock } from './pace.ts'
 import { cityFrom, MODES, SCOOTER } from './city.ts'
-import { networks, readRoutes, roadNode, tripPaths, type Batch, type Routes } from './paths.ts'
+import { networks, readRoutes, roadNode, tripPaths, wayBack, type Batch, type Routes } from './paths.ts'
 import type { GraphJson } from './route.ts'
 import { workNodes } from './jobs.ts'
 import { cellMax, gridOf, levels, liveOf, roadUse, stepper, take as takeTraffic, type Grid, type Live, type RoadUse } from './traffic.ts'
@@ -114,7 +114,10 @@ const replans = (w: World): Replans | undefined => {
   return { k: Uint32Array.from(ks), dest: take(w.dest, at, Uint8Array), dep: take(w.dep, at, Int32Array), dur1: take(w.dur1, at, Uint16Array), ret: take(w.ret, at, Int32Array), dur2: take(w.dur2, at, Uint16Array) }
 }
 
-/** The paths to work as paths 0..n-1, then the paths to the day-off places as paths n..2n-1. */
+/**
+ * The paths to work as paths 0..n-1, the paths to the day-off places as paths n..2n-1, then the paths home from them
+ * that differ from the way there reversed as paths 2n..3n-1 and 3n..4n-1 (Travellers.tsx).
+ */
 // The two take turns, so the dots of a day off do not wait for every road path to work.
 function* bothPaths(trips: Trips, coords: [number, number][], graphs: Awaited<typeof net>, known?: Routes): Generator<Batch> {
   const n = trips.home.length
@@ -124,6 +127,9 @@ function* bothPaths(trips: Trips, coords: [number, number][], graphs: Awaited<ty
     if (!a.done) yield a.value
     if (!b.done) yield { ...b.value, ks: b.value.ks.map(k => k + n) }
   }
+  if (!known) return
+  for (const batch of wayBack(trips, coords, graphs, known)) yield { ...batch, ks: batch.ks.map(k => k + 2 * n) }
+  for (const batch of wayBack({ home: trips.home, work: trips.play, mode: trips.playMode }, coords, graphs, known)) yield { ...batch, ks: batch.ks.map(k => k + 3 * n) }
 }
 
 /** Advances the model by `minutes`, and takes the traffic at each boundary of JAM_MINUTES that it reaches. */

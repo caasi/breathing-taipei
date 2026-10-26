@@ -2,7 +2,7 @@ import { expect, test } from 'vitest'
 import { existsSync, readFileSync } from 'node:fs'
 import { init } from './core.ts'
 import { cityFrom } from './city.ts'
-import { KNOWN_BATCH, networks, pathIn, readRoutes, ROAD_MODES, roadNode, routeKey, tripPaths, writeRoutes, type Batch } from './paths.ts'
+import { KNOWN_BATCH, networks, pathIn, readRoutes, ROAD_MODES, roadNode, routeKey, tripPaths, wayBack, writeRoutes, type Batch } from './paths.ts'
 import { edgesTo, tree } from './route.ts'
 
 const pub = (f: string) => JSON.parse(readFileSync(new URL(`../../public/${f}`, import.meta.url), 'utf8'))
@@ -88,4 +88,23 @@ test.skipIf(!existsSync(bin))('every path of the routes file, and every way back
   }
   expect(flipped).toBeGreaterThan(0)
   expect(bad).toBe(0)
+}, 60_000)
+
+test.skipIf(!existsSync(bin))('a dot goes home on its own path when the routes file holds one, from the far end to home (real data)', () => {
+  const net = networks(pub('road-graph.json'), pub('mrt-graph.json')), b = readFileSync(bin)
+  const routes = readRoutes(new Uint16Array(b.buffer, b.byteOffset, b.byteLength / 2), net.road)!
+  const c = cityFrom({ ...pub('od2.json'), villages: pub('villages2.json'), signal: pub('signal.json'), night: pub('night.json') }, 10, 'village')
+  const w = init(c.city, 42), ks = Array.from(w.movers).filter(i => ROAD_MODES.has(w.mode[i])).slice(0, 2000)
+  const legs = { home: ks.map(i => w.home[i]), work: ks.map(i => w.work[i]), mode: ks.map(i => w.mode[i]) }
+  const at = (v: number) => roadNode(net, c.coords, v)
+  const own = legs.home.map((h, k) => at(legs.work[k]) !== at(h) && routes.has(routeKey(at(legs.work[k]), at(h))))
+  const seen = new Set<number>()
+  for (const batch of wayBack(legs, c.coords, net, routes)) batch.ks.forEach((k, j) => {
+    seen.add(k)
+    const pts = batch.pts.subarray(batch.off[j], batch.off[j + 1])
+    expect([pts[0], pts[1]]).toEqual(Array.from(Float32Array.from(c.coords[legs.work[k]])))
+    expect([pts[pts.length - 2], pts[pts.length - 1]]).toEqual(Array.from(Float32Array.from(c.coords[legs.home[k]])))
+  })
+  expect(seen.size).toBeGreaterThan(0)
+  own.forEach((o, k) => expect(seen.has(k)).toBe(o))
 }, 60_000)

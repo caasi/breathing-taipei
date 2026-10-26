@@ -26,7 +26,6 @@
 
 ## Limits of the model that are known
 
-- **A dot goes home along its way there, reversed.** The road load of a trip home follows its own path, which a one-way road can make different (`roadUse` in `web/src/sim/traffic.ts`). The dot of that trip draws the way there backwards: on a 國道 or a ramp that is usually the other carriageway, about 30 m away; on a one-way street such as 信義路, the dot drives it the wrong way, while the load goes home on 仁愛路, a few hundred metres away.
 
 - **A car that takes another route draws its usual one.** The paths of the dots are made before a run, with the fastest variant for a car (`tripPaths` in `web/src/sim/paths.ts`). When the trip starts, 60% of the drivers choose by the live traffic (`NAV`). Of all the car legs to work and home from work in one day, 2.6% take another variant (2026-10-27). Their road load and jam events follow the variant they took; their dots draw the fastest one.
 - **A bus cannot use a contraflow bus lane.** On a one-way street with a bus lane the other way (in OSM, 信義路 has `oneway:bus=no` and `bus:lanes:backward=designated`, and part of 仁愛路三段 `busway=opposite_lane`), a bus takes the one-way rule of the cars and goes round.

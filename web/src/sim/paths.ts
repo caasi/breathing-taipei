@@ -117,3 +117,21 @@ export function* tripPaths(legs: Leg, coords: [number, number][], net: ReturnTyp
     yield pack(ks, ks.map(k => full(k, pathTo(net.road, via, road(legs.work[k])))))
   }
 }
+
+/**
+ * Yields the paths home of the road trips whose way back `routes` holds (a one-way road made it differ from the way
+ * there), as points from the far end to home, in batches. Any other trip goes home along its way there reversed, as its
+ * road load does (traffic.ts roadUse).
+ */
+export function* wayBack(legs: Leg, coords: [number, number][], net: ReturnType<typeof networks>, routes: Routes): Generator<Batch> {
+  const at = new Map<number, number>(), road = (v: number) => at.get(v) ?? at.set(v, roadNode(net, coords, v)).get(v)!
+  const ks: number[] = [], parts: number[][] = []
+  for (let k = 0; k < legs.home.length; k++) {
+    const m = legs.mode[k], a = road(legs.work[k]), b = road(legs.home[k])
+    if (!ROAD_MODES.has(m) || a === b || !routes.has(routeKey(a, b))) continue
+    const edges = pathIn(routes, a, b, m === SCOOTER ? 1 : 0)!
+    ks.push(k); parts.push([...coords[legs.work[k]], ...pathAlong(net.road, a, edges), ...coords[legs.home[k]]])
+    if (ks.length === KNOWN_BATCH) { yield pack(ks.splice(0), parts.splice(0)) }
+  }
+  if (ks.length) yield pack(ks, parts)
+}

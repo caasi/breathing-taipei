@@ -103,11 +103,16 @@ export function Travellers({ tracks, trips, clock, byMode, view, traffic }: Prop
       let count = 0
       for (let k = 0; k < n; k++) {
         // A trip out of the city has no path on the map, so it draws no dot.
-        const play = trips.dest[k] === PLAY, t = trips.dest[k] === GONE ? undefined : tracks.current[play ? n + k : k]
-        if (!t) continue
-        let p: number
+        const play = trips.dest[k] === PLAY, there = trips.dest[k] === GONE ? undefined : tracks.current[play ? n + k : k]
+        if (!there) continue
+        // Home along its own path when it has one (a one-way road), else along the way there backwards.
+        let p: number, t = there
         if (m >= trips.dep[k] && m < trips.dep[k] + trips.dur1[k]) p = (m - trips.dep[k]) / trips.dur1[k]
-        else if (m >= trips.ret[k] && m < trips.ret[k] + trips.dur2[k]) p = 1 - (m - trips.ret[k]) / trips.dur2[k]
+        else if (m >= trips.ret[k] && m < trips.ret[k] + trips.dur2[k]) {
+          const back = tracks.current[(play ? 3 : 2) * n + k]
+          p = (m - trips.ret[k]) / trips.dur2[k]
+          if (back) t = back; else p = 1 - p
+        }
         else continue
         const [x, y, i] = at(t, p), md = play ? trips.playMode[k] : trips.mode[k], c = cells && ROAD_MODES.has(md) ? cells.index.get(t.cell[i]) : undefined
         xy[2 * count] = x; xy[2 * count + 1] = y; mode[count] = md; slow[count] = c === undefined ? 0 : cells!.level[c] / 255; count++
