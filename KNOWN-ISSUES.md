@@ -29,7 +29,7 @@
 - **A dot goes home along its way there, reversed.** The road load of a trip home follows its own path, which the one-way 國道, 快速道路 and ramps can make different (`roadUse` in `web/src/sim/traffic.ts`). The dot of that trip on the map draws the way there backwards. At the scale of the map the two ways are usually the two carriageways of one road, about 30 m apart. Not measured: how many dots take another ramp or road home.
 
 - **瑞光路 does not jam.** At 08:45 on 2026-10-27, 2,765 agents were on the road to the 6 villages of 內湖科技園區, and 250 of them were in the buckets of 內湖區 (Fable, direction check, not measured again after the later changes). A traveller is placed along its whole path by its free time, so the last 500 m hold a small share of a long trip, and nothing waits at the end. That is a queue at a bottleneck: https://github.com/caasi/breathing-taipei/issues/25. Do not change `CAPACITY`, `ACROSS` or `LANES` to make it jam: these apply to every road.
-- **The evening is too free.** The trips home from work in 台北市 are 24.1% slower than with no jam, against 92% in the TomTom Traffic Index (DATA.md, "Figures in the code").
+- **The evening is too free.** The trips home from work in 台北市 are 23.7% slower than with no jam, against 92% in the TomTom Traffic Index (DATA.md, "Figures in the code").
 - **The commuters from other counties are missing**, also on the roads into the city: https://github.com/caasi/breathing-taipei/issues/21.
 
 ## Sources that the project cites but did not read

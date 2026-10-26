@@ -54,7 +54,9 @@ const run = (capacity: number) => {
   }
   // An agent home again gets its next plan at once (core.ts advance), so the end of a trip home is seen here.
   w.onPlan = i => done(1, i, w.done)
-  for (let slot = 0; slot < 96; slot++, advance(w, 15)) {
+  // The first take at 00:15, as the worker's stepper takes at each boundary that it reaches.
+  for (let slot = 0; slot < 96; slot++) {
+    advance(w, 15)
     take(w, use, load, live, undefined, capacity)
     const t = now(w)
     for (const i of w.movers) {
