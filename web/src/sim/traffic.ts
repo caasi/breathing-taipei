@@ -78,9 +78,11 @@ export const extraTime = (people: number, km: number, capacity = CAPACITY) => AL
 export const cellLevels = (load: ArrayLike<number>, grid: Grid, capacity = CAPACITY) =>
   Uint8Array.from(cellLoad(load, grid), (p, c) => Math.round(255 * Math.min(1, extraTime(p, grid.km[c], capacity) / (SLOWEST - 1))))
 
-/** Per edge, the level of its cell (cellLevels) on an edge that has load. */
+/**
+ * Per edge: 0 for an edge with no traveller, else 1 + the level of its cell (cellLevels) on 1 to 255. The map draws
+ * the flow only on roads in use, and the colour follows those roads and not the square of the cell.
+ */
 export const levels = (load: ArrayLike<number>, grid: Grid, cells: Uint8Array, out: Uint8Array) => {
-  // An edge with no traveller stays clear, so the colour follows the roads in use and not the square of the cell.
-  for (let e = 0; e < out.length; e++) out[e] = load[e] > 0 ? cells[grid.cellOf[e]] : 0
+  for (let e = 0; e < out.length; e++) out[e] = load[e] > 0 ? 1 + Math.round(cells[grid.cellOf[e]] * 254 / 255) : 0
   return out
 }

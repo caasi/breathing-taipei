@@ -13,6 +13,9 @@ const WIDTH_PX = 0.6
 // ponytail: the glow of slow roads, chosen by eye: it starts at slowness GLOW_FROM, spreads over GLOW_LEVELS halvings
 // of the screen size (each level doubles its reach), and is added at GLOW_GAIN.
 const GLOW_FROM = 0.15, GLOW_LEVELS = 5, GLOW_GAIN = 1.4
+// ponytail: the flow on roads in use, chosen by eye: dashes of FLOW_PERIOD device pixels move both ways (the levels
+// have no direction) at FLOW_FAST pixels a second on a free road down to FLOW_SLOW on the slowest.
+const FLOW_PERIOD = 14, FLOW_FAST = 40, FLOW_SLOW = 3
 // Edge levels sit in a texture of this width, as one row of 29,404 texels is wider than many GPUs allow.
 const ROW = 1024
 const vec = (xs: number[]) => `vec${xs.length}(${xs.map(v => v.toFixed(3)).join(', ')})`
@@ -32,25 +35,26 @@ vec4 ramp(float t) {
 // A line thinner than a pixel cannot be drawn by rasterising its width, so each segment is a quad one device pixel
 // wider than the line on each side, and the fragment shader gives each pixel the share of it that the line covers.
 const BAKE_VS = `#version 300 es
-in vec2 xy; in vec2 normal; in float across; in float edge;
-uniform vec4 view; uniform vec2 devicePx; uniform float w;
-out float d; flat out int id;
+in vec2 xy; in vec2 normal; in float across; in float edge; in float along;
+uniform vec4 view; uniform vec2 devicePx; uniform float w; uniform float pxPerUnit;
+out float d; out float s; flat out int id;
 void main() {
   float reach = w * 0.5 + 1.0;
-  d = across * reach; id = int(edge) + 1;
+  d = across * reach; id = int(edge) + 1; s = along * pxPerUnit / ${FLOW_PERIOD.toFixed(1)};
   // The map is scaled the same on both axes and y points down on the screen, so the normal on the screen is (x, -y).
   gl_Position = vec4(xy * view.xy + view.zw + vec2(normal.x, -normal.y) * reach * devicePx, 0, 1);
 }`
 // Pass 0 adds up the cover, so a pixel where roads meet is brighter. Pass 1 writes the edge (id + 1, 0 for none) in
-// two bytes; where lines cross, the last one drawn keeps the pixel.
+// two bytes and the phase of the flow dashes along the edge in the third; where lines cross, the last one drawn keeps
+// the pixel.
 const BAKE_FS = `#version 300 es
 precision highp float;
-in float d; flat in int id; uniform float w; uniform int pass; out vec4 o;
+in float d; in float s; flat in int id; uniform float w; uniform int pass; out vec4 o;
 void main() {
   // The overlap of this pixel, [|d| - 0.5, |d| + 0.5], with the line, [-w / 2, w / 2], in device pixels.
   float a = abs(d), cover = max(0.0, min(a + 0.5, w * 0.5) - max(a - 0.5, -w * 0.5));
   if (cover <= 0.0) discard;
-  o = pass == 0 ? vec4(cover, 0, 0, 1) : vec4(float(id % 256) / 255.0, float(id / 256) / 255.0, 0, 1);
+  o = pass == 0 ? vec4(cover, 0, 0, 1) : vec4(float(id % 256) / 255.0, float(id / 256) / 255.0, fract(s), 1);
 }`
 const SHOW_VS = `#version 300 es
 void main() { gl_Position = vec4(gl_VertexID == 1 ? 3.0 : -1.0, gl_VertexID == 2 ? 3.0 : -1.0, 0, 1); }`
@@ -58,18 +62,26 @@ void main() { gl_Position = vec4(gl_VertexID == 1 ? 3.0 : -1.0, gl_VertexID == 2
 // With glow, it writes only the slow roads, at 1 / scale of the screen, for the bloom below.
 const SHOW_FS = `#version 300 es
 precision highp float;
-uniform sampler2D cover, edges, before, after; uniform float k; uniform bool glow; uniform int scale; out vec4 o;
+uniform sampler2D cover, edges, before, after; uniform float k; uniform bool glow; uniform int scale; uniform float time; out vec4 o;
 ${RAMP}
 void main() {
   ivec2 p = ivec2(gl_FragCoord.xy) * scale;
-  vec2 e = texelFetch(edges, p, 0).rg * 255.0;
-  int id = int(e.r + 0.5) + 256 * int(e.g + 0.5) - 1;
+  vec4 e = texelFetch(edges, p, 0);
+  int id = int(e.r * 255.0 + 0.5) + 256 * int(e.g * 255.0 + 0.5) - 1;
   if (id < 0) discard;
   ivec2 at = ivec2(id % ${ROW}, id / ${ROW});
-  // The slowness moves from the one before the last update to the last one, as the cell fills do.
-  float t = mix(texelFetch(before, at, 0).r, texelFetch(after, at, 0).r, k), cover = min(1.0, texelFetch(cover, p, 0).r);
+  // The level moves from the one before the last update to the last one, as the cell fills do. 0 is a road with no
+  // traveller; 1 to 255 is the slowness of a road in use.
+  float raw = mix(texelFetch(before, at, 0).r, texelFetch(after, at, 0).r, k) * 255.0, used = smoothstep(0.0, 1.0, raw);
+  float t = max(0.0, raw - 1.0) / 254.0, cover = min(1.0, texelFetch(cover, p, 0).r);
   vec4 c = ramp(t);
   float a = glow ? cover * smoothstep(${GLOW_FROM.toFixed(2)}, 1.0, t) : c.a * cover;
+  if (!glow) {
+    // Dashes that move both ways, slower on a slower road; a road in use shows them over a brighter line.
+    float run = time * mix(${FLOW_FAST.toFixed(1)}, ${FLOW_SLOW.toFixed(1)}, sqrt(t)) / ${FLOW_PERIOD.toFixed(1)};
+    float dash = max(1.0 - smoothstep(0.25, 0.45, fract(e.b - run)), 1.0 - smoothstep(0.25, 0.45, fract(e.b + run)));
+    a = mix(a, max(a, 0.5 * cover) * mix(0.3, 1.0, dash), used);
+  }
   o = vec4(c.rgb * a, a);
 }`
 // Dual filtering (Kawase blur on a chain of half sizes; Marius Bjørge, ARM, SIGGRAPH 2015): each level down takes 5
@@ -101,40 +113,43 @@ export type RoadLines = number[][]
 
 // Two triangles per segment of every edge, in map space, with the unit normal, the side (+1 or -1) and the edge index.
 const quads = (lines: RoadLines, proj: GeoProjection) => {
-  const xy: number[] = [], normal: number[] = [], across: number[] = [], edge: number[] = []
+  const xy: number[] = [], normal: number[] = [], across: number[] = [], edge: number[] = [], along: number[] = []
   lines.forEach((lonlat, e) => {
     const pts: [number, number][] = []
     for (let i = 0; i < lonlat.length; i += 2) pts.push(proj([lonlat[i], lonlat[i + 1]])!)
+    let run = 0 // map units from the start of the edge
     for (let i = 1; i < pts.length; i++) {
       const [x0, y0] = pts[i - 1], [x1, y1] = pts[i], l = Math.hypot(x1 - x0, y1 - y0)
       if (!l) continue
       const nx = -(y1 - y0) / l, ny = (x1 - x0) / l
-      for (const [x, y, s] of [[x0, y0, 1], [x0, y0, -1], [x1, y1, 1], [x1, y1, 1], [x0, y0, -1], [x1, y1, -1]]) {
-        xy.push(x, y); normal.push(nx * s, ny * s); across.push(s); edge.push(e)
+      for (const [x, y, s, r] of [[x0, y0, 1, 0], [x0, y0, -1, 0], [x1, y1, 1, l], [x1, y1, 1, l], [x0, y0, -1, 0], [x1, y1, -1, l]]) {
+        xy.push(x, y); normal.push(nx * s, ny * s); across.push(s); edge.push(e); along.push(run + r)
       }
+      run += l
     }
   })
-  return { xy: new Float32Array(xy), normal: new Float32Array(normal), across: new Float32Array(across), edge: new Float32Array(edge) }
+  const f = (a: number[]) => new Float32Array(a)
+  return { xy: f(xy), normal: f(normal), across: f(across), edge: f(edge), along: f(along) }
 }
 
-type Props = { lines: RoadLines; proj: GeoProjection; levels: Uint8Array; fadeSeconds: number; view: View }
+type Props = { lines: RoadLines; proj: GeoProjection; levels: Uint8Array; fadeSeconds: number; view: View; running: boolean }
 
 /**
  * The road network, with its slow edges (traffic.ts) in colour. The network is drawn into textures once per view; a
  * change of levels uploads one byte per edge, and the colours move from the levels before to the new ones over
  * `fadeSeconds`.
  */
-export function Traffic({ lines, proj, levels, fadeSeconds, view }: Props) {
+export function Traffic({ lines, proj, levels, fadeSeconds, view, running }: Props) {
   const ref = useRef<HTMLCanvasElement>(null)
-  const target = useRef(levels), view$ = useRef(view), fade = useRef(fadeSeconds)
-  target.current = levels; view$.current = view; fade.current = fadeSeconds
+  const target = useRef(levels), view$ = useRef(view), fade = useRef(fadeSeconds), running$ = useRef(running)
+  target.current = levels; view$.current = view; fade.current = fadeSeconds; running$.current = running
   const geometry = useMemo(() => quads(lines, proj), [lines, proj])
   useWebGL2(ref, { antialias: false }, (gl, canvas) => {
     const bake = program(gl, BAKE_VS, BAKE_FS), show = program(gl, SHOW_VS, SHOW_FS)
     const down = program(gl, SHOW_VS, DOWN_FS), up = program(gl, SHOW_VS, UP_FS), glow = program(gl, SHOW_VS, GLOW_FS)
     const bakeAt = (name: string) => gl.getUniformLocation(bake, name), showAt = (name: string) => gl.getUniformLocation(show, name)
     const vao = gl.createVertexArray(); gl.bindVertexArray(vao)
-    const buffers = (['xy', 'normal', 'across', 'edge'] as const).map(name => {
+    const buffers = (['xy', 'normal', 'across', 'edge', 'along'] as const).map(name => {
       const b = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, b); gl.bufferData(gl.ARRAY_BUFFER, geometry[name], gl.STATIC_DRAW)
       const loc = gl.getAttribLocation(bake, name); gl.enableVertexAttribArray(loc)
       gl.vertexAttribPointer(loc, name === 'xy' || name === 'normal' ? 2 : 1, gl.FLOAT, false, 0, 0)
@@ -168,14 +183,15 @@ export function Traffic({ lines, proj, levels, fadeSeconds, view }: Props) {
     }
     const drawNetwork = (v: View) => {
       const [cover, edges] = baked
-      for (const [unit, t, format] of [[2, cover, gl.R8], [3, edges, gl.RG8]] as const) {
+      for (const [unit, t, format] of [[2, cover, gl.R8], [3, edges, gl.RGBA8]] as const) {
         gl.activeTexture(gl.TEXTURE0 + unit); gl.bindTexture(gl.TEXTURE_2D, t)
-        gl.texImage2D(gl.TEXTURE_2D, 0, format, canvas.width, canvas.height, 0, format === gl.R8 ? gl.RED : gl.RG, gl.UNSIGNED_BYTE, null)
+        gl.texImage2D(gl.TEXTURE_2D, 0, format, canvas.width, canvas.height, 0, format === gl.R8 ? gl.RED : gl.RGBA, gl.UNSIGNED_BYTE, null)
       }
       gl.useProgram(bake)
       gl.uniform4fv(bakeAt('view'), clip(v, canvas.clientWidth, canvas.clientHeight))
       gl.uniform2f(bakeAt('devicePx'), 2 / canvas.width, 2 / canvas.height)
       gl.uniform1f(bakeAt('w'), WIDTH_PX * canvas.width / canvas.clientWidth)
+      gl.uniform1f(bakeAt('pxPerUnit'), v.k * canvas.width / canvas.clientWidth)
       // The glow passes leave a smaller viewport behind; fit() sets it only when the canvas size changes.
       gl.bindFramebuffer(gl.FRAMEBUFFER, frame); gl.viewport(0, 0, canvas.width, canvas.height)
       for (const [pass, t] of [[0, cover], [1, edges]] as const) {
@@ -204,7 +220,7 @@ export function Traffic({ lines, proj, levels, fadeSeconds, view }: Props) {
       }
       gl.drawArrays(gl.TRIANGLES, 0, 3)
     }
-    let raf = 0, network = '', drawn = '', uploaded: Uint8Array | undefined, start = -Infinity, settled = false
+    let raf = 0, network = '', drawn = '', uploaded: Uint8Array | undefined, start = -Infinity, settled = false, flow = 0, last = performance.now()
     const draw = () => {
       const now = performance.now(), w = fit(gl, canvas), v = view$.current, t = target.current, key = `${w} ${canvas.height} ${v.k} ${v.x} ${v.y}`
       if (key !== network) { drawNetwork(v); network = key; drawn = '' }
@@ -214,10 +230,19 @@ export function Traffic({ lines, proj, levels, fadeSeconds, view }: Props) {
         shown.set(next); next.fill(0); next.set(t.subarray(0, next.length))
         upload(0, shown); upload(1, next); uploaded = t; start = drawn ? now : -Infinity; settled = false
       }
-      if (!settled || key !== drawn) {
-        const k = Math.min(1, (now - start) / 1000 / Math.max(1e-3, fade.current))
-        gl.useProgram(show); gl.uniform1f(showAt('k'), k); settled = k === 1
+      // The dashes move while the clock runs, so the lines are drawn again each frame then; the glow only when the
+      // colours change.
+      const moving = running$.current
+      if (moving) flow += (now - last) / 1000
+      last = now
+      const recolour = !settled || key !== drawn
+      if (recolour || moving) {
         gl.clearColor(0, 0, 0, 0)
+        gl.useProgram(show); gl.uniform1f(showAt('time'), flow)
+      }
+      if (recolour) {
+        const k = Math.min(1, (now - start) / 1000 / Math.max(1e-3, fade.current))
+        gl.uniform1f(showAt('k'), k); settled = k === 1
         // The slow roads at half size, then down the chain and back up, each level up added onto the one it writes.
         gl.disable(gl.BLEND)
         gl.uniform1i(showAt('glow'), 1); gl.uniform1i(showAt('scale'), 2)
@@ -226,14 +251,17 @@ export function Traffic({ lines, proj, levels, fadeSeconds, view }: Props) {
         for (let i = 1; i < GLOW_LEVELS; i++) pass(down, i, i - 1)
         gl.enable(gl.BLEND); gl.blendFunc(gl.ONE, gl.ONE)
         for (let i = GLOW_LEVELS - 2; i >= 0; i--) pass(up, i, i + 1)
+        drawn = key
+      }
+      if (recolour || moving) {
         // On the canvas: the glow added, then the lines over it (premultiplied colour).
+        gl.enable(gl.BLEND); gl.blendFunc(gl.ONE, gl.ONE)
         gl.bindFramebuffer(gl.FRAMEBUFFER, null); gl.viewport(0, 0, canvas.width, canvas.height); gl.clear(gl.COLOR_BUFFER_BIT)
         gl.useProgram(glow); gl.uniform2f(gl.getUniformLocation(glow, 'screen'), canvas.width, canvas.height)
         pass(glow, -1, 0)
         gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA)
         gl.useProgram(show); gl.uniform1i(showAt('glow'), 0); gl.uniform1i(showAt('scale'), 1)
         gl.drawArrays(gl.TRIANGLES, 0, 3)
-        drawn = key
       }
       raf = requestAnimationFrame(draw)
     }

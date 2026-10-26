@@ -32,7 +32,7 @@ export type FromWorker = {
   start?: number; nodes?: string[]; homes?: Uint32Array; coords?: [number, number][]; trips?: Trips; replans?: Replans; paths?: Batch[]; routed?: number
   minute: number; day: number; counts: Uint32Array; road: Uint32Array; away: number; ms: number
   events?: SimEvent[] // personal events of plans made since the last message
-  traffic?: Uint8Array // per road edge: 0 (free) to 255 (slowest) (traffic.ts); sent when it changes
+  traffic?: Uint8Array // per road edge: 0 no traveller, 1 (free) to 255 (slowest) (traffic.ts levels); sent when it changes
   cells?: Uint8Array // per cell of the traffic, in the order of cellKeys, sent with traffic
   cellKeys?: Int32Array // the key (traffic.ts cellKey) of each cell, sent once a run
   clock: number; at: number // the clock (pace.ts) shows minute `clock` at `at` (performance.timeOrigin + performance.now())
