@@ -6,7 +6,7 @@ import type { GraphJson } from './route.ts'
 const ALPHA = 0.15, BETA = 4
 // ponytail: one capacity for every cell, in people per km of road, fitted so that the morning peak of 台北市 has the
 // TomTom congestion level (scripts/traffic.ts, DATA.md "Figures in the code"). Real roads differ in lanes.
-export const CAPACITY = 58
+export const CAPACITY = 140
 // ponytail: the road load is taken over cells of CELL degrees (about 1 km) and the people per km of road in a cell stand
 // in for the flow of BPR. Every trip takes one shortest path, so per edge only a few edges carried any load, with a
 // travel time up to 25 times the free time; a cell spreads it over the roads nearby. Use flows per hour on each edge
@@ -51,22 +51,27 @@ export const loadNow = (w: World, use: RoadUse, out: Float32Array, onRoad?: (age
   return out
 }
 
-/** The cell of each edge (by the middle of its ends) and the km of road in each cell. */
-export type Grid = { cellOf: Int32Array; km: Float64Array; keys: Int32Array }
-/** The key of the cell that holds a point; the page finds the cell of a dot with it. */
-export const cellKey = (lon: number, lat: number) => Math.floor(lon / CELL) * 100_000 + Math.floor(lat / CELL)
+// ponytail: the capacity of a road of each class (scripts/graphs.py: street, 國道, 快速道路, ramp) over that of a street,
+// for their lanes; guesses. Each class of a cell is taken apart, so the many km of 國道 and ramps at an interchange do
+// not thin out the load of the streets next to them.
+const LANES = [1, 3, 2, 0.5]
+
+/** A bucket is the roads of one class in one cell: the bucket of each edge, and the km and lanes of each bucket. */
+export type Grid = { cellOf: Int32Array; km: Float64Array; lanes: Float64Array; keys: Int32Array }
+/** The key of the cell that holds a point. The key of a bucket is 4 x the key of its cell + its class. */
+export const cellKey = (lon: number, lat: number) => (Math.floor(lon / CELL) - 12_000) * 10_000 + Math.floor(lat / CELL) - 2_400
 export const gridOf = (road: GraphJson): Grid => {
   const ids = new Map<number, number>()
-  const cellOf = Int32Array.from(road.edges, ([a, b]) => {
-    const k = cellKey((road.lon[a] + road.lon[b]) / 2, (road.lat[a] + road.lat[b]) / 2)
+  const cellOf = Int32Array.from(road.edges, ([a, b, , , cls = 0]) => {
+    const k = 4 * cellKey((road.lon[a] + road.lon[b]) / 2, (road.lat[a] + road.lat[b]) / 2) + cls
     return ids.get(k) ?? ids.set(k, ids.size).get(k)!
   })
-  const km = new Float64Array(ids.size)
+  const km = new Float64Array(ids.size), keys = Int32Array.from(ids.keys())
   road.edges.forEach(([, , m], e) => (km[cellOf[e]] += m / 1000))
-  return { cellOf, km, keys: Int32Array.from(ids.keys()) }
+  return { cellOf, km, lanes: Float64Array.from(keys, k => LANES[k % 4]), keys }
 }
 
-/** People on the road of each cell. */
+/** People on the road of each bucket. */
 export const cellLoad = (load: ArrayLike<number>, grid: Grid) => {
   const out = new Float64Array(grid.km.length)
   for (let e = 0; e < load.length; e++) out[grid.cellOf[e]] += load[e]
@@ -76,9 +81,9 @@ export const cellLoad = (load: ArrayLike<number>, grid: Grid) => {
 /** Extra time over free flow, as a share of the free time, for `people` on `km` of road. */
 export const extraTime = (people: number, km: number, capacity = CAPACITY) => ALPHA * (people / km / capacity) ** BETA
 
-/** Per cell, 0 (free) to 255 (SLOWEST or slower). */
+/** Per bucket, 0 (free) to 255 (SLOWEST or slower). */
 export const cellLevels = (load: ArrayLike<number>, grid: Grid, capacity = CAPACITY) =>
-  Uint8Array.from(cellLoad(load, grid), (p, c) => Math.round(255 * Math.min(1, extraTime(p, grid.km[c], capacity) / (SLOWEST - 1))))
+  Uint8Array.from(cellLoad(load, grid), (p, c) => Math.round(255 * Math.min(1, extraTime(p, grid.km[c], capacity * grid.lanes[c]) / (SLOWEST - 1))))
 
 /**
  * Per edge: 0 for an edge with no traveller, else 1 + the level of its cell (cellLevels) on 1 to 255. The map draws

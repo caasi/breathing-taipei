@@ -33,7 +33,7 @@ const node = new Map<number, number>(), at = (v: number) => node.get(v) ?? node.
 const metres: number[] = roadJson.edges.map((e: number[]) => e[2])
 const use = roadUse(w, (a, b) => routes.get(routeKey(at(a), at(b))), metres)
 
-// A cell is in 台北市 when the village nearest to the first node of its first edge is.
+// A bucket (the roads of one class in a cell) is in 台北市 when the village nearest to the first node of its first edge is.
 const villages: { town: string; lon: number; lat: number }[] = data.villages, grid = gridOf(roadJson)
 const taipei = new Array<boolean | undefined>(grid.km.length)
 roadJson.edges.forEach(([a]: number[], e: number) => {
@@ -51,7 +51,7 @@ for (let slot = 0; slot < 96; slot++, advance(w, 15)) {
   if (!MORNING.hours.includes(hour) && !EVENING.hours.includes(hour)) continue
   loadNow(w, use, load)
   const s = sums.get(hour) ?? [0, 0]
-  cellLoad(load, grid).forEach((p, c) => { if (p && taipei[c]) { s[0] += p * extraTime(p, grid.km[c], REFERENCE); s[1] += p } })
+  cellLoad(load, grid).forEach((p, c) => { if (p && taipei[c]) { s[0] += p * extraTime(p, grid.km[c], REFERENCE * grid.lanes[c]); s[1] += p } })
   sums.set(hour, s)
 }
 const level = (hours: number[], capacity: number) => {
