@@ -7,6 +7,8 @@ import { Traffic, type RoadLines } from './Traffic.tsx'
 import { PLACE } from './Dashboard.tsx'
 import { MAP_SIZE, svgTransform, type Rect, type View } from './view.ts'
 
+const NO_TRAFFIC = new Uint8Array(0)
+
 export type Transit = {
   lines: { kind: string; name: string; colour: string; coords: [number, number][] }[]
   points: { kind: string; name: string; lon: number; lat: number }[]
@@ -132,8 +134,9 @@ export function HeatMap({ towns, villages, level, nodes, counts, perAgent, proj,
       <Fills cells={geo.cells} proj={proj} colours={colours} fadeSeconds={fadeSeconds} view={view} />
       {/* The view is outside the memo, so a zoom or pan step changes one attribute and leaves the paths alone. */}
       <svg style={SVG}><g transform={svgTransform(view)}>{fixed}</g></svg>
-      {/* Mounted once and then hidden, not unmounted: a WebGL canvas must not be mounted again (AGENTS.md). */}
-      {roads && traffic && <Traffic lines={roads} proj={proj} levels={traffic} fadeSeconds={fadeSeconds} view={view} running={speed > 0} shown={show.has('traffic')} />}
+      {/* Mounted once and then hidden, not unmounted: a WebGL canvas must not be mounted again (AGENTS.md). Until the
+          first take of a run, it draws the network with no traffic. */}
+      {roads && <Traffic lines={roads} proj={proj} levels={traffic ?? NO_TRAFFIC} fadeSeconds={fadeSeconds} view={view} running={speed > 0} shown={show.has('traffic')} />}
       <svg style={SVG}><g transform={svgTransform(view)}>
         {geo.labels.map(l => <text key={l.town} x={l.xy[0]} y={l.xy[1]} textAnchor="middle" fontSize={12} fill="#fff" stroke="#211d1d" strokeWidth={3} paintOrder="stroke">
           {l.name}<tspan x={l.xy[0]} dy={14}>{((byTown.get(l.town) ?? 0) * perAgent).toLocaleString()}</tspan></text>)}
