@@ -1,4 +1,4 @@
-import { where, now, ROAD, PLAY, GONE, type World } from './core.ts'
+import { where, now, slowDown, ROAD, PLAY, GONE, type World } from './core.ts'
 import { ROAD_MODES, VARIANTS } from './paths.ts'
 import { FASTER, type GraphJson } from './route.ts'
 
@@ -6,7 +6,7 @@ import { FASTER, type GraphJson } from './route.ts'
 const ALPHA = 0.15, BETA = 4
 // ponytail: one capacity for every cell, in people per km of road, fitted so that the morning peak of 台北市 has the
 // TomTom congestion level (scripts/traffic.ts, DATA.md "Figures in the code"). Real roads differ in lanes.
-export const CAPACITY = 260
+export const CAPACITY = 266
 // ponytail: the road load is taken over cells of CELL degrees (about 500 m) and the people per km of road in a cell stand
 // in for the flow of BPR. Every trip takes one shortest path, so per edge only a few edges carried any load, with a
 // travel time up to 25 times the free time; a cell spreads it over the roads nearby. Use flows per hour on each edge
@@ -61,9 +61,17 @@ const choose = (w: World, use: RoadUse, i: number, base: number, mode: number, l
   return best
 }
 
+/** The travel time of a path over its free time, by the slowness of `live`. */
+const slowerOn = (es: Uint16Array, live: Live) => {
+  let free = 0, jam = 0
+  for (let k = 0; k < es.length; k++) { const f = live.time[es[k]]; free += f; jam += f * live.slower[live.grid.cellOf[es[k]]] }
+  return free ? jam / free : 1
+}
+
 /**
- * Real people on each edge now: each road traveller is on the edge at its share of the trip. A trip takes its variant
- * when it is first seen on the road, by the slowness of `live` then. onRoad gets each traveller and its edge.
+ * Real people on each edge now: each road traveller is on the edge at its share of the trip. When a trip is first seen
+ * on the road, it takes its variant by the slowness of `live` then, and its leg takes that much longer (core.ts
+ * slowDown), so a jam keeps more people on the road. onRoad gets each traveller and its edge.
  */
 export const loadNow = (w: World, use: RoadUse, out: Float32Array, onRoad?: (agent: number, edge: number) => void, live?: Live) => {
   out.fill(0)
@@ -74,7 +82,11 @@ export const loadNow = (w: World, use: RoadUse, out: Float32Array, onRoad?: (age
     if (w.dest[i] === GONE || where(w, i, t) !== ROAD) continue
     const out1 = t < w.dep[i] + w.dur1[i], start = out1 ? w.dep[i] : w.ret[i], leg = w.dest[i] === PLAY ? 1 : 0
     const base = (2 * j + leg) * VARIANTS
-    if (use.since[j] !== start) { use.pick[j] = choose(w, use, i, base, leg ? w.playMode[i] : w.mode[i], live); use.since[j] = start }
+    if (use.since[j] !== start) {
+      use.pick[j] = choose(w, use, i, base, leg ? w.playMode[i] : w.mode[i], live); use.since[j] = start
+      const chosen = use.paths[base + use.pick[j]]
+      if (chosen && live) slowDown(w, i, slowerOn(chosen, live))
+    }
     const es = use.paths[base + use.pick[j]]
     if (!es) continue
     const p = out1 ? (t - w.dep[i]) / w.dur1[i] : 1 - (t - w.ret[i]) / w.dur2[i]

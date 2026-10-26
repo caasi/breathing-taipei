@@ -249,6 +249,25 @@ export const advance = (w: World, minutes: number) => {
   }
 }
 
+/**
+ * A jam: the leg that agent i is on now takes `factor` times as long, at most MAX_LEG. A longer way to work can make the
+ * agent leave work later (never before it arrives). The agent moves to the bucket of its new minute home, so it stays in
+ * exactly one bucket. An agent that is not on the road does not change.
+ */
+export const slowDown = (w: World, i: number, factor: number) => {
+  const t = now(w), end = w.ret[i] + w.dur2[i]
+  if (t >= w.dep[i] && t < w.dep[i] + w.dur1[i]) {
+    w.dur1[i] = leg(w.dur1[i] * factor)
+    w.ret[i] = Math.max(w.ret[i], w.dep[i] + w.dur1[i])
+  } else if (t >= w.ret[i] && t < end) w.dur2[i] = leg(w.dur2[i] * factor)
+  else return
+  const next = w.ret[i] + w.dur2[i]
+  if (next === end) return
+  const old = w.due[end % RING]
+  old.splice(old.indexOf(i), 1)
+  w.due[next % RING].push(i)
+}
+
 export const counts = (w: World, modes: number) => {
   const c = Uint32Array.from(w.stayers)
   const road = new Uint32Array(modes)

@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'vitest'
 import fc from 'fast-check'
 import { readFileSync } from 'node:fs'
-import { init, advance, counts, where, ROAD, AWAY, PLAY, GONE, MINUTES_PER_DAY, type City, type World } from './core.ts'
+import { init, advance, counts, where, slowDown, now, ROAD, AWAY, PLAY, GONE, MINUTES_PER_DAY, type City, type World } from './core.ts'
 import { cityFrom, km, MODES, MAX_KM, WALK, BIKE } from './city.ts'
 
 // 1-5 groups with 1-4 nodes each, sparse non-negative OD, any destination weights,
@@ -178,6 +178,25 @@ describe('core properties', () => {
       expect(w.dur2[i]).toBe(minutes(1, 0, 0, hour))
       expect(w.ret[i] + w.dur2[i]).toBeLessThanOrEqual((day + 1) * 1440)
     }
+  })
+
+  test('a jam makes the leg under way longer, and the agent stays in exactly the bucket of its new minute home', () => {
+    fc.assert(fc.property(cityArb, fc.nat(1000), fc.integer({ min: 1, max: 3 * 1440 }), fc.double({ min: 1, max: 4, noNaN: true }), (city, seed, minutes, factor) => {
+      const w = run(city, seed, minutes), t = now(w), before = new Map<number, number>()
+      for (const i of w.movers) if (where(w, i) === ROAD) { before.set(i, w.ret[i] + w.dur2[i]); slowDown(w, i, factor) }
+      const seen = new Map<number, number>()
+      w.due.forEach((agents, slot) => agents.forEach(i => { expect(seen.has(i)).toBe(false); seen.set(i, slot) }))
+      for (const i of w.movers) {
+        const end = w.ret[i] + w.dur2[i]
+        expect(seen.get(i)).toBe(end % w.due.length)
+        expect(end).toBeGreaterThan(t)
+        if (before.has(i)) expect(end).toBeGreaterThanOrEqual(before.get(i)!)
+        expect(w.ret[i]).toBeGreaterThanOrEqual(w.dep[i] + w.dur1[i])
+      }
+      advance(w, 1440)
+      const c = counts(w, MODES.length)
+      expect(sumOf(c)).toBe(total(city))
+    }), { numRuns: 60 })
   })
 
   test('same seed gives the same run', () => {

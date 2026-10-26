@@ -56,7 +56,8 @@ let newEvents: SimEvent[] = []
 let eventId = 0
 let routed = 0
 let idx = new Uint32Array(0) // agent of each sampled trip
-let sentDep = new Int32Array(0) // departure last sent for each sampled trip; a new plan always changes it
+// The plan last sent for each sampled trip: a new plan always changes the departure, and a jam (traffic.ts) a leg.
+let sentDep = new Int32Array(0), sentDur1 = new Uint16Array(0), sentDur2 = new Uint16Array(0)
 let use: RoadUse | undefined, grid: Grid | undefined, live: Live | undefined, load = new Float32Array(0), jam = new Uint8Array(0)
 let jamSlot = -1, jamAt = -Infinity, trafficOn = false
 // The traffic is taken once per 15 simulated minutes and at most every 250 ms: one take costs 7 to 15 ms on a desktop.
@@ -91,7 +92,7 @@ const sample = (w: World): Trips => {
   const picked: number[] = []
   for (let i = 0; i < w.home.length; i += every) if (w.home[i] !== w.work[i] || w.home[i] !== w.play[i]) picked.push(i)
   idx = Uint32Array.from(picked)
-  sentDep = take(w.dep, idx, Int32Array)
+  sentDep = take(w.dep, idx, Int32Array); sentDur1 = take(w.dur1, idx, Uint16Array); sentDur2 = take(w.dur2, idx, Uint16Array)
   return { home: take(w.home, idx, Uint16Array), work: take(w.work, idx, Uint16Array), mode: take(w.mode, idx, Uint8Array),
     play: take(w.play, idx, Uint16Array), playMode: take(w.playMode, idx, Uint8Array), dest: take(w.dest, idx, Uint8Array),
     dep: take(w.dep, idx, Int32Array), dur1: take(w.dur1, idx, Uint16Array), ret: take(w.ret, idx, Int32Array), dur2: take(w.dur2, idx, Uint16Array) }
@@ -99,7 +100,10 @@ const sample = (w: World): Trips => {
 
 const replans = (w: World): Replans | undefined => {
   const ks: number[] = []
-  for (let k = 0; k < idx.length; k++) if (w.dep[idx[k]] !== sentDep[k]) { ks.push(k); sentDep[k] = w.dep[idx[k]] }
+  for (let k = 0; k < idx.length; k++) {
+    const i = idx[k]
+    if (w.dep[i] !== sentDep[k] || w.dur1[i] !== sentDur1[k] || w.dur2[i] !== sentDur2[k]) { ks.push(k); sentDep[k] = w.dep[i]; sentDur1[k] = w.dur1[i]; sentDur2[k] = w.dur2[i] }
+  }
   if (!ks.length) return undefined
   const at = ks.map(k => idx[k])
   return { k: Uint32Array.from(ks), dest: take(w.dest, at, Uint8Array), dep: take(w.dep, at, Int32Array), dur1: take(w.dur1, at, Uint16Array), ret: take(w.ret, at, Int32Array), dur2: take(w.dur2, at, Uint16Array) }
