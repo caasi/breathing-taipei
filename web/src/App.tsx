@@ -118,7 +118,6 @@ export function App() {
   const [loadError, setLoadError] = useState<string>()
   const [open, setOpen] = useState<'info' | 'settings' | 'policies'>()
   const [runError, setRunError] = useState<string>()
-  // Highways are for orientation only and compete with the area colours, so they start hidden.
   const [show, setShow] = useStored('layers', new Set(LAYERS.map(l => l[0])),
     setOf(LAYERS.map(l => l[0])), v => [...v].join(','))
   const [trafficOn, setTrafficOn] = useStored('traffic', true, bool, fromBool)
