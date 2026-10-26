@@ -257,7 +257,7 @@ export const advance = (w: World, minutes: number) => {
  * than asked. On the way home, the new start can fall before the agent reached work: only the minutes
  * before now change. The model reads only now; the page draws up to one step behind it, and can show the agent at work
  * for that step. A later arrival at work can make the agent leave work later (never before it
- * arrives). The agent moves to the bucket of its new minute home, so it stays in exactly one bucket. An agent that is not
+ * arrives). An agent that is not
  * on the road does not change.
  */
 export const stretch = (w: World, i: number, arrive: number) => {
