@@ -261,7 +261,7 @@ onmessage = async (e: MessageEvent<ToWorker>) => {
     const backs = new Map<number, Extract<SimEvent, { kind: 'personal' }>>()
     onLate = () => backs.forEach((b, i) => {
       // Once the character has left, a jam on the way home moves its start (core.ts stretch), not the leaving time.
-      if (now(world) >= b.t) { backs.delete(i); return }
+      if (now(world) >= world.ret[i]) { backs.delete(i); return }
       if (world.ret[i] === b.t) return
       const late = { ...b, t: world.ret[i], late: (b.late ?? 0) + world.ret[i] - b.t, mood: temperOf(i) < 0.55 ? 'angry' as const : 'blank' as const }
       newEvents.push(late); backs.set(i, late)
