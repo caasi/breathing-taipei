@@ -6,12 +6,12 @@ import { FASTER, type GraphJson } from './route.ts'
 const ALPHA = 0.15, BETA = 4
 // ponytail: one capacity for every cell, in people per km of road, fitted so that the morning peak of 台北市 has the
 // TomTom congestion level (scripts/traffic.ts, DATA.md "Figures in the code"). Real roads differ in lanes.
-export const CAPACITY = 54
-// ponytail: the road load is taken over cells of CELL degrees (about 1 km) and the people per km of road in a cell stand
+export const CAPACITY = 78
+// ponytail: the road load is taken over cells of CELL degrees (about 500 m) and the people per km of road in a cell stand
 // in for the flow of BPR. Every trip takes one shortest path, so per edge only a few edges carried any load, with a
 // travel time up to 25 times the free time; a cell spreads it over the roads nearby. Use flows per hour on each edge
 // when trips get more than one path and edges get capacities of their own.
-const CELL = 0.01
+const CELL = 0.005
 // ponytail: the travel time over free time at which the colour of a road is at its end (dark red); chosen by eye.
 const SLOWEST = 1 / 0.3
 // ponytail: the share of drivers and bus riders who follow the live traffic (a map app) when they leave; the others take
@@ -95,7 +95,8 @@ const LANES = [1, 3, 2, 0.5]
 /** A bucket is the roads of one class in one cell: the bucket of each edge, and the km and lanes of each bucket. */
 export type Grid = { cellOf: Int32Array; km: Float64Array; lanes: Float64Array; keys: Int32Array }
 /** The key of the cell that holds a point. The key of a bucket is 4 x the key of its cell + its class. */
-export const cellKey = (lon: number, lat: number) => (Math.floor(lon / CELL) - 12_000) * 10_000 + Math.floor(lat / CELL) - 2_400
+// From 121°E and 24°N, so that 4 times the key fits in an Int32Array.
+export const cellKey = (lon: number, lat: number) => Math.floor((lon - 121) / CELL) * 10_000 + Math.floor((lat - 24) / CELL)
 export const gridOf = (road: GraphJson): Grid => {
   const ids = new Map<number, number>()
   const cellOf = Int32Array.from(road.edges, ([a, b, , , cls = 0]) => {
