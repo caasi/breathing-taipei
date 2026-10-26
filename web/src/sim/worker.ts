@@ -263,8 +263,11 @@ onmessage = async (e: MessageEvent<ToWorker>) => {
       // Once the character has left, a jam on the way home moves its start (core.ts stretch), not the leaving time.
       if (now(world) >= world.ret[i]) { backs.delete(i); return }
       if (world.ret[i] === b.t) return
-      const late = { ...b, t: world.ret[i], late: (b.late ?? 0) + world.ret[i] - b.t, mood: temperOf(i) < 0.55 ? 'angry' as const : 'blank' as const }
-      newEvents.push(late); backs.set(i, late)
+      // How late against the planned time; back to the plain way home when the jam eases in time.
+      const minutes = world.ret[i] - world.leave[i]
+      const next = minutes > 0 ? { ...b, t: world.ret[i], late: minutes, mood: temperOf(i) < 0.55 ? 'angry' as const : 'blank' as const }
+        : { ...b, t: world.ret[i], late: undefined, mood: undefined }
+      newEvents.push(next); backs.set(i, next)
     })
     // ponytail: a character's temper is fixed by its index; about 55% take a jam by how slow it is (angry on the slowest
     // roads, else stuck), the rest go blank, work by phone or ask for an hour of leave to come late (only on the way to

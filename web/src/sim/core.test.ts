@@ -200,6 +200,8 @@ describe('core properties', () => {
         expect(where(w, i, t)).toBe(ROAD)
         const [back, p, to] = a, [back2, p2] = share(i), d = back ? w.dur2[i] : w.dur1[i]
         expect(back2).toBe(back)
+        // On the way to work the agent leaves at its planned time, or on arrival when that is later, also after an earlier end.
+        if (!back) expect(w.ret[i]).toBe(Math.max(w.leave[i], w.dep[i] + w.dur1[i]))
         // The leg ends where asked, or earlier at MAX_LEG (600 minutes).
         if (d < 600) expect((back ? w.ret[i] : w.dep[i]) + d).toBe(to)
         else expect((back ? w.ret[i] : w.dep[i]) + d).toBeLessThanOrEqual(to)
