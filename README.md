@@ -17,7 +17,7 @@ The author did not register for the event, so this is not an entry.
   - Dark: no change.
 - **The dots.** Each dot is a sample of the commuters who travel at that time.
   - MRT riders move on the MRT lines.
-  - Bus, scooter, and car commuters move on the road network: the shapes of the bus routes, and the 國道 and 快速道路 of OpenStreetMap (OSM). A scooter does not take a 國道 or a 快速道路.
+  - Bus, scooter, and car commuters move on the road network: the shapes of the bus routes, and the 國道 and 快速道路 of OpenStreetMap (OSM). A scooter does not take a 國道 or a 快速道路, unless no path on streets only exists (rare, DATA.md).
   - People who walk or ride a bicycle move in a straight line.
 - **The clock.** It shows the 民國 date and the time, then the lunar date, the solar term, a holiday (orange) and the days that are commemorated but not off (blue).
 - **The event panel.** It shows the newest 100 events: a few of the characters' plans, and the public events of each day. On a phone it is below or beside the map.
@@ -163,7 +163,7 @@ The tests with real data:
 
 ## Known gaps
 
-- `web/public/` holds the data that the app uses. These build steps are scripts: `scripts/graphs.py` builds the road and MRT graphs, `scripts/night.py` builds `night.json`, `scripts/od.py` builds `od2.json`, `scripts/days.py` builds `calendar.json`, `scripts/people.py` builds `people.json`, `scripts/atlas.py` builds `towns.json` and `villages2-topo.json`, `scripts/villages.py` builds `villages2.json`, `scripts/telecom.py` builds `signal.json`, `scripts/transit.py` builds `transit.json` (their docstrings give the inputs), and `scripts/routes.ts` builds `road-routes.bin`. `pnpm data` runs all of them except `routes.ts`, in the order of their dependencies (DATA.md, "Dependencies"). `pnpm dev` and `pnpm build` run `pnpm routes` first. Without the file, the page routes every road trip itself, which took about 30 s at 20 people per dot in Chromium against 2.5 to 3.6 s with it (measured with the file of 6.2 MB, before the traffic layer; the file is now 54.6 MB, and the time with it is not measured again).
+- `web/public/` holds the data that the app uses. These build steps are scripts: `scripts/graphs.py` builds the road and MRT graphs and the shapes of the roads (`road-lines.json`), `scripts/names.py` builds `road-names.json`, `scripts/night.py` builds `night.json`, `scripts/od.py` builds `od2.json`, `scripts/days.py` builds `calendar.json`, `scripts/people.py` builds `people.json`, `scripts/atlas.py` builds `towns.json` and `villages2-topo.json`, `scripts/villages.py` builds `villages2.json`, `scripts/telecom.py` builds `signal.json`, `scripts/transit.py` builds `transit.json` (their docstrings give the inputs), and `scripts/routes.ts` builds `road-routes.bin`. `pnpm data` runs all of them except `routes.ts`, in the order of their dependencies (DATA.md, "Dependencies"). `pnpm dev` and `pnpm build` run `pnpm routes` first. Without the file, the page routes every road trip itself, which took about 30 s at 20 people per dot in Chromium against 2.5 to 3.6 s with it (measured with the file of 6.2 MB, before the traffic layer; the file is now 54.6 MB, and the time with it is not measured again).
 - The events narrate the plans of the model and the calendar. A jam changes a plan: the trip takes longer, and the character can leave work later. The policy settings are placeholders.
 
 ## License

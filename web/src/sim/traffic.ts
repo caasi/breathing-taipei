@@ -22,12 +22,13 @@ const SHORTEST = 0.1
 // ponytail: the travel time over free time at which the colour of a road is at its end (dark red); chosen by eye.
 const SLOWEST = 1 / 0.3
 // ponytail: the share of drivers who follow the live traffic (a map app) when they leave; the others take their usual,
-// fastest route. A guess. A scooter always takes the streets-only variant. A bus keeps its fixed route (the fastest
+// fastest route. A guess. A scooter takes the streets-only variant, or the fastest one where no streets-only path
+// exists (DATA.md). A bus keeps its fixed route (the fastest
 // variant stands in for it), and a jam still slows it.
 const NAV = 0.6
 // ponytail: the road space of one traveller of each mode (city.ts MODES), in PCU: a vehicle's PCU over the people in it.
 // A bus is 2 PCU with 20 riders, a scooter 0.4 PCU with 1.2 riders, a car 1 PCU with 1.4 riders; all guesses. So a
-// move from car to bus frees road space, and a bus lane has a load to take off the other lanes.
+// move from car to bus frees road space.
 export const PCU = [0, 2 / 20, 0.4 / 1.2, 1 / 1.4, 0, 0]
 
 /**

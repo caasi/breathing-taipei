@@ -29,6 +29,7 @@ for f in days:
         elif 17 <= h < 20: peak[(r["SectionID"], "pm")][f].append(v)
 out = []
 for (sid, p), byday in peak.items():
+    # ponytail: a section needs 30 minutes of night speeds (of about 1,440 in 6 days) for a free speed; a guess.
     if len(night[sid]) < 30: continue
     free, pk = st.median(night[sid]), st.median([st.median(v) for v in byday.values()])
     if pk > 0: out.append((free / pk, sid, p, free, pk))
