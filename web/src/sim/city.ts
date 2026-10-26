@@ -14,7 +14,8 @@ export const BUS = 1, SCOOTER = 2, WALK = 4, BIKE = 5
 // Mode share of Taipei residents, 2024 (DATA.md, "Figures in the code"). New Taipei uses the same split until its own figures are found.
 const OTHER = [0, 13.7, 16.3, 20.1, 20.8, 3.8], MRT_SHARE = 16.0
 // ponytail: assumed door-to-door speeds (km/h) and access minutes; calibrate with TDX travel times later.
-const SPEED = [30, 14, 26, 22, 4.5, 12], PEAK_SPEED = [30, 11, 20, 15, 4.5, 12], ACCESS = [12, 12, 3, 6, 0, 2]
+// The free speeds: the traffic model (traffic.ts) makes a road trip slower in a jam, so there is no peak speed here.
+const SPEED = [30, 14, 26, 22, 4.5, 12], ACCESS = [12, 12, 3, 6, 0, 2]
 export const MAX_KM = [Infinity, Infinity, Infinity, Infinity, 2.5, 6] // walk and bike only within these distances
 // Short-trip rates from the mode share and the YouBike rentals (DATA.md, "Figures in the code"); one person rents
 // twice (there and back). New Taipei uses Taipei's rates until its own figures are found.
@@ -23,7 +24,6 @@ const WALK_PER_MRT = 20.8 / 16.0, YOUBIKE_RENTALS = 234_000
 const DECAY_KM: Record<number, number> = { [WALK]: 0.8, [BIKE]: 2 }
 // arrivals in villages2.json are summed over 30 days (DATA.md, "Processing").
 const ARRIVAL_DAYS = 30
-const PEAK = new Set([7, 8, 9, 17, 18, 19])
 const MORNING = [5, 6, 7, 8, 9, 10, 11], EVENING = [12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23]
 // ponytail: guessed on 2026-10-24 (the user: many people go abroad or to another county on a day off); the share
 // of commuters away from Taipei and New Taipei for the day, on a Saturday off and on a Sunday or holiday.
@@ -151,7 +151,7 @@ export const cityFrom = ({ od: mrt, saturday, holiday, districts, villages, sign
     return known[d] * (jobsD[d] ? (v.jobs ?? 0) / jobsD[d] : 0) + (1 - known[d]) * spread[i]
   })
   const minutes = (a: number, b: number, mode: number, hour: number) =>
-    ACCESS[mode] + 60 * 1.3 * km(coords[a], coords[b]) / (PEAK.has(hour) ? PEAK_SPEED : SPEED)[mode]
+    ACCESS[mode] + 60 * 1.3 * km(coords[a], coords[b]) / SPEED[mode]
 
   const homes = village ? villages.map(v => Math.round(v.pop / perAgent)) : residents
   // Short trips stay inside the home district: the cross-district flows are already calibrated to the
