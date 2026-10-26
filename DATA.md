@@ -115,14 +115,64 @@ Note: The data.gov.tw entry for the Taipei shape file was not found. The license
 ## Processing
 
 - `od2.json`: Built by `scripts/od.py` from source A, with the exit positions of source B, the district boundaries of source F, and the days off of source K. Each station goes to the district that holds the mean position of its exits. Each day of the month is a workday (20 days in September 2026), a Saturday off with no holiday (4 days), or a Sunday or holiday (6 days: the Sundays, 中秋 on 9/25 and 教師節 on 9/28). A Saturday that is a holiday (2027-02-06, 春節) counts as a holiday; September 2026 has none, so `od2.json` is the same either way. Trips are added up per district and divided by the number of days of that kind. Until 2026-10-24 the file had only the workday, and it counted 9/25 and 9/28 as workdays (the mean of all 22 Monday-to-Friday days).
-- `villages2.json`: Residents from sources C and D. New Taipei has 30 villages that source F does not show. Their residents go to the other villages of the same district, in proportion to residents. Arrivals are the morning (05:00 to 11:59) trips that end at the stations in each village, summed over all 30 days of September 2026 (weekdays and weekends). The model divides them by 30 to get a daily number.
-- `signal.json`: The columns `DAY_WORK(0700~1300)` and `NIGHT_WORK` of source E for the 41 districts.
+- `towns.json` and `villages2-topo.json`: Built by `scripts/atlas.py`. The arcs and the transform of source F stay whole. Only the objects are cut to the two cities, and `towns.json` keeps the `counties` object of all of Taiwan.
+- `villages2.json`: Built by `scripts/villages.py`. Residents from sources C and D. New Taipei has 30 villages that source F does not show. Their residents go to the other villages of the same district, in proportion to residents. Arrivals are the morning (05:00 to 11:59) trips that end at the stations in each village, summed over all 30 days of September 2026 (weekdays and weekends). The model divides them by 30 to get a daily number.
+- `signal.json`: Built by `scripts/telecom.py`. The columns `DAY_WORK(0700~1300)` and `NIGHT_WORK` of source E for the 41 districts.
+- `transit.json`: Built by `scripts/transit.py` from four Overpass responses (source H). Its docstring gives the queries and the colour of each line.
 - `road-graph.json` and `mrt-graph.json`: Built by `scripts/graphs.py`. Points snap to a grid of about 120 m (roads) or 10 m (MRT), and the points in one grid cell become one node. Nodes with exactly two neighbors become points inside an edge, except stations and one node of each separate loop (a component in which every node has two neighbors). The points inside each edge are simplified (Douglas-Peucker, about 20 m). Each station is a node at the mean position of its exits. It links to the nearest point of each MRT line within 350 m, at a cost of 300 m for boarding or changing lines.
 - `night.json`: Built by `scripts/night.py`. Each business of source J with an address in Taipei or New Taipei goes to a group by its industry code: early (561111 breakfast shops), food (other 5611 restaurants, 561200 food stalls, 563112, 563113, 563115 and 563199 drink shops, 563200 drink stalls), convenience (471112 to 471114), hotel (551011, 551012), and nightlife (563114 bars, 9322 karaoke, 9323 places with hostesses, 969012 saunas). It goes to a village by the 里 in its address, with 羣, 峯 and 臺 read as 群, 峰 and 台 on both sides. A business without a 里, with a 里 that source F does not have, or with a 里 written in private-use characters, is spread over the villages of its district in proportion to the businesses of its group that matched. If none of its group matched in that district, it is spread in proportion to residents (this occurs for a few small groups in some districts of New Taipei, mostly on the north coast, for example 金山區 and 萬里區, and also 五股區 and 平溪區).
 - `road-routes.bin`: Built by `scripts/routes.ts` from `road-graph.json` and the model (seed 42, 10 people per agent, village and district level). It holds the road path between every pair of road nodes that a bus, scooter or car trip of that run uses and that the road graph connects.
 - `people.json`: Built by `scripts/people.py` from sources N and O, with the residents of `villages2.json`. A district's people outside its top 20 take the national ranking without those 20. The 300 most common surnames hold 99.6% of the people of Taiwan.
 - `calendar.json`: Built by `scripts/days.py` from sources K and L. Its docstring lists the input files and their addresses.
-- Only `scripts/days.py`, `scripts/graphs.py`, `scripts/night.py`, `scripts/od.py`, `scripts/people.py` and `scripts/routes.ts` are in the repository. Their docstrings list the input files and the commands. The other files came from one-off steps that are not in the repository yet.
+- Each file in `web/public/` has a script in `scripts/`, except `og.png` (the preview image for shared links) and the license texts. The docstring of each script gives its inputs, their URLs and the command.
+
+## Raw downloads
+
+The raw downloads are in `data/`, which git ignores (678 MB on 2026-10-24). Only the machine of the user has them. To get a file again, use the URL in the docstring of the script that reads it. A new download can give different data, because most sources change: OpenStreetMap, the registry of source J, and the latest month of sources A, C and D.
+
+| Path in `data/` | Source | Read by |
+|---|---|---|
+| `atlas/towns-10t.json` | F | `atlas.py` |
+| `atlas/villages-10t.json` | F | `atlas.py`, `villages.py` |
+| `pop/vage.csv` | C | `villages.py` |
+| `ris/ODRP014.json` | D | `villages.py` |
+| `dt/exits.csv` | B | `villages.py`, `od.py`, `graphs.py` |
+| `dt/od-202609.csv` | A (the URL of each month is in `dt/index.csv`) | `villages.py`, `od.py` |
+| `signal/segis_112Y11M_town.zip` | E (download it in a browser: the page has no direct link) | `telecom.py` |
+| `osm/rail.json` | H | `transit.py`, `graphs.py` |
+| `osm/stations.json`, `osm/airport.json`, `osm-hw/hw.json` | H | `transit.py` |
+| `bus/tpe_GetBusShape.gz`, `ntpc-transit/ntpc_GetBusShape.gz` | G | `graphs.py` |
+| `calendar/office-115.csv` | K | `days.py`, `od.py` |
+| `calendar/office-116.csv` | K | `days.py` |
+| `calendar/cwa-A-A0087-001.csv`, `calendar/cwa-A-A0087-003.csv` | L | `days.py` |
+| `people/top20-11206.csv` | N | `people.py` |
+| `people/ranking-112.csv` | O | `people.py` |
+| `night/BGMOPEN1.csv` | J | `night.py` |
+
+No script reads the other files in `data/`. They are the Overpass queries (`osm/q*.txt`, `osm-hw/q.txt`), responses that no file uses (`osm/tpe.json`, and `osm/mrt.json`, which is a 504 error page), intermediate files of the first one-off steps, and the pages and PDFs that the figures of the code come from.
+
+## Dependencies
+
+Some scripts read a file that another script writes into `web/public/`:
+
+| File | Made by | Reads from `web/public/` |
+|---|---|---|
+| `towns.json`, `villages2-topo.json` | `atlas.py` | (none) |
+| `villages2.json` | `villages.py` | (none) |
+| `signal.json` | `telecom.py` | (none) |
+| `transit.json` | `transit.py` | (none) |
+| `road-graph.json`, `mrt-graph.json` | `graphs.py` | (none) |
+| `calendar.json` | `days.py` | (none) |
+| `od2.json` | `od.py` | `towns.json` |
+| `people.json` | `people.py` | `villages2.json` |
+| `night.json` | `night.py` | `villages2-topo.json`, `villages2.json` |
+| `road-routes.bin` | `routes.ts` | `od2.json`, `villages2.json`, `signal.json`, `night.json`, `road-graph.json`, `mrt-graph.json` |
+
+So after you change a file, run again each script that reads it. Then run the scripts that read their output. For example, a change to `villages2.json` changes `people.json`, `night.json` and `road-routes.bin`.
+
+`villages.py` also imports `station_points`, `lookup` and `inside` from `od.py`, so that both scripts put a station at the same point.
+
+To rebuild every file in git, run `pnpm data` in `web/`. It runs `scripts/data.sh`, which runs the scripts in this order and then fails if a file in `web/public/` is different from git. The scripts write over the files in `web/public/`, so `data.sh` does not start when `web/public/` has a change that is not in git. Commit or stash the change first. In a git worktree, set `DATA` to the `data/` directory of the main checkout. `pnpm dev` and `pnpm build` run `routes.ts`, so `pnpm data` does not make `road-routes.bin`. On 2026-10-26 the run took 28 s and gave the files in git byte for byte.
 
 ## Estimates
 
