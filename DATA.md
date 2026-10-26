@@ -180,7 +180,7 @@ The raw downloads are in `data/`, which git ignores (678 MB on 2026-10-24). Only
 | `osm/rail.json` | H | `transit.py`, `graphs.py` |
 | `osm/stations.json`, `osm/airport.json` | H | `transit.py` |
 | `osm-hw/highways.json` (query: `scripts/queries/highways.overpassql`) | H | `graphs.py` |
-| `osm/streets.json` (query: `scripts/queries/streets.overpassql`, OSM data of 2026-10-26T15:55:11Z) | H | `names.py` |
+| `osm/streets.json` (query: `scripts/queries/streets.overpassql`, OSM data of 2026-10-26T20:14:06Z) | H | `names.py` |
 | `jobs/neihu-companies.csv` (臺北市內湖科技園區廠商名錄, 臺北市政府產業發展局, data.taipei, downloaded on 2026-10-27; the URL is in the docstring of `villages.py`) | (data.taipei) | `villages.py` |
 | `bus/tpe_GetBusShape.gz`, `ntpc-transit/ntpc_GetBusShape.gz` | G | `graphs.py` |
 | `calendar/office-115.csv` | K | `days.py`, `od.py` |
