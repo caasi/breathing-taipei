@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { expect, test } from 'vitest'
 import fc from 'fast-check'
-import { actionOf, evenPick, publicEvents, withPublic, type SimEvent } from './events.ts'
+import { actionOf, evenPick, jamOf, publicEvents, withPublic, type Mood, type SimEvent } from './events.ts'
 import { mulberry32 } from './rng.ts'
 import { indexOf, type Calendar } from './calendar.ts'
 import { GONE, PLAY, STAY, WORK } from './core.ts'
@@ -75,4 +75,16 @@ test('evenPick shows each kind at its rate, with no gap longer than one step of 
       for (let k = 1; k < shown[kind].length; k++) expect(shown[kind][k] - shown[kind][k - 1]).toBeLessThanOrEqual(Math.ceil(1 / rate))
     })
   }))
+})
+
+test('a jam names the road, or the village near it, for every mood and road mode', () => {
+  const placeOf = () => ({ town: '內湖區', village: '港墘里' })
+  const jam = (mood: Mood, mode: number, road?: string): Extract<SimEvent, { kind: 'jam' }> =>
+    ({ id: 'j', t: 0, kind: 'jam', name: '林先生', home: 0, mode, road, near: 0, mood })
+  for (const mood of ['angry', 'stuck', 'blank', 'work', 'leave'] as const) for (const mode of [1, 2, 3]) {
+    expect(jamOf(jam(mood, mode, '堤頂大道一段'), placeOf)).toContain('堤頂大道一段')
+    expect(jamOf(jam(mood, mode), placeOf)).toContain('港墘里附近')
+  }
+  expect(jamOf(jam('stuck', 1, '承德路四段'), placeOf)).toBe('坐的公車卡在承德路四段，車上的人都在看錶')
+  expect(jamOf(jam('angry', 2, '華中橋'), placeOf)).toBe('騎機車塞在華中橋，半天沒前進，氣到想罵人')
 })

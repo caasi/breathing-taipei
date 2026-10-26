@@ -10,6 +10,11 @@ export type SimEvent =
   // back: the way home of the same plan, at the minute the character leaves work or the day-off place.
   | { id: string; t: number; kind: 'personal'; name: string; home: number; to: number; dest: number; mode: number; group: string; back?: boolean }
   | { id: string; t: number; kind: 'public'; text: string }
+  // A character stuck on a slow road: the road by name, or else the node nearest to it; how it takes the jam.
+  | { id: string; t: number; kind: 'jam'; name: string; home: number; mode: number; road?: string; near: number; mood: Mood }
+
+/** How a character takes a jam: angry, stuck and waiting, blank (music, the window), working by phone, or taking leave. */
+export type Mood = 'angry' | 'stuck' | 'blank' | 'work' | 'leave'
 
 /** What a place is called: the district, and the village at village level. */
 export type PlaceOf = (node: number) => { town: string; village: string }
@@ -32,6 +37,19 @@ export const actionOf = (e: Extract<SimEvent, { kind: 'personal' }>, placeOf: Pl
   if (e.dest === PLAY) return `${by}去${place}走走`
   if (e.group) return `${by}${PURPOSE[e.group] ?? '出門'}`
   return `${by}到${place}上班`
+}
+
+/** The sentence after the name for a jam (kind 'jam'). */
+export const jamOf = (e: Extract<SimEvent, { kind: 'jam' }>, placeOf: PlaceOf) => {
+  const near = placeOf(e.near), at = e.road ?? `${near.village || near.town}附近`, bus = e.mode === 1
+  const by = bus ? '坐的公車' : e.mode === 2 ? '騎機車' : '開車'
+  switch (e.mood) {
+    case 'angry': return bus ? `坐的公車卡在${at}，越等越火大` : `${by}塞在${at}，半天沒前進，氣到想罵人`
+    case 'stuck': return bus ? `坐的公車卡在${at}，車上的人都在看錶` : `${by}卡在${at}，走走停停，只能等`
+    case 'blank': return bus ? `坐的公車塞在${at}，乾脆放空看窗外` : `${by}塞在${at}，乾脆放空聽音樂`
+    case 'work': return `${bus ? '坐公車' : by}塞在${at}，打開電話會議，先開始辦公`
+    case 'leave': return `${bus ? '坐公車' : by}塞在${at}，打電話請假，今天不進公司了`
+  }
 }
 
 // The 2026 local election (中選會, 115年11月28日) and the day the new mayors take office (12月25日 in 2018 and 2022;

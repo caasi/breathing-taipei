@@ -2,7 +2,7 @@ import { getJson, getOptional } from '../load.ts'
 import { init, advance, counts, PLAY, STAY, WORK, type World } from './core.ts'
 import { kindAt, WORKDAY, type Calendar } from './calendar.ts'
 import { drawNames, nameOf, type People } from './people.ts'
-import { evenPick, type SimEvent } from './events.ts'
+import { evenPick, type Mood, type SimEvent } from './events.ts'
 import { mulberry32 } from './rng.ts'
 import { FPS, clockAt, respeed, stepsTo, type Clock } from './pace.ts'
 import { cityFrom, MODES } from './city.ts'
@@ -18,7 +18,7 @@ export type ToWorker =
   // minute: the clock of the page at at (performance.timeOrigin + performance.now() of the change), so both clocks agree.
   | { type: 'speed'; hoursPerSec: number; minute: number; at: number }
   | { type: 'sample'; every: number } // the run goes on; only the agents drawn as dots change
-  | { type: 'traffic'; on: boolean } // the traffic layer is shown; the worker takes the traffic only then
+  | { type: 'traffic'; on: boolean } // the traffic layer is shown; the worker sends the levels only then
 /**
  * Sampled agents' current plans (minutes since 00:00 of day 0), for the renderer to interpolate.
  * dest is WORK, PLAY, GONE or STAY (core.ts); the path of trip k to work is path k, to its day-off place path n + k.
@@ -60,7 +60,13 @@ let use: RoadUse | undefined, grid: Grid | undefined, load = new Float32Array(0)
 let jamSlot = -1, jamAt = -Infinity, trafficOn = false
 // The traffic is taken once per 15 simulated minutes and at most every 250 ms: one take costs 7 to 15 ms on a desktop.
 const JAM_MINUTES = 15, JAM_MS = 250
-const data = Promise.all(['od2.json', 'villages2.json', 'signal.json', 'road-graph.json', 'mrt-graph.json', 'night.json', 'calendar.json', 'people.json'].map(getJson))
+// A jam event comes from a road traveller on an edge at least this slow (traffic.ts levels: 1 + 254 x slowness; red
+// from slowness 0.43). ponytail: at most one jam event a take, and one a day for each character; by eye.
+const JAM_FROM = 1 + Math.round(0.43 * 254), ANGRY_FROM = 1 + Math.round(0.75 * 254)
+let onJam: ((agent: number, edge: number, level: number) => void) | undefined
+const data = Promise.all(['od2.json', 'villages2.json', 'signal.json', 'road-graph.json', 'mrt-graph.json', 'night.json', 'calendar.json', 'people.json', 'road-names.json'].map(getJson))
+/** The name of each road edge, from scripts/names.py: edge[e] indexes names, or is -1. */
+type RoadNames = { names: string[]; edge: number[] }
 const net = data.then(([, , , road, mrt]) => networks(road, mrt))
 // Made by `pnpm routes` before dev and build; without it (or for another road graph) the worker routes every road trip itself.
 const routes = Promise.all([net, getOptional('road-routes.bin').catch(() => undefined)])
@@ -68,6 +74,13 @@ const routes = Promise.all([net, getOptional('road-routes.bin').catch(() => unde
 // The start handler awaits data and net and reports their failure; routes only feeds the paths. Mark all three
 // handled, so a failure that settles before the first start does not also log an unhandled rejection.
 data.catch(() => {}); net.catch(() => {}); routes.catch(() => {})
+
+/** The node (village, or district centre) nearest to a point; a linear search, as it runs about once a take. */
+const nearestOf = (coords: [number, number][], lon: number, lat: number) => {
+  let best = 0, bd = Infinity
+  coords.forEach(([x, y], v) => { const d = (x - lon) ** 2 + (y - lat) ** 2; if (d < bd) { bd = d; best = v } })
+  return best
+}
 
 const take = <T extends Uint32Array | Int32Array | Uint16Array | Uint8Array>(a: T, at: ArrayLike<number>, ctor: new (n: number) => T) => {
   const out = new ctor(at.length); for (let k = 0; k < at.length; k++) out[k] = a[at[k]]; return out
@@ -131,10 +144,15 @@ const frame = () => {
     paths.push(b.value); routed += b.value.ks.length
   }
   const slot = Math.floor((w.day * 1440 + w.minute) / JAM_MINUTES)
-  if (trafficOn && use && grid && slot !== jamSlot && performance.now() - jamAt >= JAM_MS) {
+  if (use && grid && slot !== jamSlot && performance.now() - jamAt >= JAM_MS) {
     jamSlot = slot; jamAt = performance.now()
-    const cells = cellLevels(loadNow(w, use, load), grid), next = levels(load, grid, cells, new Uint8Array(load.length))
-    if (next.some((v, e) => v !== jam[e])) { jam = next; extra.traffic = next; extra.cells = cells }
+    const onRoad: number[] = []
+    const cells = cellLevels(loadNow(w, use, load, (i, e) => onRoad.push(i, e)), grid), next = levels(load, grid, cells, new Uint8Array(load.length))
+    // The jam events need the traffic with the layer off too; the page gets the levels only while it shows them.
+    if (trafficOn && next.some((v, e) => v !== jam[e])) { jam = next; extra.traffic = next; extra.cells = cells }
+    const stuck: number[] = []
+    for (let k = 0; k < onRoad.length; k += 2) if (next[onRoad[k + 1]] >= JAM_FROM) stuck.push(k)
+    if (stuck.length && onJam) { const k = stuck[Math.floor(Math.random() * stuck.length)]; onJam(onRoad[k], onRoad[k + 1], next[onRoad[k + 1]]) }
   }
   const msg: FromWorker = { ...extra, paths, routed, minute: w.minute, day: w.day, counts: c.nodes, road: c.road, away: c.away, ms, events: newEvents, clock: clock.minute, at: performance.timeOrigin + t, since }
   newEvents = []
@@ -186,7 +204,8 @@ onmessage = async (e: MessageEvent<ToWorker>) => {
   // Any failure while starting (loading, building the city, sampling) goes to the page.
   // The async handler would otherwise reject without a message, and onerror does not see a rejection.
   try {
-    const [[od2, villages, signal, roadJson, , night, cal, people], graphs] = await Promise.all([data, net])
+    const [[od2, villages, signal, roadJson, , night, cal, people, roadNames], graphs] = await Promise.all([data, net])
+    onJam = undefined
     const c = cityFrom({ ...od2, villages, signal, night }, m.perAgent, m.level, day => kindAt(cal as Calendar, m.startDay + day))
     w = init(c.city, m.seed)
     const world = w, districtOf = Array.from(w.home, h => (m.level === 'village' ? villages[h].town : c.nodes[h]))
@@ -211,6 +230,21 @@ onmessage = async (e: MessageEvent<ToWorker>) => {
       newEvents.push({ ...e, id: `a${++eventId}` })
       // A shown trip also shows its way home, so the stream follows one character through the day.
       if (dest === WORK || play) newEvents.push({ ...e, id: `a${++eventId}`, t: world.ret[i], back: true })
+    }
+    // ponytail: a character's temper is fixed by its index; about 55% take a jam by how slow it is (angry on the slowest
+    // roads, else stuck), the rest go blank, work by phone or take leave (only on the way to work; leave only before
+    // noon). The shares are by eye. Taking leave does not change the plan yet (#2).
+    const { names, edge: edgeName } = roadNames as RoadNames, jammed = new Map<number, number>()
+    onJam = (i, e, level) => {
+      const t = world.day * 1440 + Math.floor(world.minute), today = Math.floor(t / 1440)
+      if (jammed.get(i) === today) return
+      jammed.set(i, today)
+      const temper = Math.imul(i + 1, 2654435761) / 2 ** 32 + 0.5, toWork = world.dest[i] === WORK && t < world.dep[i] + world.dur1[i]
+      const mood: Mood = temper < 0.55 ? (level >= ANGRY_FROM ? 'angry' : 'stuck') : temper < 0.75 || !toWork ? 'blank'
+        : temper < 0.92 || t % 1440 >= 12 * 60 ? 'work' : 'leave'
+      const a = roadJson.edges[e][0], road = edgeName[e] >= 0 ? names[edgeName[e]] : undefined
+      newEvents.push({ id: `j${++eventId}`, t, kind: 'jam', name: nameOf(ids, i), home: world.home[i],
+        mode: world.dest[i] === PLAY ? world.playMode[i] : world.mode[i], road, near: road ? 0 : nearestOf(c.coords, roadJson.lon[a], roadJson.lat[a]), mood })
     }
     // The plans under way at day 0 were made during init, which calls no onPlan: pass them through the same filter.
     for (const i of w.movers) w.onPlan(i)

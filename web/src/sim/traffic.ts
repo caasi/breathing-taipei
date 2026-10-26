@@ -31,8 +31,8 @@ export const roadUse = (w: World, pathOf: (from: number, to: number) => Uint16Ar
   return { work, play, cum }
 }
 
-/** Real people on each edge now: each road traveller is on the edge at its share of the trip. */
-export const loadNow = (w: World, use: RoadUse, out: Float32Array) => {
+/** Real people on each edge now: each road traveller is on the edge at its share of the trip. onRoad gets each traveller and its edge. */
+export const loadNow = (w: World, use: RoadUse, out: Float32Array, onRoad?: (agent: number, edge: number) => void) => {
   out.fill(0)
   const t = now(w)
   for (let j = 0; j < w.movers.length; j++) {
@@ -45,6 +45,7 @@ export const loadNow = (w: World, use: RoadUse, out: Float32Array) => {
     let lo = 0, hi = c.length - 1
     while (lo < hi) { const m = (lo + hi) >> 1; if (c[m] < d) lo = m + 1; else hi = m }
     out[es[lo]] += w.city.perAgent
+    onRoad?.(i, es[lo])
   }
   return out
 }
