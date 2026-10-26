@@ -1,4 +1,4 @@
-import { advance, where, now, slowDown, ROAD, PLAY, GONE, type World } from './core.ts'
+import { advance, where, now, stretch, ROAD, PLAY, GONE, type World } from './core.ts'
 import { pathIn, ROAD_MODES, routeKey, VARIANTS, type Routes } from './paths.ts'
 import { BUS, SCOOTER } from './city.ts'
 import { freeTime, type GraphJson } from './route.ts'
@@ -28,10 +28,15 @@ export const PCU = [0, 2 / 20, 0.4 / 1.2, 1 / 1.4, 0, 0]
  * The road paths of each mover j (its index in w.movers), with their cumulative free time (route.ts freeTime, which
  * holds the traffic lights), so a traveller is placed by time and waits longer where streets meet: path
  * ((2j + leg) x 2 + back) x VARIANTS + v is the variant v (paths.ts) of its trip to work (leg 0) or to its day-off
- * place (leg 1), on the way there (back 0) or home (back 1), each listed in the order it is driven. pick and since:
- * the variant of the trip under way, and the minute that trip started.
+ * place (leg 1), on the way there (back 0) or home (back 1), each listed in the order it is driven. Per mover, for the
+ * trip under way: pick its variant, since the minute it started (it moves when the trip is stretched), free its
+ * minutes with no jam, path the index of its path in paths and at the edge it is on at the last take; on: the movers
+ * on the road at the last take.
  */
-export type RoadUse = { paths: (Uint16Array | undefined)[]; cum: Map<Uint16Array, Float32Array>; pick: Int8Array; since: Int32Array }
+export type RoadUse = {
+  paths: (Uint16Array | undefined)[]; cum: Map<Uint16Array, Float32Array>
+  pick: Int8Array; since: Int32Array; free: Float32Array; path: Int32Array; at: Int32Array; on: number[]
+}
 
 /**
  * ends gives the road nodes of agent i's trip (leg 0 to work, 1 to its day-off place). The way home is the path from
@@ -49,7 +54,7 @@ export const roadUse = (w: World, routes: Routes, ends: (agent: number, leg: num
       ;[there, back].forEach((es, k) => { if (es) { add(es); paths[((2 * j + leg) * 2 + k) * VARIANTS + v] = es } })
     }
   }))
-  return { paths, cum, pick: new Int8Array(n), since: new Int32Array(n).fill(-(2 ** 31)) }
+  return { paths, cum, pick: new Int8Array(n), since: new Int32Array(n).fill(-(2 ** 31)), free: new Float32Array(n), path: new Int32Array(n), at: new Int32Array(n), on: [] }
 }
 
 /** What a driver who follows the live traffic weighs a path by: the free time of each edge, and the slowness of its bucket. */
@@ -74,20 +79,20 @@ const choose = (w: World, use: RoadUse, i: number, base: number, mode: number, l
   return best
 }
 
-/** The travel time of a path over its free time, by the slowness of `live`. */
-const slowerOn = (es: Uint16Array, live: Live) => {
+/** The travel time of a path from its edge `from` to its end over its free time, by the slowness of `live`. */
+const slowerOn = (es: Uint16Array, from: number, live: Live) => {
   let free = 0, jam = 0
-  for (let k = 0; k < es.length; k++) { const f = live.time[es[k]]; free += f; jam += f * live.slower[live.grid.cellOf[es[k]]] }
+  for (let k = from; k < es.length; k++) { const f = live.time[es[k]]; free += f; jam += f * live.slower[live.grid.cellOf[es[k]]] }
   return free ? jam / free : 1
 }
 
 /**
- * The road load on each edge now, in PCU: each road traveller is on the edge at its share of the trip. When a trip is first seen
- * on the road, it takes its variant by the slowness of `live` then, and its leg takes that much longer (core.ts
- * slowDown), so a jam keeps more people on the road. onRoad gets each traveller and its edge.
+ * The road load on each edge now, in PCU: each road traveller is on the edge at its share of the trip. When a trip is
+ * first seen on the road, it takes its variant by the slowness of `live` then (what a driver knows when it leaves).
+ * onRoad gets each traveller and its edge.
  */
 export const loadNow = (w: World, use: RoadUse, out: Float32Array, onRoad?: (agent: number, edge: number) => void, live?: Live) => {
-  out.fill(0)
+  out.fill(0); use.on.length = 0
   const t = now(w)
   for (let j = 0; j < w.movers.length; j++) {
     const i = w.movers[j]
@@ -97,15 +102,16 @@ export const loadNow = (w: World, use: RoadUse, out: Float32Array, onRoad?: (age
     const base = ((2 * j + leg) * 2 + (out1 ? 0 : 1)) * VARIANTS
     if (use.since[j] !== start) {
       use.pick[j] = choose(w, use, i, base, leg ? w.playMode[i] : w.mode[i], live); use.since[j] = start
-      const chosen = use.paths[base + use.pick[j]]
-      if (chosen && live) slowDown(w, i, slowerOn(chosen, live))
+      use.free[j] = out1 ? w.dur1[i] : w.dur2[i]
     }
     const es = use.paths[base + use.pick[j]]
     if (!es) continue
+    use.path[j] = base + use.pick[j]; use.on.push(j)
     const p = out1 ? (t - w.dep[i]) / w.dur1[i] : (t - w.ret[i]) / w.dur2[i]
     const c = use.cum.get(es)!, d = p * c[c.length - 1]
     let lo = 0, hi = c.length - 1
     while (lo < hi) { const m = (lo + hi) >> 1; if (c[m] < d) lo = m + 1; else hi = m }
+    use.at[j] = lo
     out[es[lo]] += w.city.perAgent * PCU[leg ? w.playMode[i] : w.mode[i]]
     onRoad?.(i, es[lo])
   }
@@ -199,10 +205,25 @@ export const stepper = (period: number, onEdge: (w: World) => void) => {
   }
 }
 
-/** One take of the traffic: the load now, with the routes chosen by the last take, then the slowness for the next. */
+/**
+ * Each traveller on the road at the last take drives the rest of its path at the slowness of `live`: its leg ends at
+ * now + the free time left x the slowness of the edges left (core.ts stretch), so a jam keeps more people on the road,
+ * and a trip that drives into a jam, or out of one, changes as it goes.
+ */
+const retime = (w: World, use: RoadUse, live: Live) => {
+  const t = now(w)
+  for (const j of use.on) {
+    const i = w.movers[j], out1 = t < w.dep[i] + w.dur1[i], start = out1 ? w.dep[i] : w.ret[i], dur = out1 ? w.dur1[i] : w.dur2[i]
+    stretch(w, i, t + (1 - (t - start) / dur) * use.free[j] * slowerOn(use.paths[use.path[j]]!, use.at[j], live))
+    use.since[j] = out1 ? w.dep[i] : w.ret[i]
+  }
+}
+
+/** One take of the traffic: the load now, with the routes chosen when each trip was first seen, then the slowness, by which each trip drives on. */
 export const take = (w: World, use: RoadUse, load: Float32Array, live: Live, onRoad?: (agent: number, edge: number) => void, capacity = CAPACITY) => {
   loadNow(w, use, load, onRoad, live)
   live.slower = slowness(load, live.grid, capacity)
+  retime(w, use, live)
   return cellLevels(load, live.grid, capacity)
 }
 

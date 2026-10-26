@@ -251,17 +251,21 @@ export const advance = (w: World, minutes: number) => {
 }
 
 /**
- * A jam: the leg that agent i is on now takes `factor` times as long, at most MAX_LEG. A longer way to work can make the
- * agent leave work later (never before it arrives). The agent moves to the bucket of its new minute home, so it stays in
- * exactly one bucket. An agent that is not on the road does not change.
+ * A jam: the leg that agent i is on now ends at minute `arrive` instead (at least the next minute, at most MAX_LEG from
+ * now), and the agent is where it is now. The leg is drawn again through the share of it that the agent has done, so its
+ * start moves too, into the past. A later arrival at work can make the agent leave work later (never before it
+ * arrives). The agent moves to the bucket of its new minute home, so it stays in exactly one bucket. An agent that is not
+ * on the road does not change.
  */
-export const slowDown = (w: World, i: number, factor: number) => {
-  const t = now(w), end = w.ret[i] + w.dur2[i]
-  if (t >= w.dep[i] && t < w.dep[i] + w.dur1[i]) {
-    w.dur1[i] = leg(w.dur1[i] * factor)
-    w.ret[i] = Math.max(w.ret[i], w.dep[i] + w.dur1[i])
-  } else if (t >= w.ret[i] && t < end) w.dur2[i] = leg(w.dur2[i] * factor)
-  else return
+export const stretch = (w: World, i: number, arrive: number) => {
+  const t = now(w), end = w.ret[i] + w.dur2[i], out = t >= w.dep[i] && t < w.dep[i] + w.dur1[i]
+  if (!out && !(t >= w.ret[i] && t < end)) return
+  const start = out ? w.dep[i] : w.ret[i], dur = out ? w.dur1[i] : w.dur2[i], p = (t - start) / dur
+  const to = Math.min(Math.floor(t) + MAX_LEG, Math.max(Math.floor(t) + 1, Math.round(arrive)))
+  if (to === start + dur) return
+  // At least to - t, so the new start is not after now.
+  const d = Math.min(MAX_LEG, Math.ceil((to - t) / (1 - p))), s = to - d
+  if (out) { w.dep[i] = s; w.dur1[i] = d; w.ret[i] = Math.max(w.ret[i], to) } else { w.ret[i] = s; w.dur2[i] = d }
   const next = w.ret[i] + w.dur2[i]
   if (next === end) return
   const old = w.due[end % RING]
