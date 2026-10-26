@@ -16,6 +16,9 @@ export const CAPACITY = 15.7
 // travel time up to 25 times the free time; a cell spreads it over the roads nearby. Use flows per hour on each edge
 // when trips get more than one path and edges get capacities of their own.
 const CELL = 0.005, ACROSS = 0.55
+// ponytail: the least km that a bucket counts. A road that crosses only a corner of a cell gives a bucket of a few tens
+// of metres, which one car agent (about 7 PCU) jammed. A guess; the length of one edge of a block, about.
+const SHORTEST = 0.1
 // ponytail: the travel time over free time at which the colour of a road is at its end (dark red); chosen by eye.
 const SLOWEST = 1 / 0.3
 // ponytail: the share of drivers who follow the live traffic (a map app) when they leave; the others take their usual,
@@ -162,6 +165,7 @@ export const gridOf = (road: GraphJson, name: ArrayLike<number> = []): Grid => {
   // ponytail: a named road counts at most the width of a cell (ACROSS km). Its edges in one cell can add up to much more,
   // from the shapes of many bus routes and from small roads near it that took its name (瑞光路: 7.9 km in one cell).
   if (name.length) ids.forEach((b, id) => { if (!/:-1(:[+-])?$/.test(id)) km[b] = Math.min(km[b], ACROSS) })
+  km.forEach((k, b) => (km[b] = Math.max(k, SHORTEST)))
   return { cellOf, km, lanes: Float64Array.from(lanes), keys: Int32Array.from(cells.keys()), cellIn: Int32Array.from(cellIn) }
 }
 
