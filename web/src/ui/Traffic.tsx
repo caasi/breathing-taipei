@@ -10,6 +10,9 @@ export const STOPS: [number, number[], number][] = [
 ]
 // ponytail: one width for every road, in CSS pixels, as the network is drawn once per view; chosen by eye.
 const WIDTH_PX = 0.6
+// ponytail: the glow of slow roads, chosen by eye: it starts at slowness GLOW_FROM, spreads over GLOW_LEVELS halvings
+// of the screen size (each level doubles its reach), and is added at GLOW_GAIN.
+const GLOW_FROM = 0.15, GLOW_LEVELS = 5, GLOW_GAIN = 1.4
 // Edge levels sit in a texture of this width, as one row of 29,404 texels is wider than many GPUs allow.
 const ROW = 1024
 const vec = (xs: number[]) => `vec${xs.length}(${xs.map(v => v.toFixed(3)).join(', ')})`
@@ -51,20 +54,47 @@ void main() {
 }`
 const SHOW_VS = `#version 300 es
 void main() { gl_Position = vec4(gl_VertexID == 1 ? 3.0 : -1.0, gl_VertexID == 2 ? 3.0 : -1.0, 0, 1); }`
+// The canvas holds premultiplied colour, so the glow can add light on top of the map under it.
+// With glow, it writes only the slow roads, at 1 / scale of the screen, for the bloom below.
 const SHOW_FS = `#version 300 es
 precision highp float;
-uniform sampler2D cover, edges, before, after; uniform float k; out vec4 o;
+uniform sampler2D cover, edges, before, after; uniform float k; uniform bool glow; uniform int scale; out vec4 o;
 ${RAMP}
 void main() {
-  ivec2 p = ivec2(gl_FragCoord.xy);
+  ivec2 p = ivec2(gl_FragCoord.xy) * scale;
   vec2 e = texelFetch(edges, p, 0).rg * 255.0;
   int id = int(e.r + 0.5) + 256 * int(e.g + 0.5) - 1;
   if (id < 0) discard;
   ivec2 at = ivec2(id % ${ROW}, id / ${ROW});
   // The slowness moves from the one before the last update to the last one, as the cell fills do.
-  vec4 c = ramp(mix(texelFetch(before, at, 0).r, texelFetch(after, at, 0).r, k));
-  o = vec4(c.rgb, c.a * min(1.0, texelFetch(cover, p, 0).r));
+  float t = mix(texelFetch(before, at, 0).r, texelFetch(after, at, 0).r, k), cover = min(1.0, texelFetch(cover, p, 0).r);
+  vec4 c = ramp(t);
+  float a = glow ? cover * smoothstep(${GLOW_FROM.toFixed(2)}, 1.0, t) : c.a * cover;
+  o = vec4(c.rgb * a, a);
 }`
+// Dual filtering (Kawase blur on a chain of half sizes; Marius Bjørge, ARM, SIGGRAPH 2015): each level down takes 5
+// bilinear taps, each level up 8, so a wide glow costs a few small passes. The up pass adds onto the level it writes.
+const DOWN_FS = `#version 300 es
+precision highp float;
+uniform sampler2D src; uniform vec2 texel; out vec4 o;
+void main() {
+  vec2 uv = gl_FragCoord.xy * 2.0 * texel;
+  o = (texture(src, uv) * 4.0 + texture(src, uv - texel) + texture(src, uv + texel)
+    + texture(src, uv + vec2(texel.x, -texel.y)) + texture(src, uv - vec2(texel.x, -texel.y))) / 8.0;
+}`
+const UP_FS = `#version 300 es
+precision highp float;
+uniform sampler2D src; uniform vec2 texel; out vec4 o;
+void main() {
+  vec2 uv = gl_FragCoord.xy * 0.5 * texel, h = texel * 0.5;
+  o = (texture(src, uv + vec2(-h.x * 2.0, 0)) + texture(src, uv + vec2(0, h.y * 2.0))
+    + texture(src, uv + vec2(h.x * 2.0, 0)) + texture(src, uv + vec2(0, -h.y * 2.0))
+    + 2.0 * (texture(src, uv + vec2(-h.x, h.y)) + texture(src, uv + h) + texture(src, uv + vec2(h.x, -h.y)) + texture(src, uv - h))) / 12.0;
+}`
+const GLOW_FS = `#version 300 es
+precision highp float;
+uniform sampler2D src; uniform vec2 screen; out vec4 o;
+void main() { o = min(vec4(1), texture(src, gl_FragCoord.xy / screen) * ${GLOW_GAIN.toFixed(2)}); }`
 
 /** The real shape of each road edge (lon, lat, ...), in the order of road-graph.json (scripts/graphs.py). */
 export type RoadLines = number[][]
@@ -99,8 +129,9 @@ export function Traffic({ lines, proj, levels, fadeSeconds, view }: Props) {
   const target = useRef(levels), view$ = useRef(view), fade = useRef(fadeSeconds)
   target.current = levels; view$.current = view; fade.current = fadeSeconds
   const geometry = useMemo(() => quads(lines, proj), [lines, proj])
-  useWebGL2(ref, { antialias: false, premultipliedAlpha: false }, (gl, canvas) => {
+  useWebGL2(ref, { antialias: false }, (gl, canvas) => {
     const bake = program(gl, BAKE_VS, BAKE_FS), show = program(gl, SHOW_VS, SHOW_FS)
+    const down = program(gl, SHOW_VS, DOWN_FS), up = program(gl, SHOW_VS, UP_FS), glow = program(gl, SHOW_VS, GLOW_FS)
     const bakeAt = (name: string) => gl.getUniformLocation(bake, name), showAt = (name: string) => gl.getUniformLocation(show, name)
     const vao = gl.createVertexArray(); gl.bindVertexArray(vao)
     const buffers = (['xy', 'normal', 'across', 'edge'] as const).map(name => {
@@ -120,6 +151,15 @@ export function Traffic({ lines, proj, levels, fadeSeconds, view }: Props) {
     gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1)
     const slowness = [0, 1].map(unit => { const t = texture(unit); gl.texStorage2D(gl.TEXTURE_2D, 1, gl.R8, ROW, rows); return t })
     const baked = [2, 3].map(texture), frame = gl.createFramebuffer()
+    // Unit 4: the glow levels, from 1/2 of the screen down; bilinear, as the blur reads between texels.
+    const bloom = Array.from({ length: GLOW_LEVELS }, () => {
+      const t = texture(4)
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR)
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE)
+      return t
+    })
+    let sizes: [number, number][] = []
+    for (const p of [down, up, glow]) { gl.useProgram(p); gl.uniform1i(gl.getUniformLocation(p, 'src'), 4) }
     gl.useProgram(show)
     ;['before', 'after', 'cover', 'edges'].forEach((name, unit) => gl.uniform1i(showAt(name), unit))
     const upload = (unit: number, data: Uint8Array) => {
@@ -136,7 +176,8 @@ export function Traffic({ lines, proj, levels, fadeSeconds, view }: Props) {
       gl.uniform4fv(bakeAt('view'), clip(v, canvas.clientWidth, canvas.clientHeight))
       gl.uniform2f(bakeAt('devicePx'), 2 / canvas.width, 2 / canvas.height)
       gl.uniform1f(bakeAt('w'), WIDTH_PX * canvas.width / canvas.clientWidth)
-      gl.bindFramebuffer(gl.FRAMEBUFFER, frame)
+      // The glow passes leave a smaller viewport behind; fit() sets it only when the canvas size changes.
+      gl.bindFramebuffer(gl.FRAMEBUFFER, frame); gl.viewport(0, 0, canvas.width, canvas.height)
       for (const [pass, t] of [[0, cover], [1, edges]] as const) {
         gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, t, 0)
         gl.clearColor(0, 0, 0, 0); gl.clear(gl.COLOR_BUFFER_BIT)
@@ -145,6 +186,23 @@ export function Traffic({ lines, proj, levels, fadeSeconds, view }: Props) {
         gl.drawArrays(gl.TRIANGLES, 0, geometry.xy.length / 2)
       }
       gl.bindFramebuffer(gl.FRAMEBUFFER, null)
+      sizes = []
+      for (let i = 0, w = canvas.width, h = canvas.height; i < GLOW_LEVELS; i++) {
+        w = Math.max(1, Math.ceil(w / 2)); h = Math.max(1, Math.ceil(h / 2)); sizes.push([w, h])
+        gl.activeTexture(gl.TEXTURE4); gl.bindTexture(gl.TEXTURE_2D, bloom[i])
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, w, h, 0, gl.RGBA, gl.UNSIGNED_BYTE, null)
+      }
+    }
+    /** Draws one pass over the screen into glow level i (or the canvas when i is -1), reading level `from`. */
+    const pass = (p: WebGLProgram, i: number, from?: number) => {
+      gl.useProgram(p)
+      if (i < 0) { gl.bindFramebuffer(gl.FRAMEBUFFER, null); gl.viewport(0, 0, canvas.width, canvas.height) }
+      else { gl.bindFramebuffer(gl.FRAMEBUFFER, frame); gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, bloom[i], 0); gl.viewport(0, 0, ...sizes[i]) }
+      if (from !== undefined) {
+        gl.activeTexture(gl.TEXTURE4); gl.bindTexture(gl.TEXTURE_2D, bloom[from])
+        gl.uniform2f(gl.getUniformLocation(p, 'texel'), 1 / sizes[from][0], 1 / sizes[from][1])
+      }
+      gl.drawArrays(gl.TRIANGLES, 0, 3)
     }
     let raf = 0, network = '', drawn = '', uploaded: Uint8Array | undefined, start = -Infinity, settled = false
     const draw = () => {
@@ -159,8 +217,21 @@ export function Traffic({ lines, proj, levels, fadeSeconds, view }: Props) {
       if (!settled || key !== drawn) {
         const k = Math.min(1, (now - start) / 1000 / Math.max(1e-3, fade.current))
         gl.useProgram(show); gl.uniform1f(showAt('k'), k); settled = k === 1
-        gl.enable(gl.BLEND); gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA)
-        gl.clearColor(0, 0, 0, 0); gl.clear(gl.COLOR_BUFFER_BIT)
+        gl.clearColor(0, 0, 0, 0)
+        // The slow roads at half size, then down the chain and back up, each level up added onto the one it writes.
+        gl.disable(gl.BLEND)
+        gl.uniform1i(showAt('glow'), 1); gl.uniform1i(showAt('scale'), 2)
+        gl.bindFramebuffer(gl.FRAMEBUFFER, frame); gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, bloom[0], 0)
+        gl.viewport(0, 0, ...sizes[0]); gl.clear(gl.COLOR_BUFFER_BIT); gl.drawArrays(gl.TRIANGLES, 0, 3)
+        for (let i = 1; i < GLOW_LEVELS; i++) pass(down, i, i - 1)
+        gl.enable(gl.BLEND); gl.blendFunc(gl.ONE, gl.ONE)
+        for (let i = GLOW_LEVELS - 2; i >= 0; i--) pass(up, i, i + 1)
+        // On the canvas: the glow added, then the lines over it (premultiplied colour).
+        gl.bindFramebuffer(gl.FRAMEBUFFER, null); gl.viewport(0, 0, canvas.width, canvas.height); gl.clear(gl.COLOR_BUFFER_BIT)
+        gl.useProgram(glow); gl.uniform2f(gl.getUniformLocation(glow, 'screen'), canvas.width, canvas.height)
+        pass(glow, -1, 0)
+        gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA)
+        gl.useProgram(show); gl.uniform1i(showAt('glow'), 0); gl.uniform1i(showAt('scale'), 1)
         gl.drawArrays(gl.TRIANGLES, 0, 3)
         drawn = key
       }
@@ -169,7 +240,8 @@ export function Traffic({ lines, proj, levels, fadeSeconds, view }: Props) {
     raf = requestAnimationFrame(draw)
     return () => {
       cancelAnimationFrame(raf); buffers.forEach(b => gl.deleteBuffer(b)); gl.deleteVertexArray(vao)
-      ;[...slowness, ...baked].forEach(t => gl.deleteTexture(t)); gl.deleteFramebuffer(frame); gl.deleteProgram(bake); gl.deleteProgram(show)
+      ;[...slowness, ...baked, ...bloom].forEach(t => gl.deleteTexture(t)); gl.deleteFramebuffer(frame)
+      ;[bake, show, down, up, glow].forEach(p => gl.deleteProgram(p))
     }
   }, [geometry])
   return <canvas ref={ref} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none' }} />
