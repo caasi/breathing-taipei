@@ -165,9 +165,9 @@ export function App() {
       if (fresh || m.cells) cellTraffic.current = m.cells && { index: cellIndex.current, level: m.cells }
       if (m.trips) { dotRuns.current.set(++lastDots.current, { trips: m.trips, tracks: { current: [] }, run: shown.current }); setTripsId(lastDots.current); unplaced.current = [] }
       if (fresh || events?.length) setPersonal(p => {
-        // A way home sent again (a jam made it late) replaces the one with its id.
-        const again = new Set(events?.map(e => e.id))
-        return [...(fresh ? [] : p.filter(e => !again.has(e.id))), ...(events ?? [])].slice(-KEEP_EVENTS)
+        // A way home sent again (a jam made it late) replaces the one with its id; one message can carry it more than once.
+        const latest = [...new Map((events ?? []).map(e => [e.id, e] as const)).values()], again = new Set(latest.map(e => e.id))
+        return [...(fresh ? [] : p.filter(e => !again.has(e.id))), ...latest].slice(-KEEP_EVENTS)
       })
       setHistory(h => record(fresh ? [] : h, entry, KEEP))
       // The dots read the arrays every frame, so new plans are written into them in place.
