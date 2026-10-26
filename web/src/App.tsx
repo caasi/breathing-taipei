@@ -122,6 +122,9 @@ export function App() {
   const [show, setShow] = useStored('layers', new Set(LAYERS.map(l => l[0])),
     setOf(LAYERS.map(l => l[0])), v => [...v].join(','))
   const [trafficOn, setTrafficOn] = useStored('traffic', true, bool, fromBool)
+  // The worker can post a frame with levels after the layer is turned off; the handler of its messages reads this.
+  const trafficOnRef = useRef(trafficOn)
+  trafficOnRef.current = trafficOn
   const layers = useMemo(() => (trafficOn ? new Set([...show, 'traffic']) : show), [show, trafficOn])
   const worker = useRef<Worker>()
   const started = useRef(0), shown = useRef(0) // the latest start posted, and the start of the frames on the page
@@ -162,7 +165,7 @@ export function App() {
       if (m.homes) setHomes(m.homes)
       if (fresh || m.traffic) setTraffic(m.traffic)
       if (m.cellKeys) cellIndex.current = new Map(Array.from(m.cellKeys, (key, c) => [key, c] as const))
-      if (fresh || m.cells) cellTraffic.current = m.cells && { index: cellIndex.current, level: m.cells }
+      if (fresh || m.cells) cellTraffic.current = m.cells && trafficOnRef.current ? { index: cellIndex.current, level: m.cells } : undefined
       if (m.trips) { dotRuns.current.set(++lastDots.current, { trips: m.trips, tracks: { current: [] }, run: shown.current }); setTripsId(lastDots.current); unplaced.current = [] }
       if (fresh || events?.length) setPersonal(p => {
         // A way home sent again (a jam made it late) replaces the one with its id; one message can carry it more than once.
