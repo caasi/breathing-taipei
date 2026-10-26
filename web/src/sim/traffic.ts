@@ -1,5 +1,6 @@
 import { where, now, slowDown, ROAD, PLAY, GONE, type World } from './core.ts'
 import { ROAD_MODES, VARIANTS } from './paths.ts'
+import { BUS, SCOOTER } from './city.ts'
 import { freeTime, type GraphJson } from './route.ts'
 
 // BPR (Bureau of Public Roads, 1964): time on a road = free time x (1 + ALPHA (volume / capacity)^BETA).
@@ -17,7 +18,7 @@ const SLOWEST = 1 / 0.3
 // ponytail: the share of drivers who follow the live traffic (a map app) when they leave; the others take their usual,
 // fastest route. A guess. A scooter always takes the streets-only variant. A bus keeps its fixed route (the fastest
 // variant stands in for it), and a jam still slows it.
-const NAV = 0.6, BUS = 1, SCOOTER = 2
+const NAV = 0.6
 
 /**
  * The road paths of each mover j (its index in w.movers), with their cumulative free time (route.ts freeTime, which

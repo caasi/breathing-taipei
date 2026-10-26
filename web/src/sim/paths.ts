@@ -1,5 +1,5 @@
 import { graphFrom, graphHash, nearest, tree, pathTo, pathAlong, type GraphJson, type Graph } from './route.ts'
-import { MRT } from './city.ts'
+import { MRT, SCOOTER } from './city.ts'
 
 /** Paths for trips ks: trip ks[i]'s points (lon, lat, ...) are pts[off[i] .. off[i + 1]), from home to work. */
 export type Batch = { ks: Uint32Array; pts: Float32Array; off: Uint32Array }
@@ -91,7 +91,8 @@ export function* tripPaths(legs: Leg, coords: [number, number][], net: ReturnTyp
     const into = (map: Map<number, number[]>, a: number) => (map.get(a) ?? map.set(a, []).get(a)!).push(k)
     if (m === MRT && station(h) !== station(w)) into(mrtFrom, station(h))
     else if (ROAD_MODES.has(m) && road(h) !== road(w)) {
-      const a = road(h), edges = routes?.get(routeKey(a, road(w)))
+      // A scooter dot takes the streets-only variant, as its road load does (traffic.ts); the others the fastest one.
+      const a = road(h), edges = (m === SCOOTER ? routes?.get(routeKey(a, road(w), 1)) : undefined) ?? routes?.get(routeKey(a, road(w)))
       if (edges) { known.push(k); knownFrom.push(a); knownEdges.push(edges) }
       else into(roadFrom, a)
     }

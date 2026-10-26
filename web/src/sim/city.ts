@@ -10,7 +10,7 @@ export type Data = { od: number[][][]; saturday?: number[][][]; holiday?: number
 
 export const MODES = ['捷運', '公車', '機車', '汽車', '步行', '自行車'] as const
 export const MRT = 0
-export const WALK = 4, BIKE = 5
+export const BUS = 1, SCOOTER = 2, WALK = 4, BIKE = 5
 // Mode share of Taipei residents, 2024 (DATA.md, "Figures in the code"). New Taipei uses the same split until its own figures are found.
 const OTHER = [0, 13.7, 16.3, 20.1, 20.8, 3.8], MRT_SHARE = 16.0
 // ponytail: assumed door-to-door speeds (km/h) and access minutes; calibrate with TDX travel times later.
