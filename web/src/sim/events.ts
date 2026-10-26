@@ -7,8 +7,9 @@ import { isoAt, kindAt, type Calendar } from './calendar.ts'
  * the key of a list row.
  */
 export type SimEvent =
-  // back: the way home of the same plan, at the minute the character leaves work or the day-off place.
-  | { id: string; t: number; kind: 'personal'; name: string; home: number; to: number; dest: number; mode: number; group: string; back?: boolean }
+  // back: the way home of the same plan, at the minute the character leaves work or the day-off place. late: the
+  // minutes that a jam on the way there moved it, with how the character takes it (angry or blank).
+  | { id: string; t: number; kind: 'personal'; name: string; home: number; to: number; dest: number; mode: number; group: string; back?: boolean; late?: number; mood?: Mood }
   | { id: string; t: number; kind: 'public'; text: string }
   // A character stuck on a slow road: the road by name, or else the node nearest to it; how it takes the jam.
   | { id: string; t: number; kind: 'jam'; name: string; home: number; mode: number; road?: string; near: number; mood: Mood }
@@ -31,6 +32,10 @@ const PURPOSE: Record<string, string> = {
 export const actionOf = (e: Extract<SimEvent, { kind: 'personal' }>, placeOf: PlaceOf) => {
   const by = BY[e.mode], there = placeOf(e.to), here = placeOf(e.home)
   const place = there.town === here.town ? (there.village || there.town) : there.town
+  if (e.back && e.late) {
+    const home = e.dest === PLAY ? `從${place}回家` : e.group ? '回家' : '下班回家'
+    return e.mood === 'angry' ? `路上塞車晚到，晚了${e.late}分鐘才${by}${home}，一肚子火` : `路上塞車晚到，晚了${e.late}分鐘才${by}${home}，算了，明天早點出門`
+  }
   if (e.back) return e.dest === PLAY ? `${by}從${place}回家` : e.group ? `${by}回家` : `${by}下班回家`
   if (e.dest === STAY) return '今天在家休息'
   if (e.dest === GONE) return '今天出遠門，離開雙北'

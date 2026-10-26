@@ -33,6 +33,8 @@ test('a personal event says where the character goes and how', () => {
   expect(actionOf({ ...e(WORK, 2, 0), back: true }, at)).toBe('搭捷運下班回家')
   expect(actionOf({ ...e(PLAY, 2, 3), back: true }, at)).toBe('開車從中山區回家')
   expect(actionOf({ ...e(WORK, 1, 2, 'early'), back: true }, at)).toBe('騎機車回家')
+  expect(actionOf({ ...e(WORK, 2, 3), back: true, late: 25, mood: 'angry' }, at)).toBe('路上塞車晚到，晚了25分鐘才開車下班回家，一肚子火')
+  expect(actionOf({ ...e(PLAY, 2, 3), back: true, late: 5, mood: 'blank' }, at)).toBe('路上塞車晚到，晚了5分鐘才開車從中山區回家，算了，明天早點出門')
 })
 
 test('greetings follow the kind of day', () => {

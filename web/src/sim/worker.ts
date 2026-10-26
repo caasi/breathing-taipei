@@ -65,8 +65,12 @@ let trafficOn = false, lastCells = new Uint8Array(0), jamRng = mulberry32(0)
 const JAM_MINUTES = 15
 // A jam event comes from a road traveller on an edge at least this slow (traffic.ts levels: 1 + 254 x slowness; red
 // from slowness 0.43). ponytail: at most one jam event a take, and one a day for each character; by eye.
+// The temper of a character, 0 to 1, fixed by its index.
+const temperOf = (i: number) => Math.imul(i + 1, 2654435761) / 2 ** 32 + 0.5
 const JAM_FROM = 1 + Math.round(0.43 * 254), ANGRY_FROM = 1 + Math.round(0.75 * 254)
 let onJam: ((agent: number, edge: number, level: number) => void) | undefined
+// After each take: moves the shown way home of a character that a jam made late to work.
+let onLate: (() => void) | undefined
 const data = Promise.all(['od2.json', 'villages2.json', 'signal.json', 'road-graph.json', 'mrt-graph.json', 'night.json', 'calendar.json', 'people.json', 'road-names.json'].map(getJson))
 /** The name of each road edge, from scripts/names.py: edge[e] indexes names, or is -1. */
 type RoadNames = { names: string[]; edge: number[] }
@@ -135,6 +139,7 @@ const takeTrafficNow = (world: World) => {
   if (trafficOn && changed) { extra.traffic = next; extra.cells = cells }
   const stuck: number[] = []
   for (let k = 0; k < onRoad.length; k += 2) if (next[onRoad[k + 1]] >= JAM_FROM) stuck.push(k)
+  onLate?.()
   if (stuck.length && onJam) { const k = stuck[Math.floor(jamRng() * stuck.length)]; onJam(onRoad[k], onRoad[k + 1], next[onRoad[k + 1]]) }
 }
 
@@ -217,7 +222,7 @@ onmessage = async (e: MessageEvent<ToWorker>) => {
   // The async handler would otherwise reject without a message, and onerror does not see a rejection.
   try {
     const [[od2, villages, signal, roadJson, , night, cal, people, roadNames], graphs] = await Promise.all([data, net])
-    onJam = undefined; jamRng = mulberry32(m.seed + 3)
+    onJam = undefined; onLate = undefined; jamRng = mulberry32(m.seed + 3)
     const c = cityFrom({ ...od2, villages, signal, night }, m.perAgent, m.level, day => kindAt(cal as Calendar, m.startDay + day))
     w = init(c.city, m.seed)
     const world = w, districtOf = Array.from(w.home, h => (m.level === 'village' ? villages[h].town : c.nodes[h]))
@@ -229,6 +234,7 @@ onmessage = async (e: MessageEvent<ToWorker>) => {
     eventId = 0
     const pick = evenPick(SHOWN.map(s => keep * s), pickRng)
     w.onPlan = i => {
+      backs.delete(i)
       const dest = world.dest[i]
       // A STAY on a workday is a commuter who works in its home node (at district level: its own district), not a day of rest.
       if (dest === STAY && kindAt(cal as Calendar, m.startDay + Math.floor(world.dep[i] / 1440) - 1) === WORKDAY) return
@@ -241,8 +247,16 @@ onmessage = async (e: MessageEvent<ToWorker>) => {
         dest, mode: play ? world.playMode[i] : world.mode[i], group }
       newEvents.push({ ...e, id: `a${++eventId}` })
       // A shown trip also shows its way home, so the stream follows one character through the day.
-      if (dest === WORK || play) newEvents.push({ ...e, id: `a${++eventId}`, t: world.ret[i], back: true })
+      if (dest === WORK || play) { const b = { ...e, id: `a${++eventId}`, t: world.ret[i], back: true }; newEvents.push(b); backs.set(i, b) }
     }
+    // A jam on the way can make a character reach work after its usual leaving time, so it leaves later (core.ts
+    // slowDown). The way home is sent again with the same id, the new time, how late, and the temper of the character.
+    const backs = new Map<number, Extract<SimEvent, { kind: 'personal' }>>()
+    onLate = () => backs.forEach((b, i) => {
+      if (world.ret[i] === b.t) return
+      const late = { ...b, t: world.ret[i], late: (b.late ?? 0) + world.ret[i] - b.t, mood: temperOf(i) < 0.55 ? 'angry' as const : 'blank' as const }
+      newEvents.push(late); backs.set(i, late)
+    })
     // ponytail: a character's temper is fixed by its index; about 55% take a jam by how slow it is (angry on the slowest
     // roads, else stuck), the rest go blank, work by phone or take leave (only on the way to work; leave only before
     // noon). The shares are by eye. Taking leave does not change the plan yet (#2).
@@ -251,7 +265,7 @@ onmessage = async (e: MessageEvent<ToWorker>) => {
       const t = world.day * 1440 + Math.floor(world.minute), today = Math.floor(t / 1440)
       if (jammed.get(i) === today) return
       jammed.set(i, today)
-      const temper = Math.imul(i + 1, 2654435761) / 2 ** 32 + 0.5, toWork = world.dest[i] === WORK && t < world.dep[i] + world.dur1[i]
+      const temper = temperOf(i), toWork = world.dest[i] === WORK && t < world.dep[i] + world.dur1[i]
       const mood: Mood = temper < 0.55 ? (level >= ANGRY_FROM ? 'angry' : 'stuck') : temper < 0.75 || !toWork ? 'blank'
         : temper < 0.92 || t % 1440 >= 12 * 60 ? 'work' : 'leave'
       const a = roadJson.edges[e][0], road = edgeName[e] >= 0 ? names[edgeName[e]] : undefined

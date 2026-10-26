@@ -164,7 +164,11 @@ export function App() {
       if (m.cellKeys) cellIndex.current = new Map(Array.from(m.cellKeys, (key, c) => [key, c] as const).filter(([key]) => key >= 0))
       if (fresh || m.cells) cellTraffic.current = m.cells && { index: cellIndex.current, level: m.cells }
       if (m.trips) { dotRuns.current.set(++lastDots.current, { trips: m.trips, tracks: { current: [] }, run: shown.current }); setTripsId(lastDots.current); unplaced.current = [] }
-      if (fresh || events?.length) setPersonal(p => [...(fresh ? [] : p), ...(events ?? [])].slice(-KEEP_EVENTS))
+      if (fresh || events?.length) setPersonal(p => {
+        // A way home sent again (a jam made it late) replaces the one with its id.
+        const again = new Set(events?.map(e => e.id))
+        return [...(fresh ? [] : p.filter(e => !again.has(e.id))), ...(events ?? [])].slice(-KEEP_EVENTS)
+      })
       setHistory(h => record(fresh ? [] : h, entry, KEEP))
       // The dots read the arrays every frame, so new plans are written into them in place.
       // New plans and routes are for the newest trips, also before a render shows them.
