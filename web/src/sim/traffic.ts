@@ -1,13 +1,13 @@
 import { advance, where, now, stretch, ROAD, PLAY, GONE, type World } from './core.ts'
 import { pathIn, ROAD_MODES, routeKey, VARIANTS, type Routes } from './paths.ts'
-import { BUS, SCOOTER } from './city.ts'
+import { ACCESS, BUS, SCOOTER } from './city.ts'
 import { freeTime, type GraphJson } from './route.ts'
 
 // BPR (Bureau of Public Roads, 1964): time on a road = free time x (1 + ALPHA (volume / capacity)^BETA).
 const ALPHA = 0.15, BETA = 4
 // ponytail: one capacity for every cell, in passenger car units (PCU) per km of road, fitted so that the morning peak of 台北市 has the
 // TomTom congestion level (scripts/traffic.ts, DATA.md "Figures in the code"). Real roads differ in lanes.
-export const CAPACITY = 101
+export const CAPACITY = 99
 // ponytail: the road load is taken over cells of CELL degrees (about 500 m) and the PCU per km of road in a cell stand
 // in for the flow of BPR. Every trip takes one shortest path, so per edge only a few edges carried any load, with a
 // travel time up to 25 times the free time; a cell spreads it over the roads nearby. Use flows per hour on each edge
@@ -219,14 +219,17 @@ export const stepper = (period: number, onEdge: (w: World) => void) => {
 
 /**
  * Each traveller on the road at the last take drives the rest of its path at the slowness of `live`: its leg ends at
- * now + the free time left x the slowness of the edges left (core.ts stretch), so a jam keeps more people on the road,
- * and a trip that drives into a jam, or out of one, changes as it goes.
+ * now + the free time left, with its driving share x the slowness of the edges left (core.ts stretch), so a jam keeps
+ * more people on the road, and a trip that drives into a jam, or out of one, changes as it goes. The minutes off the
+ * road (city.ts ACCESS: walking, waiting, parking) keep their length, spread over the leg like the rest of it.
  */
 const retime = (w: World, use: RoadUse, live: Live) => {
   const t = now(w)
   for (const j of use.on) {
     const i = w.movers[j], out1 = t < w.dep[i] + w.dur1[i], start = out1 ? w.dep[i] : w.ret[i], dur = out1 ? w.dur1[i] : w.dur2[i]
-    stretch(w, i, t + (1 - (t - start) / dur) * use.free[j] * slowerOn(use.paths[use.path[j]]!, use.at[j], live, use.left[j]))
+    const free = use.free[j], off = Math.min(free, ACCESS[w.dest[i] === PLAY ? w.playMode[i] : w.mode[i]])
+    const slow = slowerOn(use.paths[use.path[j]]!, use.at[j], live, use.left[j])
+    stretch(w, i, t + (1 - (t - start) / dur) * (off + (free - off) * slow))
     use.since[j] = out1 ? w.dep[i] : w.ret[i]
   }
 }

@@ -6,7 +6,7 @@
  *
  * It runs the app's model (seed 42, 10 people per agent, village level) on the workday 2026-10-27 and takes the
  * traffic every 15 minutes, as the app does. The congestion level is that of TomTom: the extra travel time of the
- * trips over their time with no jam, summed over the trips (so a long trip weighs more, as TomTom counts per 10 km).
+ * trips over their time on the road with no jam (without the minutes off the road, city.ts ACCESS), summed over the trips (so a long trip weighs more, as TomTom counts per 10 km).
  * The trips are the road trips (bus, scooter, car) to work in 台北市 that leave home in the morning hours, and the
  * trips home from work in 台北市 that leave in the evening hours. The traffic changes the trips (traffic.ts take), so
  * the level is not a simple power of the capacity: the script bisects the capacity until the morning level is within
@@ -15,7 +15,7 @@
  */
 import { readFileSync } from 'node:fs'
 import { init, advance, now, WORK } from '../web/src/sim/core.ts'
-import { cityFrom } from '../web/src/sim/city.ts'
+import { ACCESS, cityFrom } from '../web/src/sim/city.ts'
 import { kindAt, indexOf, type Calendar } from '../web/src/sim/calendar.ts'
 import { networks, readRoutes, ROAD_MODES, roadNode } from '../web/src/sim/paths.ts'
 import { CAPACITY, gridOf, liveOf, roadUse, take } from '../web/src/sim/traffic.ts'
@@ -50,7 +50,8 @@ const run = (capacity: number) => {
   const peaks = [MORNING.hours, EVENING.hours]
   const done = (back: number, i: number, end: number) => {
     const seen = trips[back].get(i)
-    if (seen?.length === 2) { seen.push(end); sums[back][0] += end - seen[0] - seen[1]; sums[back][1] += seen[1] }
+    // TomTom counts the time on the road, so the minutes off the road (city.ts ACCESS) are not in the time with no jam.
+    if (seen?.length === 2) { seen.push(end); sums[back][0] += end - seen[0] - seen[1]; sums[back][1] += Math.max(1, seen[1] - ACCESS[w.mode[i]]) }
   }
   // An agent home again gets its next plan at once (core.ts advance), so the end of a trip home is seen here.
   w.onPlan = i => done(1, i, w.done)

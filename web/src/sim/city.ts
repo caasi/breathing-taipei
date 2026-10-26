@@ -15,7 +15,9 @@ export const BUS = 1, SCOOTER = 2, WALK = 4, BIKE = 5
 const OTHER = [0, 13.7, 16.3, 20.1, 20.8, 3.8], MRT_SHARE = 16.0
 // ponytail: assumed door-to-door speeds (km/h) and access minutes; calibrate with TDX travel times later.
 // The free speeds: the traffic model (traffic.ts) makes a road trip slower in a jam, so there is no peak speed here.
-const SPEED = [30, 14, 26, 22, 4.5, 12], ACCESS = [12, 12, 3, 6, 0, 2]
+const SPEED = [30, 14, 26, 22, 4.5, 12]
+// The minutes of a trip off the road: walking, waiting, parking; traffic.ts retime does not slow them.
+export const ACCESS = [12, 12, 3, 6, 0, 2]
 export const MAX_KM = [Infinity, Infinity, Infinity, Infinity, 2.5, 6] // walk and bike only within these distances
 // Short-trip rates from the mode share and the YouBike rentals (DATA.md, "Figures in the code"); one person rents
 // twice (there and back). New Taipei uses Taipei's rates until its own figures are found.
