@@ -9,7 +9,9 @@ Usage:
 
 road-names.json: {"names": [...], "edge": [...]}, where edge[e] is the index of the name of edge e of road-graph.json,
 or -1 when no named road of its class lies within MAX_M of the middle of the edge (a lane, or a road with no name).
-A street edge takes only a street name, so a viaduct over it does not name it; a 國道 edge takes only a 國道.
+A street edge takes only a street name, so a viaduct over it does not name it; a 國道 edge takes only a 國道. A
+快速道路 that is a bridge, a viaduct or a tunnel (or on a layer above 0) names only 快速道路 edges: a street under
+市民大道高架道路 or beside 象山隧道 is not that road. A river bridge of a street (華中橋) still names the street.
 """
 import json, math, sys, collections
 
@@ -20,7 +22,7 @@ MAX_M = 30
 # The OSM highway kinds that may name an edge of each class (scripts/graphs.py: 0 street, 1 國道, 2 快速道路, 3 ramp).
 KINDS = {
     0: {"trunk", "primary", "secondary", "tertiary", "primary_link", "secondary_link", "tertiary_link"},
-    1: {"motorway"}, 2: {"trunk"}, 3: {"motorway_link", "trunk_link", "motorway", "trunk"},
+    1: {"motorway"}, 2: {"trunk", "trunk-raised"}, 3: {"motorway_link", "trunk_link", "motorway", "trunk", "trunk-raised"},
 }
 CELL = 0.001  # degrees, about 100 m: wider than MAX_M, so the 3 x 3 cells around a point hold every candidate
 
@@ -57,11 +59,16 @@ def gap(p, a, b):
     return math.hypot(ax + t * dx, ay + t * dy)
 
 ways = [x for x in json.load(open(sys.argv[1]))["elements"] if x["type"] == "way" and "geometry" in x]
+
+def kind(t):
+    """The highway kind, with "trunk-raised" for a 快速道路 off the ground, which may not name a street edge."""
+    raised = t.get("bridge") or t.get("tunnel") or int(t.get("layer", "0").split(";")[0] or 0) > 0
+    return "trunk-raised" if t["highway"] == "trunk" and raised else t["highway"]
 grid = collections.defaultdict(list)  # cell -> (segment start, end, kind, label)
 for x in ways:
     pts = [(g["lon"], g["lat"]) for g in x["geometry"]]
     for a, b in zip(pts, pts[1:]):
-        seg = (a, b, x["tags"]["highway"], label(x["tags"]))
+        seg = (a, b, kind(x["tags"]), label(x["tags"]))
         for c in {(math.floor(p[0] / CELL), math.floor(p[1] / CELL)) for p in (a, b, ((a[0] + b[0]) / 2, (a[1] + b[1]) / 2))}:
             grid[c].append(seg)
 
