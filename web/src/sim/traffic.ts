@@ -198,8 +198,8 @@ export const cellMax = (grid: Grid, buckets: Uint8Array) => {
 }
 
 /** Per bucket, 0 (free) to 255 (SLOWEST or slower). */
-export const cellLevels = (load: ArrayLike<number>, grid: Grid, capacity = CAPACITY) =>
-  Uint8Array.from(slowness(load, grid, capacity), x => Math.round(255 * Math.min(1, (x - 1) / (SLOWEST - 1))))
+export const cellLevels = (load: ArrayLike<number>, grid: Grid, capacity = CAPACITY) => levelsOf(slowness(load, grid, capacity))
+const levelsOf = (slower: ArrayLike<number>) => Uint8Array.from(slower, x => Math.round(255 * Math.min(1, (x - 1) / (SLOWEST - 1))))
 
 /**
  * A step function that advances the model and calls onEdge at each boundary of `period` minutes that it reaches, once,
@@ -236,7 +236,7 @@ export const take = (w: World, use: RoadUse, load: Float32Array, live: Live, onR
   loadNow(w, use, load, onRoad, live)
   live.slower = slowness(load, live.grid, capacity)
   retime(w, use, live)
-  return cellLevels(load, live.grid, capacity)
+  return levelsOf(live.slower)
 }
 
 /**
