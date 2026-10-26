@@ -145,9 +145,10 @@ export const cityFrom = ({ od: mrt, saturday, holiday, districts, villages, sign
   villages.forEach((v, i) => { arrD[g[i]] += v.arrivals; jobsD[g[i]] += v.jobs ?? 0 })
   const workersD = districts.map((_, d) => sum(MORNING.map(h => sum(od[h].map(row => row[d])))))
   const known = jobsD.map((j, d) => (workersD[d] ? Math.min(1, j / workersD[d]) : 0))
+  const spread = villages.map((v, i) => 0.5 * (arrD[g[i]] ? v.arrivals / arrD[g[i]] : 0) + 0.5 * v.pop / popD[g[i]])
   const to = villages.map((v, i) => {
-    const d = g[i], rest = 0.5 * (arrD[d] ? v.arrivals / arrD[d] : 0) + 0.5 * v.pop / popD[d]
-    return known[d] * (jobsD[d] ? (v.jobs ?? 0) / jobsD[d] : 0) + (1 - known[d]) * rest
+    const d = g[i]
+    return known[d] * (jobsD[d] ? (v.jobs ?? 0) / jobsD[d] : 0) + (1 - known[d]) * spread[i]
   })
   const minutes = (a: number, b: number, mode: number, hour: number) =>
     ACCESS[mode] + 60 * 1.3 * km(coords[a], coords[b]) / (PEAK.has(hour) ? PEAK_SPEED : SPEED)[mode]
@@ -160,7 +161,7 @@ export const cityFrom = ({ od: mrt, saturday, holiday, districts, villages, sign
   const kinds = [...(local ? [local] : []), ...nightKinds]
   const off = kindOf && saturday && holiday ? daysOff(mrt, [saturday, holiday], od, kindOf) : undefined
   const city: City = village
-    ? { od, group: g, homes, to, perAgent, modeOf, minutes, kinds, off }
+    ? { od, group: g, homes, to, toPlay: spread, perAgent, modeOf, minutes, kinds, off }
     : { od, group: groupOf, homes, to: districts.map(() => 1), perAgent, modeOf, minutes, kinds, off }
   return { city, nodes: village ? villages.map(v => v.code) : districts, coords, target }
 }

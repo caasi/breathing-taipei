@@ -15,6 +15,7 @@ export type City = {
   group: ArrayLike<number> // node -> group
   homes: ArrayLike<number> // agents living in each node
   to: ArrayLike<number> // destination weight of each node within its group; all 0 means uniform
+  toPlay?: ArrayLike<number> // the same for the day-off place, without the known jobs (default: to)
   perAgent: number // real people per agent
   modeOf: (fromNode: number, toNode: number, r: number) => number
   kinds?: Kind[] // people who do not commute on the OD, tried in this order
@@ -157,7 +158,7 @@ export const init = (city: City, seed: number): World => {
   const groups = od[0].length
   const members: number[][] = Array.from({ length: groups }, () => [])
   for (let v = 0; v < group.length; v++) members[group[v]].push(v)
-  const weights = members.map(vs => vs.map(v => to[v]))
+  const weights = members.map(vs => vs.map(v => to[v])), playWeights = members.map(vs => vs.map(v => (city.toPlay ?? to)[v]))
   const morning = Array.from({ length: groups }, (_, a) =>
     Array.from({ length: groups }, (_, b) => MORNING.reduce((s, h) => s + od[h][a][b], 0)))
   const residents = new Array(groups).fill(0)
@@ -191,7 +192,7 @@ export const init = (city: City, seed: number): World => {
       w.mode[i] = city.modeOf(v, w.work[i], w.rng())
       if (playOf) {
         const pg = pick(playOf[g], w.rng())
-        w.play[i] = members[pg][pick(weights[pg], w.rng())]
+        w.play[i] = members[pg][pick(playWeights[pg], w.rng())]
         w.playMode[i] = city.modeOf(v, w.play[i], w.rng())
       }
     } else {
