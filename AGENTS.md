@@ -68,6 +68,29 @@ The large items are GitHub issues; each one links to its issue.
   - The info and gear icons open a panel. On a desktop it opens over the map. On a phone the icons sit on the map, and the panel opens below it or beside it. On a phone the events fill that area, and a third icon opens the policies.
   - Display settings are in local storage (`useStored`), and policy settings are in the query string (`useQuery`). `README.md` lists the keys.
 
+## Rendering references for the traffic layer
+
+Collected on 2026-10-26 by an agent search; the user asked to keep them for later. "Checked" means that an agent opened the primary page or source file. "Not checked" means that the facts come from a search snippet or a copy.
+
+Used already:
+
+- Dual filtering (a Kawase blur on a chain of half sizes) for the glow: Marius Bjørge (ARM), "Bandwidth-Efficient Rendering", SIGGRAPH 2015. Not checked: cited from memory.
+- Moving dashes for the flow: the Mapbox GL JS example "Add an ant path animation to a line" (https://docs.mapbox.com/mapbox-gl-js/example/animate-ant-path/), not checked. The dash speed per road is our addition.
+
+Not tried yet, in the order that the search ranked them:
+
+1. Accumulate the cover times the slowness in a float texture, then map it with a log or histogram-equalized scale, so that the dense centre does not saturate and the suburbs stay visible. Datashader 0.13 release, James A. Bednar, HoloViz, 2021-06-23 (https://blog.holoviz.org/posts/ds_release_0.13/), checked.
+2. Trails behind the dots. deck.gl TripsLayer (https://deck.gl/docs/api-reference/geo-layers/trips-layer): each vertex has a time, and the fragment shader fades the alpha by `1 - (currentTime - vTime) / trailLength`; checked in `modules/geo-layers/src/trips-layer/trips-layer.ts`. Or a feedback texture that keeps the last frame at 0.996: mapbox/webgl-wind (https://github.com/mapbox/webgl-wind), code checked.
+3. A soft glow from one draw, without a post pass: the `line-blur` ramp of Mapbox GL JS, `alpha = clamp(min(dist - (inner - blur2), outer - dist) / blur2, 0, 1)` in `src/shaders/line.fragment.glsl` (https://github.com/mapbox/mapbox-gl-js), checked. It can be cheaper than the glow chain on a phone.
+4. Show the slowness in two channels, width and colour, so that it does not depend on colour alone. City Roads, Andrei Kashcha (https://github.com/anvaka/city-roads), and "Roads to Rome", moovel lab, 2015 (https://flowingdata.com/2015/12/10/all-the-roads-that-lead-to-rome); both not checked.
+
+Other facts from the search:
+
+- Mapbox Traffic v1 (https://docs.mapbox.com/data/tilesets/reference/mapbox-traffic-v1/), checked: 4 classes of congestion (low, moderate, heavy, severe) per segment and per direction, with the two directions drawn apart by `line-offset`. Our levels have no direction.
+- Translucent lines that overlap at a joint add up and look brighter: Rye Terrell, "Instanced Line Rendering Part II: Alpha blending", 2021-09-30 (https://wwwtyro.net/2021/10/01/instanced-lines-part-2.html), checked. Our cover bake adds up on purpose; use MAX blending if crossings look too bright.
+- Anti-aliased lines from quads with a signed normal: Konstantin Käfer, "Drawing Antialiased Lines with OpenGL", Mapbox (https://blog.mapbox.com/drawing-antialiased-lines-with-opengl-8766f34192dc), not checked (the page returned 403). This is the method of `Traffic.tsx`.
+- No primary source was found for how the Google Maps traffic layer or the Cities: Skylines traffic overlay is drawn.
+
 ## Data that is only on this machine
 
 `data/` is git-ignored (678 MB on 2026-10-24). It holds the raw downloads, for example `data/night/BGMOPEN1.csv` (the business tax registry, 322 MB, extract of 2026-10-23) that `scripts/night.py` reads. To rebuild `web/public/night.json`, download the file again from the URL in the docstring of `scripts/night.py`. DATA.md lists each raw download and the script that reads it ("Raw downloads"), and the order of the scripts ("Dependencies"). `pnpm data` in `web/` rebuilds every data file in git and fails when one differs from git.
