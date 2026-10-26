@@ -4,6 +4,7 @@ import { feature, mesh } from 'topojson-client'
 import type { FeatureCollection, Geometry } from 'geojson'
 import { Fills } from './Fills.tsx'
 import { Traffic, type RoadLines } from './Traffic.tsx'
+import { PLACE } from './Dashboard.tsx'
 import { MAP_SIZE, svgTransform, type Rect, type View } from './view.ts'
 
 export type Transit = {
@@ -101,10 +102,12 @@ export function HeatMap({ towns, villages, level, nodes, counts, perAgent, proj,
     return { cells, borders, labels, lines, points }
   }, [cells, towns, proj, transit])
 
+  // The borders take the blue of the place names in the events (Dashboard.tsx), and village edges are dashed, so they
+  // stay apart from the roads (white to red, Traffic.tsx).
   // Cell edges, borders, lines and stations never change during a run, so they are one SVG whose paths are built once.
   const fixed = useMemo(() => <>
-      {geo.cells.map((c, k) => <path key={'c' + k} d={c.d} fill="none" stroke="#fff" strokeOpacity={0.1} strokeWidth={0.4} />)}
-      {geo.borders.map((b, k) => <path key={'b' + k} d={b.d} fill="none" stroke="#fff" strokeOpacity={0.2} strokeWidth={b.taipei ? 1.8 : 1} />)}
+      {geo.cells.map((c, k) => <path key={'c' + k} d={c.d} fill="none" stroke={PLACE.village} strokeOpacity={0.15} strokeWidth={0.4} strokeDasharray="1.2 1" />)}
+      {geo.borders.map((b, k) => <path key={'b' + k} d={b.d} fill="none" stroke={PLACE.town} strokeOpacity={0.3} strokeWidth={b.taipei ? 1.8 : 1} />)}
       {geo.lines.filter(l => show.has(l.kind)).map((l, k) =>
         <path key={'l' + k} d={l.d} fill="none" stroke={l.colour} strokeWidth={l.kind === 'mrt' ? 1.8 : 1.5}
           strokeDasharray={l.kind === 'tra' ? '6 3' : undefined} opacity={LINE_OPACITY} />)}

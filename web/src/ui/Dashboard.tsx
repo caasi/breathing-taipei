@@ -8,7 +8,7 @@ import { actionOf, jamOf, type PlaceOf, type SimEvent } from '../sim/events.ts'
 const COLOUR = { personal: '#eee', public: '#c9a7ff', jam: '#ff8a65' } as const
 // Where a character lives: two tones of one cool hue, apart from the warm names and from the data colours of the map
 // (no official colour per district was found). ponytail: chosen by eye.
-const PLACE = { town: '#8ecae6', village: '#b9dcee' } as const
+export const PLACE = { town: '#8ecae6', village: '#b9dcee' } as const
 
 type Policy = { id: string; label: string } & ({ type: 'toggle' } | { type: 'range'; min: number; max: number; step: number; unit: string; start: number })
 // ponytail: placeholder policies for the layout only; nothing here reaches the simulation yet.
