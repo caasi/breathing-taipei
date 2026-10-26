@@ -1,20 +1,23 @@
 """Build the routing graphs: roads from the bus route shapes of both cities, MRT from OSM lines and station exits.
 
 Usage:
-  python3 scripts/graphs.py TPE_SHAPES NTPC_SHAPES OSM_RAIL EXITS_CSV OUT_DIR
+  python3 scripts/graphs.py TPE_SHAPES NTPC_SHAPES OSM_RAIL EXITS_CSV HIGHWAYS OUT_DIR
 
   TPE_SHAPES   https://tcgbusfs.blob.core.windows.net/blobbus/GetBusShape.gz
   NTPC_SHAPES  https://tcgbusfs.blob.core.windows.net/ntpcbus/GetBusShape.gz
   OSM_RAIL     Overpass JSON: way["railway"~"^(subway|rail|light_rail|monorail)$"](24.90,121.25,25.20,121.70); out tags geom;
   EXITS_CSV    data.gov.tw 128428 (Big5): https://data.taipei/api/dataset/cfa4778c-62c1-497b-b704-756231de348b/resource/307a7f61-e302-4108-a817-877ccbfca7c1/download
+  HIGHWAYS     Overpass JSON of scripts/queries/highways.overpassql (國道, 快速道路 and their ramps, with node ids):
+               curl -A <name> --data-urlencode data@scripts/queries/highways.overpassql https://overpass-api.de/api/interpreter
   OUT_DIR      writes road-graph.json, road-lines.json and mrt-graph.json
 
 Output per graph: kept nodes (degree != 2) and edges whose geometry holds the merged degree-2 points.
 road-lines.json has, for each edge of road-graph.json in the same order, the bus shape points that the edge stands
-for (lon, lat, ...), not snapped to the grid: the map draws these, and routing uses the snapped graph."""
+for (lon, lat, ...), not snapped to the grid: the map draws these, and routing uses the snapped graph.
+A road edge has a fifth value, its class, when it is not a street: 1 國道, 2 快速道路, 3 a ramp or a link to the streets."""
 import gzip, json, math, re, csv, collections, sys
 
-if __name__ == "__main__" and len(sys.argv) != 6:
+if __name__ == "__main__" and len(sys.argv) != 7:
     sys.exit(__doc__)
 
 def km(a, b):
@@ -23,15 +26,17 @@ def km(a, b):
     return 6371 * math.hypot(x, y)
 
 class Graph:
-    def __init__(s, grid): s.grid, s.idx, s.xy, s.adj, s.raw = grid, {}, [], collections.defaultdict(dict), {}
+    def __init__(s, grid): s.grid, s.idx, s.xy, s.adj, s.raw, s.cls = grid, {}, [], collections.defaultdict(dict), {}, {}
     def add(s, p):
         s.xy.append(p); return len(s.xy) - 1
     def node(s, p):
         k = (round(p[0] / s.grid), round(p[1] / s.grid))
         if k not in s.idx: s.idx[k] = s.add((k[0] * s.grid, k[1] * s.grid))
         return s.idx[k]
-    def link(s, a, b, d=None):
-        if a != b: d = km(s.xy[a], s.xy[b]) if d is None else d; s.adj[a][b] = s.adj[b][a] = d
+    def link(s, a, b, d=None, cls=0):
+        if a == b: return
+        d = km(s.xy[a], s.xy[b]) if d is None else d; s.adj[a][b] = s.adj[b][a] = d
+        if cls: s.cls[(a, b)] = s.cls[(b, a)] = cls
     def line(s, pts):
         ns = [s.node(p) for p in pts]
         for a, b in zip(ns, ns[1:]): s.link(a, b)
@@ -74,7 +79,8 @@ def contract(g, keep_extra=()):
                 d += g.adj[cur][nxt]; prev, cur = cur, nxt
             seen.add((a, b0)); seen.add((cur, geom[-1] if geom else a))
             if a < cur or (a == cur and geom):
-                edges.append((remap[a], remap[cur], d, [g.xy[p] for p in geom], [a, *geom, cur]))
+                # ponytail: the class of the first step names the whole edge; a chain that changes class is rare.
+                edges.append((remap[a], remap[cur], d, [g.xy[p] for p in geom], [a, *geom, cur], g.cls.get((a, b0), 0)))
     nodes = [g.xy[v] for v in sorted(keep)]
     return nodes, edges, remap
 
@@ -96,9 +102,9 @@ def simplify(pts, a, b, tol=2e-4):
     return [p for p, k in zip(full, keep) if k][1:-1]
 
 def dump(path, nodes, edges, extra=None):
-    edges = [(a, b, d, simplify(geom, nodes[a], nodes[b])) for a, b, d, geom, _ in edges]
+    edges = [(a, b, d, simplify(geom, nodes[a], nodes[b]), cls) for a, b, d, geom, _, cls in edges]
     out = {"lon": [round(p[0], 5) for p in nodes], "lat": [round(p[1], 5) for p in nodes],
-           "edges": [[a, b, round(d * 1000), [round(c, 5) for p in geom for c in p]] for a, b, d, geom in edges]}
+           "edges": [[a, b, round(d * 1000), [round(c, 5) for p in geom for c in p]] + ([cls] if cls else []) for a, b, d, geom, cls in edges]}
     if extra: out.update(extra)
     json.dump(out, open(path, "w"), ensure_ascii=False, separators=(",", ":"))
 
@@ -108,14 +114,38 @@ for f in sys.argv[1:3]:
     for r in json.loads(gzip.open(f).read().decode("utf-8-sig")):
         for part in re.findall(r"\(([^()]+)\)", r["wkt"]):
             road.line([tuple(map(float, xy.split())) for xy in part.split(",")])
+
+# --- 國道 and 快速道路 from OSM, with their ramps ---
+# Their points do not snap to the grid of the streets: a viaduct over a street must not meet it. Ways meet each other
+# at shared OSM nodes. They meet the streets at the end of a ramp or of a road that ends among streets, and a 快速道路
+# that is not a bridge or a tunnel also meets them at each of its points that falls in a cell of a street.
+CLASS = {"motorway": 1, "trunk": 2, "motorway_link": 3, "trunk_link": 3}
+ways = [x for x in json.load(open(sys.argv[5]))["elements"] if x["type"] == "way"]
+uses, osm = collections.Counter(n for x in ways for n in set(x["nodes"])), {}
+def street(p, reach):
+    """The street node of the cell of p, or of a cell up to `reach` cells away, nearest first; None when there is none."""
+    k = (round(p[0] / road.grid), round(p[1] / road.grid))
+    near = [road.idx[c] for c in ((k[0] + i, k[1] + j) for i in range(-reach, reach + 1) for j in range(-reach, reach + 1)) if c in road.idx]
+    return min(near, key=lambda v: km(p, road.xy[v]), default=None)
+for x in ways:
+    t = x["tags"]; pts = [(g["lon"], g["lat"]) for g in x["geometry"]]
+    ns = [osm[n] if n in osm else osm.setdefault(n, road.add(p)) for n, p in zip(x["nodes"], pts)]
+    for a, b, pa, pb in zip(ns, ns[1:], pts, pts[1:]):
+        if a != b: road.link(a, b, cls=CLASS[t["highway"]]); road.raw.setdefault((a, b), [pa, pb]); road.raw.setdefault((b, a), [pb, pa])
+    at_grade = t["highway"] == "trunk" and not t.get("bridge") and not t.get("tunnel")
+    for i, (n, p) in enumerate(zip(x["nodes"], pts)):
+        end = i in (0, len(pts) - 1) and uses[n] == 1
+        v = street(p, 2) if end else street(p, 0) if at_grade else None
+        if v is not None: road.link(osm[n], v, cls=3); road.raw.setdefault((osm[n], v), [p, road.xy[v]]); road.raw.setdefault((v, osm[n]), [road.xy[v], p])
+
 nodes, edges, _ = contract(road)
-dump(sys.argv[5] + "/road-graph.json", nodes, edges)
+dump(sys.argv[6] + "/road-graph.json", nodes, edges)
 lines = []
-for *_, chain in edges:
+for *_, chain, _cls in edges:
     pts = [p for a, b in zip(chain, chain[1:]) for p in road.raw[(a, b)]]
     pts = [pts[0]] + simplify(pts[1:-1], pts[0], pts[-1], 2e-5) + [pts[-1]]  # ~2 m
     lines.append([round(c, 5) for p in pts for c in p])
-json.dump(lines, open(sys.argv[5] + "/road-lines.json", "w"), separators=(",", ":"))
+json.dump(lines, open(sys.argv[6] + "/road-lines.json", "w"), separators=(",", ":"))
 print("road:", len(road.xy), "points ->", len(nodes), "nodes,", len(edges), "edges")
 
 # --- MRT: OSM lines (Taipei Metro and Circular line), joined through station nodes ---
@@ -140,6 +170,6 @@ for name, pts in acc.items():
         best = min(ns, key=lambda n: km(c, mrt.xy[n]))
         if km(c, mrt.xy[best]) < 0.35: mrt.link(s, best, 0.3)  # boarding or changing line costs ~300 m
 nodes, edges, remap = contract(mrt, stations.values())
-dump(sys.argv[5] + "/mrt-graph.json", nodes, edges, {"stations": {k: remap[v] for k, v in stations.items()}})
+dump(sys.argv[6] + "/mrt-graph.json", nodes, edges, {"stations": {k: remap[v] for k, v in stations.items()}})
 lonely = [k for k, v in stations.items() if not mrt.adj[v]]
 print("mrt:", len(mrt.xy), "points ->", len(nodes), "nodes,", len(edges), "edges; stations", len(stations), "not on a line:", lonely)

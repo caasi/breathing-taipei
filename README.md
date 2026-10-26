@@ -63,7 +63,7 @@ Display settings:
 | `dot` | `20`, `50`, `100`, `200`, `500` people for each dot. A switch draws other agents as dots, and the run goes on | `50` |
 | `dots` | `1` shows the dots, `0` hides them | `1` |
 | `mode` | `1` colors the dots by mode | `0` |
-| `layers` | Comma list of `mrt`, `lrt`, `tra`, `hsr`, `airport`, `highway`. Unknown names are ignored, and a list with no known name goes back to the default. An empty list hides all layers | All except `highway` |
+| `layers` | Comma list of `mrt`, `lrt`, `tra`, `hsr`, `airport`. Unknown names are ignored (`highway` too: the 國道 and 快速道路 are now in `traffic`), and a list with no known name goes back to the default. An empty list hides all layers | All |
 | `traffic` | `1` shows the road network with the slow roads in colour, and colours the bus, scooter and car dots on slow roads. `0` hides it, and the simulation does not take the traffic | `1` |
 
 Policy settings (placeholders):

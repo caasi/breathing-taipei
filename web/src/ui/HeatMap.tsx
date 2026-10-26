@@ -39,7 +39,7 @@ const LAND = `rgb(${BACKGROUND.join(', ')})`
 const NEW_TAIPEI_OPACITY = 0.45
 
 // Lines and stations are for orientation; kept faint so the eye follows the area colours.
-const LINE_OPACITY = { rail: 0.35, highway: 0.3 }
+const LINE_OPACITY = 0.35
 const STATION_OPACITY = 0.6
 const SVG = { position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none' } as const
 
@@ -106,8 +106,8 @@ export function HeatMap({ towns, villages, level, nodes, counts, perAgent, proj,
       {geo.cells.map((c, k) => <path key={'c' + k} d={c.d} fill="none" stroke="#fff" strokeOpacity={0.1} strokeWidth={0.4} />)}
       {geo.borders.map((b, k) => <path key={'b' + k} d={b.d} fill="none" stroke="#fff" strokeOpacity={0.2} strokeWidth={b.taipei ? 1.8 : 1} />)}
       {geo.lines.filter(l => show.has(l.kind)).map((l, k) =>
-        <path key={'l' + k} d={l.d} fill="none" stroke={l.colour} strokeWidth={l.kind === 'mrt' ? 1.8 : l.kind === 'highway' ? 1 : 1.5}
-          strokeDasharray={l.kind === 'tra' ? '6 3' : undefined} opacity={l.kind === 'highway' ? LINE_OPACITY.highway : LINE_OPACITY.rail} />)}
+        <path key={'l' + k} d={l.d} fill="none" stroke={l.colour} strokeWidth={l.kind === 'mrt' ? 1.8 : 1.5}
+          strokeDasharray={l.kind === 'tra' ? '6 3' : undefined} opacity={LINE_OPACITY} />)}
       {geo.points.filter(p => p.kinds.some(k => show.has(k))).map(p => {
         const has = (k: string) => p.kinds.includes(k) && show.has(k)
         return <g key={p.kinds.join() + p.name} opacity={STATION_OPACITY}>

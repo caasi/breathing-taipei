@@ -47,7 +47,7 @@ export const writeRoutes = (g: Graph, paths: Map<number, number[]>) => {
 }
 /** The road node a village (or district center) starts and ends its road trips at; the script and the worker share it. */
 export const roadNode = (net: ReturnType<typeof networks>, coords: [number, number][], v: number) =>
-  nearest(net.road, coords[v][0], coords[v][1])
+  nearest(net.road, coords[v][0], coords[v][1], u => net.road.street[u] === 1)
 
 const pack = (ks: number[], parts: number[][]): Batch => {
   const off = new Uint32Array(ks.length + 1)

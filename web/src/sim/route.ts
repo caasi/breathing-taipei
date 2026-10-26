@@ -1,22 +1,30 @@
 /** Shortest paths on a contracted graph whose edges carry their in-between points. */
-export type GraphJson = { lon: number[]; lat: number[]; edges: [number, number, number, number[]][]; stations?: Record<string, number> }
+/** An edge: from, to, metres, in-between points, and for a road that is not a street its class (scripts/graphs.py). */
+export type GraphJson = { lon: number[]; lat: number[]; edges: [number, number, number, number[], number?][]; stations?: Record<string, number> }
 export type Graph = {
   lon: Float64Array; lat: Float64Array
+  street: Uint8Array // 1 for a node on a street (class 0); trips start and end only there
   start: Int32Array; to: Int32Array; w: Float64Array; edge: Int32Array; owner: Int32Array // adjacency (CSR); owner = node a slot belongs to
   geom: number[][]; from: Int32Array; end: Int32Array // per edge: in-between points (lon, lat, ...) listed from `from` to `end`
 }
 
+// ponytail: free speeds over the speed of a street, for the class of an edge (street, 國道 80, 快速道路 60, ramp 40 km/h
+// against 25 on a street); a guess, so that routes take the fast roads. The weight of an edge is its time in metres of street.
+const FASTER = [1, 80 / 25, 60 / 25, 40 / 25]
+
 export const graphFrom = (j: GraphJson): Graph => {
-  const n = j.lon.length, deg = new Int32Array(n + 1)
+  const n = j.lon.length, deg = new Int32Array(n + 1), street = new Uint8Array(n)
   for (const [a, b] of j.edges) { deg[a + 1]++; deg[b + 1]++ }
   for (let i = 0; i < n; i++) deg[i + 1] += deg[i]
   const fill = deg.slice(0, n), m = deg[n]
   const to = new Int32Array(m), w = new Float64Array(m), edge = new Int32Array(m), owner = new Int32Array(m)
-  j.edges.forEach(([a, b, d], e) => {
+  j.edges.forEach(([a, b, metres, , cls = 0], e) => {
+    const d = metres / FASTER[cls]
+    if (!cls) street[a] = street[b] = 1
     owner[fill[a]] = a; to[fill[a]] = b; w[fill[a]] = d; edge[fill[a]++] = e
     owner[fill[b]] = b; to[fill[b]] = a; w[fill[b]] = d; edge[fill[b]++] = e
   })
-  return { lon: Float64Array.from(j.lon), lat: Float64Array.from(j.lat), start: deg, to, w, edge, owner,
+  return { lon: Float64Array.from(j.lon), lat: Float64Array.from(j.lat), street, start: deg, to, w, edge, owner,
     geom: j.edges.map(e => e[3]), from: Int32Array.from(j.edges.map(e => e[0])), end: Int32Array.from(j.edges.map(e => e[1])) }
 }
 

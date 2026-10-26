@@ -17,10 +17,11 @@ import { hhmm, H2 } from './ui/format.ts'
 
 const SPEEDS = [0, 1, 2, 4, 8]
 const EVERY = [2, 5, 10, 20, 50]
-const LAYERS: [string, string][] = [['mrt', '捷運'], ['lrt', '輕軌'], ['tra', '台鐵'], ['hsr', '高鐵'], ['airport', '機場'], ['highway', '國道與快速道路']]
+// 國道 and 快速道路 are part of the traffic layer, which draws them with the streets.
+const LAYERS: [string, string][] = [['mrt', '捷運'], ['lrt', '輕軌'], ['tra', '台鐵'], ['hsr', '高鐵'], ['airport', '機場']]
 // The traffic has a key of its own, not a place in `layers`: a browser that stored the layers before it existed would
-// keep it off. In the panel it shows before the highways.
-const LAYER_BOXES: [string, string][] = [...LAYERS.slice(0, -1), ['traffic', '路況'], LAYERS[LAYERS.length - 1]]
+// keep it off.
+const LAYER_BOXES: [string, string][] = [...LAYERS, ['traffic', '路況']]
 const PER_AGENT = 10
 // Plans are made ahead of their departure, so the newest events are not all shown yet: keep more than the list shows.
 const KEEP_EVENTS = 3 * MAX_EVENTS
@@ -118,7 +119,7 @@ export function App() {
   const [open, setOpen] = useState<'info' | 'settings' | 'policies'>()
   const [runError, setRunError] = useState<string>()
   // Highways are for orientation only and compete with the area colours, so they start hidden.
-  const [show, setShow] = useStored('layers', new Set(LAYERS.map(l => l[0]).filter(k => k !== 'highway')),
+  const [show, setShow] = useStored('layers', new Set(LAYERS.map(l => l[0])),
     setOf(LAYERS.map(l => l[0])), v => [...v].join(','))
   const [trafficOn, setTrafficOn] = useStored('traffic', true, bool, fromBool)
   const layers = useMemo(() => (trafficOn ? new Set([...show, 'traffic']) : show), [show, trafficOn])
