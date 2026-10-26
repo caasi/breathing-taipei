@@ -5,7 +5,7 @@ import { drawNames, nameOf, type People } from './people.ts'
 import { evenPick, type Mood, type SimEvent } from './events.ts'
 import { mulberry32 } from './rng.ts'
 import { FPS, clockAt, respeed, stepsTo, type Clock } from './pace.ts'
-import { cityFrom, MODES } from './city.ts'
+import { cityFrom, MODES, SCOOTER } from './city.ts'
 import { networks, readRoutes, roadNode, tripPaths, type Batch, type Routes } from './paths.ts'
 import type { GraphJson } from './route.ts'
 import { workNodes } from './jobs.ts'
@@ -268,13 +268,16 @@ onmessage = async (e: MessageEvent<ToWorker>) => {
       if (jammed.get(i) === today) return
       jammed.set(i, today)
       const temper = temperOf(i), toWork = world.dest[i] === WORK && t < world.dep[i] + world.dur1[i]
+      const mode = world.dest[i] === PLAY ? world.playMode[i] : world.mode[i]
+      // A scooter rider cannot start work by phone in the saddle; one who would waits instead.
+      const working: Mood = mode === SCOOTER ? 'stuck' : 'work'
       const mood: Mood = temper < 0.55 ? (level >= ANGRY_FROM ? 'angry' : 'stuck') : temper < 0.75 || !toWork ? 'blank'
-        : temper < 0.92 || t % 1440 >= 12 * 60 ? 'work' : 'leave'
+        : temper < 0.92 || t % 1440 >= 12 * 60 ? working : 'leave'
       // A road with no name is told by the village nearest the middle of the edge: an edge can be longer than a cell.
       const [a, b] = roadJson.edges[e], road = edgeName[e] >= 0 ? names[edgeName[e]] : undefined
       const near = road ? 0 : nearestOf(c.coords, (roadJson.lon[a] + roadJson.lon[b]) / 2, (roadJson.lat[a] + roadJson.lat[b]) / 2)
       newEvents.push({ id: `j${++eventId}`, t, kind: 'jam', name: nameOf(ids, i), home: world.home[i],
-        mode: world.dest[i] === PLAY ? world.playMode[i] : world.mode[i], road, near, mood })
+        mode, road, near, mood })
     }
     // The plans under way at day 0 were made during init, which calls no onPlan: pass them through the same filter.
     for (const i of w.movers) w.onPlan(i)
