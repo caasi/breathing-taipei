@@ -193,7 +193,8 @@ describe('core properties', () => {
         const end = w.ret[i] + w.dur2[i]
         expect(seen.get(i)).toBe(end % w.due.length)
         expect(end).toBeGreaterThan(t)
-        expect(w.ret[i]).toBeGreaterThanOrEqual(w.dep[i] + w.dur1[i] - (asked.get(i)?.[0] ? Infinity : 0))
+        // On the way home the start can move before the arrival at work (core.ts stretch); the way there keeps the order.
+        if (!asked.get(i)?.[0]) expect(w.ret[i]).toBeGreaterThanOrEqual(w.dep[i] + w.dur1[i])
         const a = asked.get(i)
         if (!a) continue
         expect(where(w, i, t)).toBe(ROAD)

@@ -254,7 +254,9 @@ export const advance = (w: World, minutes: number) => {
  * A jam: the leg that agent i is on now ends at minute `arrive` instead (at least the next minute, at most MAX_LEG from
  * now), and the agent is where it is now. The leg is drawn again through the share of it that the agent has done, so its
  * start moves too, into the past. A leg is at most MAX_LEG long: a longer one keeps the share done and ends earlier
- * than asked. A later arrival at work can make the agent leave work later (never before it
+ * than asked. On the way home, the new start can fall before the agent reached work: only the minutes
+ * before now change. The model reads only now; the page draws up to one step behind it, and can show the agent at work
+ * for that step. A later arrival at work can make the agent leave work later (never before it
  * arrives). The agent moves to the bucket of its new minute home, so it stays in exactly one bucket. An agent that is not
  * on the road does not change.
  */
