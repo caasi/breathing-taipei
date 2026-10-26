@@ -270,9 +270,11 @@ onmessage = async (e: MessageEvent<ToWorker>) => {
       const temper = temperOf(i), toWork = world.dest[i] === WORK && t < world.dep[i] + world.dur1[i]
       const mood: Mood = temper < 0.55 ? (level >= ANGRY_FROM ? 'angry' : 'stuck') : temper < 0.75 || !toWork ? 'blank'
         : temper < 0.92 || t % 1440 >= 12 * 60 ? 'work' : 'leave'
-      const a = roadJson.edges[e][0], road = edgeName[e] >= 0 ? names[edgeName[e]] : undefined
+      // A road with no name is told by the village nearest the middle of the edge: an edge can be longer than a cell.
+      const [a, b] = roadJson.edges[e], road = edgeName[e] >= 0 ? names[edgeName[e]] : undefined
+      const near = road ? 0 : nearestOf(c.coords, (roadJson.lon[a] + roadJson.lon[b]) / 2, (roadJson.lat[a] + roadJson.lat[b]) / 2)
       newEvents.push({ id: `j${++eventId}`, t, kind: 'jam', name: nameOf(ids, i), home: world.home[i],
-        mode: world.dest[i] === PLAY ? world.playMode[i] : world.mode[i], road, near: road ? 0 : nearestOf(c.coords, roadJson.lon[a], roadJson.lat[a]), mood })
+        mode: world.dest[i] === PLAY ? world.playMode[i] : world.mode[i], road, near, mood })
     }
     // The plans under way at day 0 were made during init, which calls no onPlan: pass them through the same filter.
     for (const i of w.movers) w.onPlan(i)
