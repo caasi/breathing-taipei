@@ -203,8 +203,9 @@ describe('core properties', () => {
         // The leg ends where asked, or earlier at MAX_LEG (600 minutes).
         if (d < 600) expect((back ? w.ret[i] : w.dep[i]) + d).toBe(to)
         else expect((back ? w.ret[i] : w.dep[i]) + d).toBeLessThanOrEqual(to)
-        // The share done moves by less than a minute of the new leg (whole minutes).
-        expect(Math.abs(p2 - p)).toBeLessThanOrEqual(1 / d + 1e-9)
+        // The share done moves forward by less than a minute of the new leg (whole minutes), never back.
+        expect(p2 - p).toBeGreaterThanOrEqual(-1e-9)
+        expect(p2 - p).toBeLessThanOrEqual(1 / d + 1e-9)
       }
       advance(w, 1440)
       const c = counts(w, MODES.length)

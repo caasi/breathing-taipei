@@ -251,14 +251,12 @@ export const advance = (w: World, minutes: number) => {
 }
 
 /**
- * A jam: the leg that agent i is on now ends at minute `arrive` instead (at least the next minute, at most MAX_LEG from
- * now). The leg is drawn again through the share of it that the agent has done, in whole minutes, so its start moves
- * too, into the past, and the agent can move forward by up to a minute of the new leg, never back. A leg is at most MAX_LEG long: a longer one keeps the share done and ends earlier
- * than asked. On the way home, the new start can fall before the agent reached work: only the minutes
- * before now change. The model reads only now; the page draws up to one step behind it, and can show the agent at work
- * for that step. A later arrival at work can make the agent leave work later (never before it
- * arrives). An agent that is not
- * on the road does not change.
+ * A jam: the leg that agent i is on now ends at minute `arrive` instead. The leg is drawn again through the share of it
+ * that the agent has done, in whole minutes rounded so that the agent moves forward, never back, so its start moves into
+ * the past. A leg longer than MAX_LEG keeps the share done and ends earlier than asked. On the way home the new start
+ * can fall before the agent reached work: only minutes before now change, and the page, which draws up to one step
+ * behind the model, can show the agent at work for that step. A later arrival at work can make the agent leave work
+ * later. An agent that is not on the road does not change.
  */
 export const stretch = (w: World, i: number, arrive: number) => {
   const t = now(w), end = w.ret[i] + w.dur2[i], out = t >= w.dep[i] && t < w.dep[i] + w.dur1[i]
@@ -269,7 +267,7 @@ export const stretch = (w: World, i: number, arrive: number) => {
   // At least to - t, so the new start is not after now. At MAX_LEG, the start that keeps the share done, but the leg
   // ends after this minute.
   const want = Math.ceil((to - t) / (1 - p)), d = Math.min(MAX_LEG, want)
-  const s = d === want ? to - d : Math.max(Math.round(t - p * d), Math.floor(t) + 1 - d)
+  const s = d === want ? to - d : Math.max(Math.floor(t - p * d), Math.floor(t) + 1 - d)
   if (out) { w.dep[i] = s; w.dur1[i] = d; w.ret[i] = Math.max(w.ret[i], s + d) } else { w.ret[i] = s; w.dur2[i] = d }
   const next = w.ret[i] + w.dur2[i]
   if (next === end) return
