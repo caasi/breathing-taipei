@@ -64,7 +64,7 @@ let trafficOn = false, lastCells = new Uint8Array(0), jamRng = mulberry32(0)
 // same step), whatever the speed, so a seed gives the same run at any speed. One take costs 7 to 15 ms on a desktop (2026-10-26), so at 8x (32 takes a second) it is the main cost.
 const JAM_MINUTES = 15
 // A jam event comes from a road traveller on an edge at least this slow (traffic.ts levels: 1 + 254 x the colour level
-// of cellLevels; red from 0.43, 2 times the free time; angry from 0.75, 2.75 times). ponytail: at most one jam event a take, and one a day for each character; by eye.
+// of levelsOf; red from 0.43, 2 times the free time; angry from 0.75, 2.75 times). ponytail: at most one jam event a take, and one a day for each character; by eye.
 // The temper of a character, 0 to 1, fixed by its index.
 const temperOf = (i: number) => Math.imul(i + 1, 2654435761) / 2 ** 32 + 0.5
 const JAM_FROM = 1 + Math.round(0.43 * 254), ANGRY_FROM = 1 + Math.round(0.75 * 254)

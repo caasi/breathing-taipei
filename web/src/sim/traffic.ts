@@ -197,8 +197,7 @@ export const cellMax = (grid: Grid, buckets: Uint8Array) => {
   return out
 }
 
-/** Per bucket, 0 (free) to 255 (SLOWEST or slower). */
-export const cellLevels = (load: ArrayLike<number>, grid: Grid, capacity = CAPACITY) => levelsOf(slowness(load, grid, capacity))
+/** Per bucket, from its slowness: 0 (free) to 255 (SLOWEST or slower). */
 const levelsOf = (slower: ArrayLike<number>) => Uint8Array.from(slower, x => Math.round(255 * Math.min(1, (x - 1) / (SLOWEST - 1))))
 
 /**
@@ -243,7 +242,7 @@ export const take = (w: World, use: RoadUse, load: Float32Array, live: Live, onR
 }
 
 /**
- * Per edge: 0 for an edge with no traveller, else 1 + the level of its cell (cellLevels) on 1 to 255. The map draws
+ * Per edge: 0 for an edge with no traveller, else 1 + the level of its bucket (levelsOf) on 1 to 255. The map draws
  * the flow only on roads in use, and the colour follows those roads and not the square of the cell.
  */
 export const levels = (load: ArrayLike<number>, grid: Grid, cells: Uint8Array, out: Uint8Array) => {
