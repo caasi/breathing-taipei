@@ -18,6 +18,7 @@ export type ToWorker =
   // minute: the clock of the page at at (performance.timeOrigin + performance.now() of the change), so both clocks agree.
   | { type: 'speed'; hoursPerSec: number; minute: number; at: number }
   | { type: 'sample'; every: number } // the run goes on; only the agents drawn as dots change
+  | { type: 'traffic'; on: boolean } // the traffic layer is shown; the worker takes the traffic only then
 /**
  * Sampled agents' current plans (minutes since 00:00 of day 0), for the renderer to interpolate.
  * dest is WORK, PLAY, GONE or STAY (core.ts); the path of trip k to work is path k, to its day-off place path n + k.
@@ -54,7 +55,7 @@ let routed = 0
 let idx = new Uint32Array(0) // agent of each sampled trip
 let sentDep = new Int32Array(0) // departure last sent for each sampled trip; a new plan always changes it
 let use: RoadUse | undefined, grid: Grid | undefined, load = new Float32Array(0), jam = new Uint8Array(0)
-let jamSlot = -1, jamAt = -Infinity
+let jamSlot = -1, jamAt = -Infinity, trafficOn = false
 // The traffic is taken once per 15 simulated minutes and at most every 250 ms: one take costs 7 to 15 ms on a desktop.
 const JAM_MINUTES = 15, JAM_MS = 250
 const data = Promise.all(['od2.json', 'villages2.json', 'signal.json', 'road-graph.json', 'mrt-graph.json', 'night.json', 'calendar.json', 'people.json'].map(getJson))
@@ -128,7 +129,7 @@ const frame = () => {
     paths.push(b.value); routed += b.value.ks.length
   }
   const slot = Math.floor((w.day * 1440 + w.minute) / JAM_MINUTES)
-  if (use && grid && slot !== jamSlot && performance.now() - jamAt >= JAM_MS) {
+  if (trafficOn && use && grid && slot !== jamSlot && performance.now() - jamAt >= JAM_MS) {
     jamSlot = slot; jamAt = performance.now()
     const next = levels(loadNow(w, use, load), grid, new Uint8Array(load.length))
     if (next.some((v, e) => v !== jam[e])) { jam = next; extra.traffic = next }
@@ -172,6 +173,8 @@ onmessage = async (e: MessageEvent<ToWorker>) => {
     since = m.at; owed = true
     return
   }
+  // A layer switched on gets the traffic of now at the next frame, also when the levels did not change since it was off.
+  if (m.type === 'traffic') { trafficOn = m.on; jamSlot = -1; jam = new Uint8Array(0); return }
   if (m.type === 'sample') { every = m.every; if (w) net.then(g => { if (w) extra = { ...extra, trips: draw(w, g) } }); return }
   // The old world stops now. The clock of the new run stands at minute 0 until the page is ready for it and sends a
   // speed, as the clock of the page does.

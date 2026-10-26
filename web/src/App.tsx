@@ -176,6 +176,7 @@ export function App() {
   }, [])
   // Declared before the start, so the first start draws with the stored density.
   useEffect(() => post({ type: 'sample', every }), [every])
+  useEffect(() => post({ type: 'traffic', on: show.has('traffic') }), [show])
   useEffect(() => {
     if (runStart === undefined) return
     // The new world starts at minute 0, and both clocks stand there until the page has drawn the first frame. The page
