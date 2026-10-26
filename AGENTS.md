@@ -87,7 +87,7 @@ Not tried yet, in the order that the search ranked them:
 
 Other facts from the search:
 
-- Mapbox Traffic v1 (https://docs.mapbox.com/data/tilesets/reference/mapbox-traffic-v1/), checked: 4 classes of congestion (low, moderate, heavy, severe) per segment and per direction, with the two directions drawn apart by `line-offset`. Our levels have no direction.
+- Mapbox Traffic v1 (https://docs.mapbox.com/data/tilesets/reference/mapbox-traffic-v1/), checked: 4 classes of congestion (low, moderate, heavy, severe) per segment and per direction, with the two directions drawn apart by `line-offset`. Our levels have no direction on a two-way edge; a one-way edge has a bucket for each heading (since 2026-10-27).
 - Translucent lines that overlap at a joint add up and look brighter: Rye Terrell, "Instanced Line Rendering Part II: Alpha blending", 2021-09-30 (https://wwwtyro.net/2021/10/01/instanced-lines-part-2.html), checked. Our cover bake adds up on purpose; use MAX blending if crossings look too bright.
 - Anti-aliased lines from quads with a signed normal: Konstantin Käfer, "Drawing Antialiased Lines with OpenGL", Mapbox (https://blog.mapbox.com/drawing-antialiased-lines-with-opengl-8766f34192dc), not checked (the page returned 403). This is the method of `Traffic.tsx`.
 - No primary source was found for how the Google Maps traffic layer or the Cities: Skylines traffic overlay is drawn.

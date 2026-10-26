@@ -22,7 +22,8 @@ export type ToWorker =
   | { type: 'traffic'; on: boolean } // the traffic layer is shown; the worker sends the levels only then
 /**
  * Sampled agents' current plans (minutes since 00:00 of day 0), for the renderer to interpolate.
- * dest is WORK, PLAY, GONE or STAY (core.ts); the path of trip k to work is path k, to its day-off place path n + k.
+ * dest is WORK, PLAY, GONE or STAY (core.ts); the path of trip k to work is path k, to its day-off place path n + k,
+ * and its own ways home, where they differ from the way there reversed, paths 2n + k and 3n + k (bothPaths).
  */
 export type Trips = { home: Uint16Array; work: Uint16Array; mode: Uint8Array; play: Uint16Array; playMode: Uint8Array; dest: Uint8Array; dep: Int32Array; dur1: Uint16Array; ret: Int32Array; dur2: Uint16Array }
 /** New plans of sampled agents since the last message; k indexes Trips. */
