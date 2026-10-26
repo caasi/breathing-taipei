@@ -6,7 +6,8 @@
  *
  * Reads web/public/*.json and writes web/public/road-routes.bin. It runs the model as the app does
  * (seed 42, 10 people per agent, village and district level) and routes every road trip (bus, scooter,
- * car), to work and to the day-off place, between two different road nodes that the road graph connects.
+ * car), to work and to the day-off place, between two different road nodes that the road graph connects, in each
+ * variant of paths.ts (VARIANTS) that differs from the ones before it.
  * Run it again after a change to the road graph, the routing code, the model, or the app's seed or
  * PER_AGENT. The worker ignores a file for another road graph; for a stale model it routes the trips
  * that the file does not hold.
@@ -35,11 +36,22 @@ for (const level of ['village', 'district'] as const) {
   }
   for (const i of w.movers) { want(w.home[i], w.work[i], w.mode[i]); want(w.home[i], w.play[i], w.playMode[i]) }
 }
+const g = net.road
+// The slot weights of the variants (paths.ts VARIANTS): fastest, on streets only, shortest in metres.
+const weights = [g.w, Float64Array.from(g.w, (w, k) => (g.cls[g.edge[k]] ? Infinity : w)), Float64Array.from(g.edge, e => g.metres[e])]
 const paths = new Map<number, number[]>()
 for (const [a, bs] of wanted) {
-  const { via, dist } = tree(net.road, a)
-  // An unreachable pair stays out, so the worker routes it as before.
-  for (const b of bs) if (Number.isFinite(dist[b])) paths.set(routeKey(a, b), edgesTo(net.road, via, b))
+  const trees = weights.map(w => tree(g, a, w))
+  for (const b of bs) {
+    const found: string[] = []
+    trees.forEach(({ via, dist }, v) => {
+      // An unreachable pair stays out, so the worker routes it as before; a variant that repeats one before it stays out too.
+      if (!Number.isFinite(dist[b])) return
+      const edges = edgesTo(g, via, b), key = edges.join()
+      if (!found.includes(key)) paths.set(routeKey(a, b, v), edges)
+      found.push(key)
+    })
+  }
 }
 const out = writeRoutes(net.road, paths)
 writeFileSync(new URL('../web/public/road-routes.bin', import.meta.url), out)

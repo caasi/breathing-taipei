@@ -8,7 +8,7 @@ import { FPS, clockAt, respeed, stepsTo, type Clock } from './pace.ts'
 import { cityFrom, MODES } from './city.ts'
 import { networks, readRoutes, roadNode, routeKey, tripPaths, type Batch, type Routes } from './paths.ts'
 import type { GraphJson } from './route.ts'
-import { cellLevels, gridOf, levels, loadNow, roadUse, type Grid, type RoadUse } from './traffic.ts'
+import { gridOf, levels, liveOf, roadUse, take as takeTraffic, type Grid, type Live, type RoadUse } from './traffic.ts'
 
 export type Level = 'district' | 'village'
 export type ToWorker =
@@ -56,7 +56,7 @@ let eventId = 0
 let routed = 0
 let idx = new Uint32Array(0) // agent of each sampled trip
 let sentDep = new Int32Array(0) // departure last sent for each sampled trip; a new plan always changes it
-let use: RoadUse | undefined, grid: Grid | undefined, load = new Float32Array(0), jam = new Uint8Array(0)
+let use: RoadUse | undefined, grid: Grid | undefined, live: Live | undefined, load = new Float32Array(0), jam = new Uint8Array(0)
 let jamSlot = -1, jamAt = -Infinity, trafficOn = false
 // The traffic is taken once per 15 simulated minutes and at most every 250 ms: one take costs 7 to 15 ms on a desktop.
 const JAM_MINUTES = 15, JAM_MS = 250
@@ -144,10 +144,10 @@ const frame = () => {
     paths.push(b.value); routed += b.value.ks.length
   }
   const slot = Math.floor((w.day * 1440 + w.minute) / JAM_MINUTES)
-  if (use && grid && slot !== jamSlot && performance.now() - jamAt >= JAM_MS) {
+  if (use && grid && live && slot !== jamSlot && performance.now() - jamAt >= JAM_MS) {
     jamSlot = slot; jamAt = performance.now()
     const onRoad: number[] = []
-    const cells = cellLevels(loadNow(w, use, load, (i, e) => onRoad.push(i, e)), grid), next = levels(load, grid, cells, new Uint8Array(load.length))
+    const cells = takeTraffic(w, use, load, live, (i, e) => onRoad.push(i, e)), next = levels(load, grid, cells, new Uint8Array(load.length))
     // The jam events need the traffic with the layer off too; the page gets the levels only while it shows them.
     if (trafficOn && next.some((v, e) => v !== jam[e])) { jam = next; extra.traffic = next; extra.cells = cells }
     const stuck: number[] = []
@@ -180,8 +180,8 @@ const traffic = (world: World, graphs: Awaited<typeof net>, roadJson: GraphJson)
     if (!known || world !== w) return
     const node = new Map<number, number>(), at = (v: number) => node.get(v) ?? node.set(v, roadNode(graphs, coords, v)).get(v)!
     const metres = Float32Array.from(roadJson.edges, e => e[2])
-    load = new Float32Array(metres.length); grid = gridOf(roadJson); extra.cellKeys = grid.keys
-    use = roadUse(world, (a, b) => known.get(routeKey(at(a), at(b))), metres)
+    load = new Float32Array(metres.length); grid = gridOf(roadJson); live = liveOf(roadJson, grid); extra.cellKeys = grid.keys
+    use = roadUse(world, (a, b, v) => known.get(routeKey(at(a), at(b), v)), metres)
   }, () => {})
 }
 onmessage = async (e: MessageEvent<ToWorker>) => {
