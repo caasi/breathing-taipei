@@ -1,6 +1,7 @@
 import type { City, DaysOff, Kind } from './core.ts'
 
-export type Village = { code: string; town: string; pop: number; arrivals: number; lon: number; lat: number }
+// jobs: known employees in the village (scripts/villages.py: 內湖科技園區 only), 0 elsewhere.
+export type Village = { code: string; town: string; pop: number; arrivals: number; jobs?: number; lon: number; lat: number }
 export type Signal = Record<string, { day: number; night: number }> // weekday 07-13 activity, weekday night stay
 /** Businesses per village (villages2.json order) for each name in kinds; built by scripts/night.py. */
 export type Night = { date: string; kinds: string[]; counts: number[][] }
@@ -138,10 +139,16 @@ export const cityFrom = ({ od: mrt, saturday, holiday, districts, villages, sign
     return ws.length - 1
   }
 
-  // ponytail: a village's share of a district's arrivals is half MRT arrivals, half residents (no jobs data yet).
-  const arrD = new Array(districts.length).fill(0)
-  villages.forEach((v, i) => (arrD[g[i]] += v.arrivals))
-  const to = villages.map((v, i) => 0.5 * (arrD[g[i]] ? v.arrivals / arrD[g[i]] : 0) + 0.5 * v.pop / popD[g[i]])
+  // ponytail: a village's share of a district's arrivals is half MRT arrivals, half residents, where no jobs are known.
+  // Where they are (內科), the known jobs take their share of the morning arrivals of the district, at most all of them.
+  const arrD = new Array(districts.length).fill(0), jobsD = new Array(districts.length).fill(0)
+  villages.forEach((v, i) => { arrD[g[i]] += v.arrivals; jobsD[g[i]] += v.jobs ?? 0 })
+  const workersD = districts.map((_, d) => sum(MORNING.map(h => sum(od[h].map(row => row[d])))))
+  const known = jobsD.map((j, d) => (workersD[d] ? Math.min(1, j / workersD[d]) : 0))
+  const to = villages.map((v, i) => {
+    const d = g[i], rest = 0.5 * (arrD[d] ? v.arrivals / arrD[d] : 0) + 0.5 * v.pop / popD[d]
+    return known[d] * (jobsD[d] ? (v.jobs ?? 0) / jobsD[d] : 0) + (1 - known[d]) * rest
+  })
   const minutes = (a: number, b: number, mode: number, hour: number) =>
     ACCESS[mode] + 60 * 1.3 * km(coords[a], coords[b]) / (PEAK.has(hour) ? PEAK_SPEED : SPEED)[mode]
 

@@ -22,7 +22,7 @@ python3 scripts/transit.py "$D/osm/rail.json" "$D/osm/stations.json" "$D/osm/air
 python3 scripts/graphs.py "$D/bus/tpe_GetBusShape.gz" "$D/ntpc-transit/ntpc_GetBusShape.gz" "$D/osm/rail.json" "$D/dt/exits.csv" "$D/osm-hw/highways.json" "$P"
 python3 scripts/names.py "$D/osm/streets.json" "$P"
 python3 scripts/days.py "$D/calendar/office-115.csv" "$D/calendar/office-116.csv" "$D/calendar/cwa-A-A0087-001.csv" "$D/calendar/cwa-A-A0087-003.csv" "$P/calendar.json"
-python3 scripts/villages.py "$D/atlas/villages-10t.json" "$D/pop/vage.csv" "$D/ris/ODRP014.json" "$D/dt/exits.csv" "$D/dt/od-202609.csv" "$P/villages2.json"
+python3 scripts/villages.py "$D/atlas/villages-10t.json" "$D/pop/vage.csv" "$D/ris/ODRP014.json" "$D/dt/exits.csv" "$D/dt/od-202609.csv" "$D/jobs/neihu-companies.csv" "$P/villages2.json"
 # These need towns.json, villages2-topo.json or villages2.json from the steps above.
 python3 scripts/od.py "$D/dt/od-202609.csv" "$D/dt/exits.csv" "$P/towns.json" "$D/calendar/office-115.csv" "$P/od2.json"
 python3 scripts/people.py "$D/people/top20-11206.csv" "$D/people/ranking-112.csv" "$P/villages2.json" "$P/people.json"
