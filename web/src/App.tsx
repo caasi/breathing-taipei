@@ -161,7 +161,7 @@ export function App() {
       const fresh = m.coords !== undefined, events = m.events, entry = { t: m.day * 1440 + m.minute, counts: m.counts }
       if (m.homes) setHomes(m.homes)
       if (fresh || m.traffic) setTraffic(m.traffic)
-      if (m.cellKeys) cellIndex.current = new Map(Array.from(m.cellKeys, (key, c) => [key, c]))
+      if (m.cellKeys) cellIndex.current = new Map(Array.from(m.cellKeys, (key, c) => [key, c] as const).filter(([key]) => key >= 0))
       if (fresh || m.cells) cellTraffic.current = m.cells && { index: cellIndex.current, level: m.cells }
       if (m.trips) { dotRuns.current.set(++lastDots.current, { trips: m.trips, tracks: { current: [] }, run: shown.current }); setTripsId(lastDots.current); unplaced.current = [] }
       if (fresh || events?.length) setPersonal(p => [...(fresh ? [] : p), ...(events ?? [])].slice(-KEEP_EVENTS))

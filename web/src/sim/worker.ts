@@ -35,7 +35,7 @@ export type FromWorker = {
   events?: SimEvent[] // personal events of plans made since the last message
   traffic?: Uint8Array // per road edge: 0 no traveller, 1 (free) to 255 (slowest) (traffic.ts levels); sent when it changes
   cells?: Uint8Array // per cell of the traffic, in the order of cellKeys, sent with traffic
-  cellKeys?: Int32Array // the key (traffic.ts cellKey) of each cell, sent once a run
+  cellKeys?: Int32Array // the key of each bucket (traffic.ts gridOf; -1 for a named road), sent once a run
   clock: number; at: number // the clock (pace.ts) shows minute `clock` at `at` (performance.timeOrigin + performance.now())
   since: number // the `at` of the change of speed that the clock uses; the page takes the clock only from its latest change
 }

@@ -114,14 +114,17 @@ const LANES = [1, 3, 2, 0.5]
  * small streets of its cell (瑞光路 had 10 to 210 people at 09:00 against 4 to 12 km of streets in its cells).
  */
 export type Grid = { cellOf: Int32Array; km: Float64Array; lanes: Float64Array; keys: Int32Array }
-/** The key of the cell that holds a point. The key of a bucket is 4 x the key of its cell + its class (not unique). */
+/**
+ * The key of the cell that holds a point. The key of a bucket of roads with no name is 4 x the key of its cell + its
+ * class, which is unique; a bucket of a named road has the key -1, as a dot (Travellers.tsx) cannot tell its road.
+ */
 // From 121°E and 24°N, so that 4 times the key fits in an Int32Array.
 export const cellKey = (lon: number, lat: number) => Math.floor((lon - 121) / CELL) * 10_000 + Math.floor((lat - 24) / CELL)
 export const gridOf = (road: GraphJson, name: ArrayLike<number> = []): Grid => {
   const ids = new Map<string, number>(), key: number[] = []
   const cellOf = Int32Array.from(road.edges, ([a, b, , , cls = 0], e) => {
     const k = 4 * cellKey((road.lon[a] + road.lon[b]) / 2, (road.lat[a] + road.lat[b]) / 2) + cls, id = `${k}:${name[e] ?? -1}`
-    if (!ids.has(id)) { ids.set(id, ids.size); key.push(k) }
+    if (!ids.has(id)) { ids.set(id, ids.size); key.push((name[e] ?? -1) < 0 ? k : -1) }
     return ids.get(id)!
   })
   const km = new Float64Array(ids.size), keys = Int32Array.from(key)

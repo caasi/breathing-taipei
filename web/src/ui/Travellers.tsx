@@ -17,7 +17,7 @@ export const track = (pts: Float32Array, proj: GeoProjection): Track => {
   const n = pts.length / 2, xy = new Float32Array(pts.length), len = new Float32Array(n), cell = new Int32Array(n)
   for (let i = 0; i < n; i++) {
     const [x, y] = proj([pts[2 * i], pts[2 * i + 1]])!
-    // ponytail: a dot takes the slowness of the streets of its cell (bucket class 0), also on a 國道 over them.
+    // ponytail: a dot takes the slowness of the unnamed streets of its cell (traffic.ts cellKey), also on a named road or a 國道.
     xy[2 * i] = x; xy[2 * i + 1] = y; cell[i] = 4 * cellKey(pts[2 * i], pts[2 * i + 1])
     if (i) len[i] = len[i - 1] + Math.hypot(x - xy[2 * i - 2], y - xy[2 * i - 1])
   }
