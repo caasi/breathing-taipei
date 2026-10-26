@@ -97,6 +97,17 @@ export function App() {
   const [personal, setPersonal] = useState<SimEvent[]>([]) // the personal events from the worker; the newest KEEP_EVENTS stay
   const [homes, setHomes] = useState(new Uint32Array(0))
   const [fps, setFps] = useState(0)
+  // The rate of animation frames, counted here and not in a layer, so it goes on when the dots are hidden.
+  useEffect(() => {
+    let raf = 0, frames = 0, since = performance.now()
+    const tick = (now: number) => {
+      frames++
+      if (now - since > 1000) { setFps(frames * 1000 / (now - since)); frames = 0; since = now }
+      raf = requestAnimationFrame(tick)
+    }
+    raf = requestAnimationFrame(tick)
+    return () => cancelAnimationFrame(raf)
+  }, [])
   // A file the page loads once stays failed until reload; a run error belongs to the current run.
   const [loadError, setLoadError] = useState<string>()
   const [open, setOpen] = useState<'info' | 'settings' | 'policies'>()
@@ -329,7 +340,7 @@ export function App() {
       <div className="reveal" style={{ position: 'absolute', inset: 0, opacity: revealed ? 1 : 0, filter: revealed ? 'none' : 'blur(8px)' }}>
       {ready && <>
         <HeatMap towns={towns} villages={villages} level={onScreen?.level ?? level} nodes={nodes} counts={s.counts} perAgent={PER_AGENT} proj={projection} transit={transit} show={show} rate={rate} road={roads} traffic={traffic} speed={speed} view={view} />
-        {dots && dotTrips && <Travellers tracks={dotRun!.tracks} trips={dotTrips} clock={clock} onFps={setFps} byMode={byMode} view={view} />}
+        {dots && dotTrips && <Travellers tracks={dotRun!.tracks} trips={dotTrips} clock={clock} byMode={byMode} view={view} />}
       </>}
       </div>
       {/* Always there, so a screen reader reads the change. */}

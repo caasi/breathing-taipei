@@ -35,7 +35,7 @@ const at = (t: Track, p: number): [number, number] => {
   return [t.xy[2 * lo] + (t.xy[2 * hi] - t.xy[2 * lo]) * f, t.xy[2 * lo + 1] + (t.xy[2 * hi + 1] - t.xy[2 * lo + 1]) * f]
 }
 
-type Props = { tracks: React.MutableRefObject<(Track | undefined)[]>; trips: Trips; clock: () => number; onFps: (fps: number) => void; byMode: boolean; view: View }
+type Props = { tracks: React.MutableRefObject<(Track | undefined)[]>; trips: Trips; clock: () => number; byMode: boolean; view: View }
 
 // The area colour carries the story; dots stay faint and add up (additive blending) so only busy lines glow.
 const DOT = [1, 236 / 255, 214 / 255, 0.4]
@@ -60,7 +60,7 @@ void main() { o = c; }`
  * The CPU finds each dot's position; WebGL draws them all in one call, because a fillRect per dot was the
  * main cost of the page once the fills moved to WebGL.
  */
-export function Travellers({ tracks, trips, clock, onFps, byMode, view }: Props) {
+export function Travellers({ tracks, trips, clock, byMode, view }: Props) {
   const ref = useRef<HTMLCanvasElement>(null)
   const mode$ = useRef(byMode), view$ = useRef(view)
   mode$.current = byMode; view$.current = view
@@ -79,12 +79,9 @@ export function Travellers({ tracks, trips, clock, onFps, byMode, view }: Props)
       return b
     }
     const xyBuffer = buffer('xy', xy, 2), modeBuffer = buffer('mode', mode, 1)
-    let raf = 0, frames = 0, since = performance.now(), drawn = ''
+    let raf = 0, drawn = ''
     const draw = () => {
       raf = requestAnimationFrame(draw)
-      frames++
-      const now = performance.now()
-      if (now - since > 1000) { onFps(frames * 1000 / (now - since)); frames = 0; since = now }
       const m = clock(), w = fit(gl, canvas), v = view$.current, key = `${m} ${w} ${canvas.height} ${v.k} ${v.x} ${v.y} ${mode$.current} ${routedBatches}`
       // A paused clock with nothing new draws nothing; the canvas keeps the last picture.
       if (key === drawn) return
