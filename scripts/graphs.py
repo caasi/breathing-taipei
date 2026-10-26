@@ -1,7 +1,7 @@
 """Build the routing graphs: roads from the bus route shapes of both cities, MRT from OSM lines and station exits.
 
 Usage:
-  python3 scripts/graphs.py TPE_SHAPES NTPC_SHAPES OSM_RAIL EXITS_CSV HIGHWAYS OUT_DIR
+  python3 scripts/graphs.py TPE_SHAPES NTPC_SHAPES OSM_RAIL EXITS_CSV HIGHWAYS STREETS OUT_DIR
 
   TPE_SHAPES   https://tcgbusfs.blob.core.windows.net/blobbus/GetBusShape.gz
   NTPC_SHAPES  https://tcgbusfs.blob.core.windows.net/ntpcbus/GetBusShape.gz
@@ -9,6 +9,7 @@ Usage:
   EXITS_CSV    data.gov.tw 128428 (Big5): https://data.taipei/api/dataset/cfa4778c-62c1-497b-b704-756231de348b/resource/307a7f61-e302-4108-a817-877ccbfca7c1/download
   HIGHWAYS     Overpass JSON of scripts/queries/highways.overpassql (國道, 快速道路 and their ramps, with node ids):
                curl -A <name> --data-urlencode data@scripts/queries/highways.overpassql https://overpass-api.de/api/interpreter
+  STREETS      Overpass JSON of scripts/queries/streets.overpassql (named roads; scripts/names.py reads it too)
   OUT_DIR      writes road-graph.json, road-lines.json and mrt-graph.json
 
 Output per graph: kept nodes (degree != 2) and edges whose geometry holds the merged degree-2 points.
@@ -19,7 +20,7 @@ A one-way edge (OSM `oneway`; a 國道 and its ramps are one-way unless tagged o
 from its first node to its second; its fifth value is then given also for a street (0)."""
 import gzip, json, math, re, csv, collections, sys
 
-if __name__ == "__main__" and len(sys.argv) != 7:
+if __name__ == "__main__" and len(sys.argv) != 8:
     sys.exit(__doc__)
 
 def km(a, b):
@@ -51,9 +52,10 @@ class Graph:
         return ns
 
 def contract(g, keep_extra=()):
-    """Keep nodes of degree != 2, nodes where the class of the road changes, and keep_extra; every other node becomes
-    geometry inside an edge, so each edge has one class."""
-    changes = lambda v: len({g.cls.get((v, w), 0) for w in g.adj[v]}) > 1
+    """Keep nodes of degree != 2, nodes where the class of the road or its one-way rule changes, and keep_extra; every
+    other node becomes geometry inside an edge, so each edge has one class and is one-way or two-way all along."""
+    one = lambda v, w: (v, w) in g.one or (w, v) in g.one
+    changes = lambda v: len({(g.cls.get((v, w), 0), one(v, w)) for w in g.adj[v]}) > 1
     keep = {v for v in range(len(g.xy)) if len(g.adj[v]) != 2 or changes(v)} | set(keep_extra)
     # A component made only of degree-2 nodes (a loop) has no kept node; keep one node of it,
     # or the walk below never starts there and the whole loop is lost.
@@ -157,14 +159,62 @@ for x in ways:
         v = street(p, 2) if end else street(p, 0) if at_grade else None
         if v is not None: road.link(osm[n], v, cls=3); road.raw.setdefault((osm[n], v), [p, road.xy[v]]); road.raw.setdefault((v, osm[n]), [road.xy[v], p])
 
+# --- one-way streets from OSM ---
+# OSM draws a divided road as two one-way ways, but the grid above merges its two carriageways into one edge, so only a
+# one-way way with no way of the same name going the other way within PAIR_M is a one-way street. A street step lies
+# along such a way when the way passes within NEAR_M of the middle of the step at an angle under 30 degrees; the step
+# then runs only the way's way. ponytail: PAIR_M and NEAR_M are guesses; a one-way pair of two streets with different
+# names closer than a grid cell can still merge into one edge and make it one-way.
+PAIR_M, NEAR_M, OWC = 60, 30, 0.0005
+def metres(a, b):
+    return 1000 * km(a, b)
+oneway = []
+for x in json.load(open(sys.argv[6]))["elements"]:
+    t = x.get("tags", {})
+    if x["type"] != "way" or t.get("highway") not in ("primary", "secondary", "tertiary") or t.get("oneway") not in ("yes", "-1"): continue
+    pts = [(g["lon"], g["lat"]) for g in x["geometry"]]
+    oneway += [(a, b, t.get("name")) for a, b in zip(*((pts[::-1], pts[-2::-1]) if t["oneway"] == "-1" else (pts, pts[1:])))]
+cells = collections.defaultdict(list)
+mid = lambda a, b: ((a[0] + b[0]) / 2, (a[1] + b[1]) / 2)
+cell = lambda p: (math.floor(p[0] / OWC), math.floor(p[1] / OWC))
+for k, (a, b, _) in enumerate(oneway): cells[cell(mid(a, b))].append(k)
+near = lambda p, reach: [k for i in range(-reach, reach + 1) for j in range(-reach, reach + 1) for k in cells[(cell(p)[0] + i, cell(p)[1] + j)]]
+heading = lambda a, b: math.atan2(b[1] - a[1], (b[0] - a[0]) * math.cos(math.radians(a[1])))
+turn = lambda h1, h2: abs((h1 - h2 + math.pi) % (2 * math.pi) - math.pi)
+def gap(p, a, b):
+    """Metres from p to the segment a-b."""
+    mx, my = 1000 * km(p, (p[0] + 1, p[1])), 1000 * km(p, (p[0], p[1] + 1))
+    ax, ay, bx, by = (a[0] - p[0]) * mx, (a[1] - p[1]) * my, (b[0] - p[0]) * mx, (b[1] - p[1]) * my
+    dx, dy = bx - ax, by - ay
+    t = max(0, min(1, -(ax * dx + ay * dy) / (dx * dx + dy * dy or 1)))
+    return math.hypot(ax + t * dx, ay + t * dy)
+def paired(k):
+    """A segment of a divided road: a segment of the same name runs the other way within PAIR_M of its middle."""
+    a, b, name = oneway[k]
+    # Segments are indexed by their middle; a long one can have its middle far off, so look 4 cells (about 200 m) away.
+    return any(oneway[j][2] == name and gap(mid(a, b), *oneway[j][:2]) <= PAIR_M and turn(heading(a, b), heading(*oneway[j][:2])) > 2.4
+               for j in near(mid(a, b), 4) if j != k)
+alone = {k for k in range(len(oneway)) if not paired(k)}
+streets_one = 0
+for a in list(road.adj):
+    for b in list(road.adj[a]):
+        if a > b or road.cls.get((a, b)) or (a, b) in road.one or (b, a) in road.one: continue
+        p, h = mid(road.xy[a], road.xy[b]), heading(road.xy[a], road.xy[b])
+        best = min(((metres(p, mid(*oneway[k][:2])), k) for k in near(p, 1) if k in alone), default=None)
+        if not best or best[0] > NEAR_M: continue
+        d = turn(h, heading(*oneway[best[1]][:2]))
+        if d < math.pi / 6: road.one.add((a, b)); streets_one += 1
+        elif d > 5 * math.pi / 6: road.one.add((b, a)); streets_one += 1
+print("one-way streets:", len(alone), "of", len(oneway), "OSM one-way segments alone;", streets_one, "street steps made one-way")
+
 nodes, edges, _ = contract(road)
-dump(sys.argv[6] + "/road-graph.json", nodes, edges)
+dump(sys.argv[7] + "/road-graph.json", nodes, edges)
 lines = []
 for *_, chain, _cls, _one in edges:
     pts = [p for a, b in zip(chain, chain[1:]) for p in road.raw[(a, b)]]
     pts = [pts[0]] + simplify(pts[1:-1], pts[0], pts[-1], 2e-5) + [pts[-1]]  # ~2 m
     lines.append([round(c, 5) for p in pts for c in p])
-json.dump(lines, open(sys.argv[6] + "/road-lines.json", "w"), separators=(",", ":"))
+json.dump(lines, open(sys.argv[7] + "/road-lines.json", "w"), separators=(",", ":"))
 print("road:", len(road.xy), "points ->", len(nodes), "nodes,", len(edges), "edges,", sum(e[6] for e in edges), "one-way;", contract.mixed, "with steps both ways")
 
 # --- MRT: OSM lines (Taipei Metro and Circular line), joined through station nodes ---
@@ -189,6 +239,6 @@ for name, pts in acc.items():
         best = min(ns, key=lambda n: km(c, mrt.xy[n]))
         if km(c, mrt.xy[best]) < 0.35: mrt.link(s, best, 0.3)  # boarding or changing line costs ~300 m
 nodes, edges, remap = contract(mrt, stations.values())
-dump(sys.argv[6] + "/mrt-graph.json", nodes, edges, {"stations": {k: remap[v] for k, v in stations.items()}})
+dump(sys.argv[7] + "/mrt-graph.json", nodes, edges, {"stations": {k: remap[v] for k, v in stations.items()}})
 lonely = [k for k, v in stations.items() if not mrt.adj[v]]
 print("mrt:", len(mrt.xy), "points ->", len(nodes), "nodes,", len(edges), "edges; stations", len(stations), "not on a line:", lonely)
