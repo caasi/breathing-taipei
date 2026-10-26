@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { HeatMap, Land, Outline, SEA, projectionFor, taipeiIn, type Transit } from './ui/HeatMap.tsx'
-import { Travellers, MODE_COLOURS, addBatches, type Track } from './ui/Travellers.tsx'
+import { Travellers, MODE_COLOURS, addBatches, type CellTraffic, type Track } from './ui/Travellers.tsx'
 import type { RoadLines } from './ui/Traffic.tsx'
 import { MODES } from './sim/city.ts'
 import type { FromWorker, WorkerError, ToWorker, Level, Trips } from './sim/worker.ts'
@@ -60,6 +60,8 @@ export function App() {
   const [transit, setTransit] = useState<Transit>()
   const [roads, setRoads] = useState<RoadLines>()
   const [traffic, setTraffic] = useState<Uint8Array>()
+  // The dots read the slowness of each cell every frame, so it is a ref and not state.
+  const cellTraffic = useRef<CellTraffic>(), cellIndex = useRef(new Map<number, number>())
   const [cal, setCal] = useState<Calendar>()
   // Day 0 of the run is the day the page opens, in Taiwan.
   const startDay = useMemo(() => cal && indexOf(cal, todayInTaipei()), [cal])
@@ -153,6 +155,8 @@ export function App() {
       const fresh = m.coords !== undefined, events = m.events, entry = { t: m.day * 1440 + m.minute, counts: m.counts }
       if (m.homes) setHomes(m.homes)
       if (fresh || m.traffic) setTraffic(m.traffic)
+      if (m.cellKeys) cellIndex.current = new Map(Array.from(m.cellKeys, (key, c) => [key, c]))
+      if (fresh || m.cells) cellTraffic.current = m.cells && { index: cellIndex.current, level: m.cells }
       if (m.trips) { dotRuns.current.set(++lastDots.current, { trips: m.trips, tracks: { current: [] }, run: shown.current }); setTripsId(lastDots.current); unplaced.current = [] }
       if (fresh || events?.length) setPersonal(p => [...(fresh ? [] : p), ...(events ?? [])].slice(-KEEP_EVENTS))
       setHistory(h => record(fresh ? [] : h, entry, KEEP))
@@ -176,7 +180,11 @@ export function App() {
   }, [])
   // Declared before the start, so the first start draws with the stored density.
   useEffect(() => post({ type: 'sample', every }), [every])
-  useEffect(() => post({ type: 'traffic', on: show.has('traffic') }), [show])
+  useEffect(() => {
+    const on = show.has('traffic')
+    if (!on) cellTraffic.current = undefined
+    post({ type: 'traffic', on })
+  }, [show])
   useEffect(() => {
     if (runStart === undefined) return
     // The new world starts at minute 0, and both clocks stand there until the page has drawn the first frame. The page
@@ -341,7 +349,7 @@ export function App() {
       <div className="reveal" style={{ position: 'absolute', inset: 0, opacity: revealed ? 1 : 0, filter: revealed ? 'none' : 'blur(8px)' }}>
       {ready && <>
         <HeatMap towns={towns} villages={villages} level={onScreen?.level ?? level} nodes={nodes} counts={s.counts} perAgent={PER_AGENT} proj={projection} transit={transit} show={show} rate={rate} roads={roads} traffic={traffic} speed={speed} view={view} />
-        {dots && dotTrips && <Travellers tracks={dotRun!.tracks} trips={dotTrips} clock={clock} byMode={byMode} view={view} />}
+        {dots && dotTrips && <Travellers tracks={dotRun!.tracks} trips={dotTrips} clock={clock} byMode={byMode} traffic={cellTraffic} view={view} />}
       </>}
       </div>
       {/* Always there, so a screen reader reads the change. */}

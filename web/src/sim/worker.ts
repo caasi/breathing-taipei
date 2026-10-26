@@ -8,7 +8,7 @@ import { FPS, clockAt, respeed, stepsTo, type Clock } from './pace.ts'
 import { cityFrom, MODES } from './city.ts'
 import { networks, readRoutes, roadNode, routeKey, tripPaths, type Batch, type Routes } from './paths.ts'
 import type { GraphJson } from './route.ts'
-import { gridOf, levels, loadNow, roadUse, type Grid, type RoadUse } from './traffic.ts'
+import { cellLevels, gridOf, levels, loadNow, roadUse, type Grid, type RoadUse } from './traffic.ts'
 
 export type Level = 'district' | 'village'
 export type ToWorker =
@@ -33,6 +33,8 @@ export type FromWorker = {
   minute: number; day: number; counts: Uint32Array; road: Uint32Array; away: number; ms: number
   events?: SimEvent[] // personal events of plans made since the last message
   traffic?: Uint8Array // per road edge: 0 (free) to 255 (slowest) (traffic.ts); sent when it changes
+  cells?: Uint8Array // per cell of the traffic, in the order of cellKeys, sent with traffic
+  cellKeys?: Int32Array // the key (traffic.ts cellKey) of each cell, sent once a run
   clock: number; at: number // the clock (pace.ts) shows minute `clock` at `at` (performance.timeOrigin + performance.now())
   since: number // the `at` of the change of speed that the clock uses; the page takes the clock only from its latest change
 }
@@ -47,7 +49,7 @@ let every = 20
 let hoursPerSec = 0, lastHours = 0 // lastHours: the last speed that was not a pause
 const clock: Clock = { minute: 0, at: performance.now(), perMs: 0 }
 let since = 0, owed = false // owed: the page has no frame yet with the clock of the latest change of speed
-let extra: Pick<FromWorker, 'start' | 'nodes' | 'homes' | 'coords' | 'trips' | 'replans' | 'traffic'> = {}
+let extra: Pick<FromWorker, 'start' | 'nodes' | 'homes' | 'coords' | 'trips' | 'replans' | 'traffic' | 'cells' | 'cellKeys'> = {}
 let pending: Generator<Batch> | undefined
 let newEvents: SimEvent[] = []
 let eventId = 0
@@ -131,8 +133,8 @@ const frame = () => {
   const slot = Math.floor((w.day * 1440 + w.minute) / JAM_MINUTES)
   if (trafficOn && use && grid && slot !== jamSlot && performance.now() - jamAt >= JAM_MS) {
     jamSlot = slot; jamAt = performance.now()
-    const next = levels(loadNow(w, use, load), grid, new Uint8Array(load.length))
-    if (next.some((v, e) => v !== jam[e])) { jam = next; extra.traffic = next }
+    const cells = cellLevels(loadNow(w, use, load), grid), next = levels(load, grid, cells, new Uint8Array(load.length))
+    if (next.some((v, e) => v !== jam[e])) { jam = next; extra.traffic = next; extra.cells = cells }
   }
   const msg: FromWorker = { ...extra, paths, routed, minute: w.minute, day: w.day, counts: c.nodes, road: c.road, away: c.away, ms, events: newEvents, clock: clock.minute, at: performance.timeOrigin + t, since }
   newEvents = []
@@ -160,7 +162,7 @@ const traffic = (world: World, graphs: Awaited<typeof net>, roadJson: GraphJson)
     if (!known || world !== w) return
     const node = new Map<number, number>(), at = (v: number) => node.get(v) ?? node.set(v, roadNode(graphs, coords, v)).get(v)!
     const metres = Float32Array.from(roadJson.edges, e => e[2])
-    load = new Float32Array(metres.length); grid = gridOf(roadJson)
+    load = new Float32Array(metres.length); grid = gridOf(roadJson); extra.cellKeys = grid.keys
     use = roadUse(world, (a, b) => known.get(routeKey(at(a), at(b))), metres)
   }, () => {})
 }

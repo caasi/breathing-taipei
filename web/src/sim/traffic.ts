@@ -50,16 +50,18 @@ export const loadNow = (w: World, use: RoadUse, out: Float32Array) => {
 }
 
 /** The cell of each edge (by the middle of its ends) and the km of road in each cell. */
-export type Grid = { cellOf: Int32Array; km: Float64Array }
+export type Grid = { cellOf: Int32Array; km: Float64Array; keys: Int32Array }
+/** The key of the cell that holds a point; the page finds the cell of a dot with it. */
+export const cellKey = (lon: number, lat: number) => Math.floor(lon / CELL) * 100_000 + Math.floor(lat / CELL)
 export const gridOf = (road: GraphJson): Grid => {
-  const ids = new Map<string, number>()
+  const ids = new Map<number, number>()
   const cellOf = Int32Array.from(road.edges, ([a, b]) => {
-    const k = `${Math.floor((road.lon[a] + road.lon[b]) / 2 / CELL)},${Math.floor((road.lat[a] + road.lat[b]) / 2 / CELL)}`
+    const k = cellKey((road.lon[a] + road.lon[b]) / 2, (road.lat[a] + road.lat[b]) / 2)
     return ids.get(k) ?? ids.set(k, ids.size).get(k)!
   })
   const km = new Float64Array(ids.size)
   road.edges.forEach(([, , m], e) => (km[cellOf[e]] += m / 1000))
-  return { cellOf, km }
+  return { cellOf, km, keys: Int32Array.from(ids.keys()) }
 }
 
 /** People on the road of each cell. */
@@ -72,11 +74,13 @@ export const cellLoad = (load: ArrayLike<number>, grid: Grid) => {
 /** Extra time over free flow, as a share of the free time, for `people` on `km` of road. */
 export const extraTime = (people: number, km: number, capacity = CAPACITY) => ALPHA * (people / km / capacity) ** BETA
 
-/** Per edge, 0 (free) to 255 (SLOWEST or slower): the slowness of its cell, on an edge that has load. */
-export const levels = (load: ArrayLike<number>, grid: Grid, out: Uint8Array, capacity = CAPACITY) => {
-  const cells = cellLoad(load, grid), level = new Uint8Array(cells.length)
-  cells.forEach((p, c) => (level[c] = Math.round(255 * Math.min(1, extraTime(p, grid.km[c], capacity) / (SLOWEST - 1)))))
+/** Per cell, 0 (free) to 255 (SLOWEST or slower). */
+export const cellLevels = (load: ArrayLike<number>, grid: Grid, capacity = CAPACITY) =>
+  Uint8Array.from(cellLoad(load, grid), (p, c) => Math.round(255 * Math.min(1, extraTime(p, grid.km[c], capacity) / (SLOWEST - 1))))
+
+/** Per edge, the level of its cell (cellLevels) on an edge that has load. */
+export const levels = (load: ArrayLike<number>, grid: Grid, cells: Uint8Array, out: Uint8Array) => {
   // An edge with no traveller stays clear, so the colour follows the roads in use and not the square of the cell.
-  for (let e = 0; e < out.length; e++) out[e] = load[e] > 0 ? level[grid.cellOf[e]] : 0
+  for (let e = 0; e < out.length; e++) out[e] = load[e] > 0 ? cells[grid.cellOf[e]] : 0
   return out
 }
