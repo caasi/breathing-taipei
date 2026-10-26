@@ -35,4 +35,4 @@
 ## Sources that the project cites but did not read
 
 - **The 1964 *Traffic Assignment Manual* of the Bureau of Public Roads**, the usual source of the BPR values 0.15 and 4 (`web/src/sim/traffic.ts`). It was not found online. DATA.md ("Figures in the code") gives what the secondary sources say, and where they do not agree.
-- **The definition of "rush hour" in the TomTom Traffic Index.** The page of 台北市 gives the morning and evening levels, but not the hours. `scripts/traffic.ts` uses 07:00 to 09:45 and 17:00 to 19:45, which are guesses.
+- **The definition of "rush hour" in the TomTom Traffic Index.** The page of 台北市 gives the morning and evening levels, but not the hours. `scripts/traffic.ts` uses 07:00 to 09:59 and 17:00 to 19:59, which are guesses.

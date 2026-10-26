@@ -22,7 +22,7 @@ import { CAPACITY, gridOf, liveOf, roadUse, take } from '../web/src/sim/traffic.
 import { workNodes } from '../web/src/sim/jobs.ts'
 
 // TomTom Traffic Index 2025, 台北市: morning rush hour 64.6%, evening rush hour 92%. ponytail: TomTom does not give the
-// hours of its rush hours; 07:00 to 09:45 and 17:00 to 19:45 are guesses (KNOWN-ISSUES.md).
+// hours of its rush hours; 07:00 to 09:59 and 17:00 to 19:59 are guesses (KNOWN-ISSUES.md).
 const MORNING = { level: 0.646, hours: [7, 8, 9] }, EVENING = { level: 0.92, hours: [17, 18, 19] }
 const SEED = 42, PER_AGENT = 10, DAY = '2026-10-27'
 
