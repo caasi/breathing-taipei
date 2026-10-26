@@ -26,13 +26,13 @@ const SEED = 42, PER_AGENT = 10, DAY = '2026-10-27'
 const pub = (f: string) => JSON.parse(readFileSync(new URL(`../web/public/${f}`, import.meta.url), 'utf8'))
 const data = { ...pub('od2.json'), villages: pub('villages2.json'), signal: pub('signal.json'), night: pub('night.json') }
 const cal: Calendar = pub('calendar.json'), start = indexOf(cal, DAY)
-const { coords, nodes } = cityFrom(data, PER_AGENT, 'village', day => kindAt(cal, start + day))
+const { coords } = cityFrom(data, PER_AGENT, 'village', day => kindAt(cal, start + day))
 const roadJson = pub('road-graph.json'), net = networks(roadJson, pub('mrt-graph.json'))
 const file = readFileSync(new URL('../web/public/road-routes.bin', import.meta.url))
 const routes = readRoutes(new Uint16Array(file.buffer, file.byteOffset, file.byteLength / 2), net.road)
 if (!routes) throw new Error('road-routes.bin is missing or for another road graph: run `pnpm routes` in web/')
 const node = new Map<number, number>(), at = (v: number) => node.get(v) ?? node.set(v, roadNode(net, coords, v)).get(v)!
-const workAt = workNodes(net, coords, nodes, pub('jobs.json'))
+const workAt = workNodes(net, coords, true)
 const metres: number[] = roadJson.edges.map((e: number[]) => e[2])
 
 // A bucket (the roads of one class in a cell) is in 台北市 when the village nearest to the first node of its first edge is.

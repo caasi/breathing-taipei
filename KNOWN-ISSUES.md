@@ -10,7 +10,7 @@
 
 - **What:** 110年工業及服務業普查村里檔 (the industry and commerce census of 2021, by village), at the Survey Research Data Archive (SRDA) of Academia Sinica: AA300009, released on 2024-08-15 (https://srda.sinica.edu.tw/search/metadata/detail/AA300009). AA300008 is the same file for 2016. Fields: `sh7` (village code), `ind` (industry), `v1` (establishments), `v2` (employees). A cell with 3 or fewer units shows (D).
 - **Why the project cannot get it:** only members of Academia Sinica can download it, only for academic research, and the data must not go to other people. A script cannot download it. Not checked: the agent read the metadata page, not the terms of the application.
-- **What the model does instead:** it spreads the jobs of a district over its villages, half by MRT arrivals and half by residents (`web/src/sim/city.ts`). So a job centre such as 內湖科技園區 is not concentrated in its villages.
+- **What the model does instead:** it spreads the jobs of a district over its villages, half by MRT arrivals and half by residents (`web/src/sim/city.ts`). Only 內湖科技園區 has its jobs placed by data (`jobs` in `villages2.json`, from its company list and a count of 108年底), because it is the one job centre with a free company list with coordinates. Every other job centre, for example 南港軟體園區 or 信義計畫區, is spread by the rule above.
 - **Free data that is near it:** 臺北市內湖科技園區廠商名錄 (the company list of 內科, with coordinates and no employees), on data.taipei. 108年底: 166,322 employees in 內科, from 臺北市產業發展局 (checked).
 
 ### Telecom population by village

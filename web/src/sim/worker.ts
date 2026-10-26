@@ -8,7 +8,7 @@ import { FPS, clockAt, respeed, stepsTo, type Clock } from './pace.ts'
 import { cityFrom, MODES } from './city.ts'
 import { networks, readRoutes, roadNode, routeKey, tripPaths, type Batch, type Routes } from './paths.ts'
 import type { GraphJson } from './route.ts'
-import { workNodes, type JobsJson } from './jobs.ts'
+import { workNodes } from './jobs.ts'
 import { gridOf, levels, liveOf, roadUse, take as takeTraffic, type Grid, type Live, type RoadUse } from './traffic.ts'
 
 export type Level = 'district' | 'village'
@@ -65,7 +65,7 @@ const JAM_MINUTES = 15, JAM_MS = 250
 // from slowness 0.43). ponytail: at most one jam event a take, and one a day for each character; by eye.
 const JAM_FROM = 1 + Math.round(0.43 * 254), ANGRY_FROM = 1 + Math.round(0.75 * 254)
 let onJam: ((agent: number, edge: number, level: number) => void) | undefined
-const data = Promise.all(['od2.json', 'villages2.json', 'signal.json', 'road-graph.json', 'mrt-graph.json', 'night.json', 'calendar.json', 'people.json', 'road-names.json', 'jobs.json'].map(getJson))
+const data = Promise.all(['od2.json', 'villages2.json', 'signal.json', 'road-graph.json', 'mrt-graph.json', 'night.json', 'calendar.json', 'people.json', 'road-names.json'].map(getJson))
 /** The name of each road edge, from scripts/names.py: edge[e] indexes names, or is -1. */
 type RoadNames = { names: string[]; edge: number[] }
 const net = data.then(([, , , road, mrt]) => networks(road, mrt))
@@ -175,14 +175,14 @@ const draw = (world: World, graphs: Awaited<typeof net>) => {
   return trips
 }
 // Every road traveller of the run, on the paths of the routes file. Without the file there is no traffic.
-const traffic = (world: World, graphs: Awaited<typeof net>, roadJson: GraphJson, codes: string[], jobs: JobsJson, roadNames: RoadNames) => {
+const traffic = (world: World, graphs: Awaited<typeof net>, roadJson: GraphJson, village: boolean, roadNames: RoadNames) => {
   use = undefined; jamSlot = -1; jam = new Uint8Array(0)
   routes.then(known => {
     if (!known || world !== w) return
     const node = new Map<number, number>(), at = (v: number) => node.get(v) ?? node.set(v, roadNode(graphs, coords, v)).get(v)!
     const metres = Float32Array.from(roadJson.edges, e => e[2])
     load = new Float32Array(metres.length); grid = gridOf(roadJson, roadNames.edge); live = liveOf(roadJson, grid); extra.cellKeys = grid.keys
-    const workAt = workNodes(graphs, coords, codes, jobs)
+    const workAt = workNodes(graphs, coords, village)
     use = roadUse(world, (i, leg, v) => known.get(routeKey(at(world.home[i]), leg ? at(world.play[i]) : workAt(i, world.work[i]), v)), metres)
   }, () => {})
 }
@@ -206,7 +206,7 @@ onmessage = async (e: MessageEvent<ToWorker>) => {
   // Any failure while starting (loading, building the city, sampling) goes to the page.
   // The async handler would otherwise reject without a message, and onerror does not see a rejection.
   try {
-    const [[od2, villages, signal, roadJson, , night, cal, people, roadNames, jobs], graphs] = await Promise.all([data, net])
+    const [[od2, villages, signal, roadJson, , night, cal, people, roadNames], graphs] = await Promise.all([data, net])
     onJam = undefined
     const c = cityFrom({ ...od2, villages, signal, night }, m.perAgent, m.level, day => kindAt(cal as Calendar, m.startDay + day))
     w = init(c.city, m.seed)
@@ -251,7 +251,7 @@ onmessage = async (e: MessageEvent<ToWorker>) => {
     // The plans under way at day 0 were made during init, which calls no onPlan: pass them through the same filter.
     for (const i of w.movers) w.onPlan(i)
     coords = c.coords
-    traffic(w, graphs, roadJson, c.nodes, jobs, roadNames as RoadNames)
+    traffic(w, graphs, roadJson, m.level === 'village', roadNames as RoadNames)
     extra = { start: m.start, nodes: c.nodes, homes: Uint32Array.from(c.city.homes), coords: c.coords, trips: draw(w, graphs) }
   } catch (err) {
     w = undefined

@@ -20,7 +20,6 @@ The app reads the files in `web/public/`. This file lists the source, the licens
 | `road-graph.json` | Road graph built from bus route shapes | G | Open Government Data License (Taipei file not confirmed) |
 | `road-lines.json` | The real shape of each edge of `road-graph.json`, for the map | G | Open Government Data License (Taipei file not confirmed) |
 | `road-names.json` | The name of each edge of `road-graph.json`, for the jam events | H | ODbL |
-| `jobs.json` | The company spots of the villages of 內湖科技園區, where their commuters go | (data.taipei) | Not checked (see `villages.py` in "Figures in the code") |
 | `mrt-graph.json` | MRT graph built from OpenStreetMap lines and station positions | B, H | ODbL 1.0 (lines) and Open Government Data License (station positions) |
 | `transit.json` | MRT, light rail, railway, high speed rail, motorway and trunk lines, stations, and airport | H | ODbL 1.0 |
 | `night.json` | Businesses of the night-time groups in each village | J, F | Open Government Data License |
@@ -119,7 +118,7 @@ Note: The data.gov.tw entry for the Taipei shape file was not found. The license
 
 - 166,322 employees at the end of 108 (2019): 臺北市政府產業發展局, 「建構臺北科技走廊，提升園區發展機能」 (https://doed.gov.taipei/News_Content.aspx?n=7A86CE12E01A9E9E&sms=F6E4BC790FC874BE&s=1183BAE25BBFB9CB), checked on 2026-10-27. No newer official count was found (KNOWN-ISSUES.md).
 - The employees are spread over the villages of 內湖區 by the number of companies of the company list in each: 2,154 in 港墘里 (63000100005), 1,600 in 63000100001, 1,365 in 63000100030, 568 in 63000100002, 3 in two other villages, and 2 outside 內湖區 (left out). Each company counts the same, which is a guess: the list has no employees. Not checked: the license of the company list. An agent search saw only 「公開」 on its data.taipei page, with no named license; `villages2.json` keeps only the counts by village.
-- The commuters to a village of the park go to one company spot each (`jobs.json`: the companies of the list on a grid of about 50 m, 286 spots), drawn by the companies of each spot and fixed by the agent (`web/src/sim/jobs.ts`); their road load ends at the street node nearest to the spot. The dots still go to the road node of the village.
+- The road load of a trip to work ends at one of up to 4 street nodes of the village (`ENDS` in `web/src/sim/jobs.ts`, a guess), fixed by the agent; each street node belongs to the nearest village centre. The same rule holds for every village, so that the trips go into the streets of a village and not only to the node nearest its centre. The dots still go to the road node of the village.
 - In a district with known jobs, the known jobs take their share of the morning arrivals of the district (the OD of 05:00 to 11:59), at most all of them; the rest of the arrivals are spread as before. The model has 120,125 morning arrivals in 內湖區, fewer than 166,322, so all of them go to the villages of the park, and the other villages of 內湖區 get no commuters.
 - 台塑企業 moved about 4,600 employees to its head office at 南京東路六段380號 in 2023 (工商時報, 2023-10-23). They are not in the model: the village of the address is not known yet.
 
@@ -198,7 +197,6 @@ Some scripts read a file that another script writes into `web/public/`:
 | `transit.json` | `transit.py` | (none) |
 | `road-graph.json`, `road-lines.json`, `mrt-graph.json` | `graphs.py` | (none) |
 | `road-names.json` | `names.py` | `road-graph.json`, `road-lines.json` |
-| `jobs.json` | `villages.py` | (none) |
 | `calendar.json` | `days.py` | (none) |
 | `od2.json` | `od.py` | `towns.json` |
 | `people.json` | `people.py` | `villages2.json` |

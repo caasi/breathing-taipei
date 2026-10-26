@@ -30,13 +30,13 @@ for (const level of ['village', 'district'] as const) {
   const c = cityFrom(data, PER_AGENT, level, () => 0), w = init(c.city, SEED)
   const node = new Map<number, number>()
   const at = (v: number) => node.get(v) ?? node.set(v, roadNode(net, c.coords, v)).get(v)!
-  const workAt = workNodes(net, c.coords, c.nodes, pub('jobs.json'))
+  const workAt = workNodes(net, c.coords, level === 'village')
   const want = (home: number, b: number, mode: number) => {
     if (!ROAD_MODES.has(mode)) return
     const a = at(home)
     if (a !== b) (wanted.get(a) ?? wanted.set(a, new Set()).get(a)!).add(b)
   }
-  // The dots go to the road node of the village; the road load goes to the company spot of the agent (jobs.ts).
+  // The dots go to the road node of the village; the road load goes to the street node of the agent (jobs.ts).
   for (const i of w.movers) {
     want(w.home[i], at(w.work[i]), w.mode[i]); want(w.home[i], workAt(i, w.work[i]), w.mode[i]); want(w.home[i], at(w.play[i]), w.playMode[i])
   }
