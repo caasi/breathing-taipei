@@ -5,18 +5,20 @@
  *   node --experimental-strip-types scripts/traffic.ts
  *
  * It runs the app's model (seed 42, 10 people per agent, village level) on the workday 2026-10-27 and takes the
- * people on the road of each cell every 15 minutes. The congestion level is the extra travel time over free flow,
- * averaged over the people on the roads of the cells of 台北市. The routes follow the traffic (traffic.ts take), so
+ * traffic every 15 minutes, as the app does. The congestion level is that of TomTom: the extra travel time of the
+ * trips over their time with no jam, summed over the trips (so a long trip weighs more, as TomTom counts per 10 km).
+ * The trips are the road trips (bus, scooter, car) to work in 台北市 that leave home in the morning hours, and the
+ * trips home from work in 台北市 that leave in the evening hours. The traffic changes the trips (traffic.ts take), so
  * the level is not a simple power of the capacity: the script bisects the capacity until the morning level is within
  * 0.5 points of TomTom (the level falls as the capacity grows).
  * It prints the fitted capacity and the levels of both peaks with it.
  */
 import { readFileSync } from 'node:fs'
-import { init, advance } from '../web/src/sim/core.ts'
+import { init, advance, now, WORK } from '../web/src/sim/core.ts'
 import { cityFrom } from '../web/src/sim/city.ts'
 import { kindAt, indexOf, type Calendar } from '../web/src/sim/calendar.ts'
-import { networks, readRoutes, roadNode } from '../web/src/sim/paths.ts'
-import { CAPACITY, cellLoad, extraTime, gridOf, liveOf, roadUse, take } from '../web/src/sim/traffic.ts'
+import { networks, readRoutes, ROAD_MODES, roadNode } from '../web/src/sim/paths.ts'
+import { CAPACITY, gridOf, liveOf, roadUse, take } from '../web/src/sim/traffic.ts'
 import { workNodes } from '../web/src/sim/jobs.ts'
 
 // TomTom Traffic Index 2025, 台北市: morning rush hour 64.6%, evening rush hour 92%.
@@ -34,37 +36,41 @@ if (!routes) throw new Error('road-routes.bin is missing or for another road gra
 const node = new Map<number, number>(), at = (v: number) => node.get(v) ?? node.set(v, roadNode(net, coords, v)).get(v)!
 const workAt = workNodes(net, coords, true)
 const metres: number[] = roadJson.edges.map((e: number[]) => e[2])
-
-// A bucket (the roads of one class in a cell) is in 台北市 when the village nearest to the first node of its first edge is.
-const villages: { town: string; lon: number; lat: number }[] = data.villages, grid = gridOf(roadJson, pub('road-names.json').edge)
-const taipei = new Array<boolean | undefined>(grid.km.length)
-roadJson.edges.forEach(([a]: number[], e: number) => {
-  if (taipei[grid.cellOf[e]] !== undefined) return
-  let best = 0, d = Infinity
-  villages.forEach((v, i) => { const x = (v.lon - roadJson.lon[a]) ** 2 + (v.lat - roadJson.lat[a]) ** 2; if (x < d) { d = x; best = i } })
-  taipei[grid.cellOf[e]] = villages[best].town.startsWith('台北市')
-})
+const villages: { town: string }[] = data.villages, grid = gridOf(roadJson, pub('road-names.json').edge)
+const inTaipei = (v: number) => villages[v].town.startsWith('台北市')
 
 const run = (capacity: number) => {
   const c = cityFrom(data, PER_AGENT, 'village', day => kindAt(cal, start + day)), w = init(c.city, SEED)
   const live = liveOf(roadJson, grid)
   const use = roadUse(w, routes, (i, leg) => [at(w.home[i]), leg ? at(w.play[i]) : workAt(i, w.work[i])], live.time)
-  const load = new Float32Array(metres.length), sums = new Map<number, [number, number]>() // hour -> [people x extra, people]
+  const load = new Float32Array(metres.length)
+  // Per trip, seen before it leaves: [planned start, time with no jam]; per peak: [extra time, time with no jam].
+  const trips = [new Map<number, number[]>(), new Map<number, number[]>()], sums = [[0, 0], [0, 0]]
+  const peaks = [MORNING.hours, EVENING.hours]
+  const done = (back: number, i: number, end: number) => {
+    const seen = trips[back].get(i)
+    if (seen?.length === 2) { seen.push(end); sums[back][0] += end - seen[0] - seen[1]; sums[back][1] += seen[1] }
+  }
+  // An agent home again gets its next plan at once (core.ts advance), so the end of a trip home is seen here.
+  w.onPlan = i => done(1, i, w.done)
   for (let slot = 0; slot < 96; slot++, advance(w, 15)) {
     take(w, use, load, live, undefined, capacity)
-    const hour = Math.floor(slot / 4)
-    if (!MORNING.hours.includes(hour) && !EVENING.hours.includes(hour)) continue
-    const s = sums.get(hour) ?? [0, 0]
-    cellLoad(load, grid).forEach((p, k) => { if (p && taipei[k]) { s[0] += p * extraTime(p, grid.km[k], capacity * grid.lanes[k]); s[1] += p } })
-    sums.set(hour, s)
+    const t = now(w)
+    for (const i of w.movers) {
+      if (w.dest[i] !== WORK || !ROAD_MODES.has(w.mode[i]) || !inTaipei(w.work[i])) continue
+      for (const back of [0, 1]) {
+        const start = back ? w.ret[i] : w.dep[i], end = back ? w.ret[i] + w.dur2[i] : w.dep[i] + w.dur1[i], seen = trips[back].get(i)
+        if (!seen && t < start && start < 1440 && peaks[back].includes(Math.floor(start / 60))) trips[back].set(i, [start, end - start])
+        else if (!back && t >= end) done(0, i, end)
+      }
+    }
   }
-  const level = (hours: number[]) => { let x = 0, n = 0; for (const h of hours) { x += sums.get(h)![0]; n += sums.get(h)![1] } return x / n }
-  return { morning: level(MORNING.hours), evening: level(EVENING.hours) }
+  return { morning: sums[0][0] / sums[0][1], evening: sums[1][0] / sums[1][1] }
 }
 let low = CAPACITY / 4, high = CAPACITY * 4, capacity = CAPACITY, got = run(capacity)
 for (let k = 0; k < 16 && Math.abs(got.morning - MORNING.level) > 0.005; k++) {
   if (got.morning > MORNING.level) low = capacity; else high = capacity
   capacity = Math.sqrt(low * high); got = run(capacity)
 }
-console.log(`capacity ${capacity.toFixed(1)} people per km of street (CAPACITY is ${CAPACITY})`)
+console.log(`capacity ${capacity.toFixed(1)} PCU per km of street (CAPACITY is ${CAPACITY})`)
 console.log(`with it: morning ${(100 * got.morning).toFixed(1)}% (TomTom ${(100 * MORNING.level).toFixed(1)}%), evening ${(100 * got.evening).toFixed(1)}% (TomTom ${(100 * EVENING.level).toFixed(1)}%)`)
