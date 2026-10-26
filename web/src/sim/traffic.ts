@@ -30,12 +30,12 @@ export const PCU = [0, 2 / 20, 0.4 / 1.2, 1 / 1.4, 0, 0]
  * ((2j + leg) x 2 + back) x VARIANTS + v is the variant v (paths.ts) of its trip to work (leg 0) or to its day-off
  * place (leg 1), on the way there (back 0) or home (back 1), each listed in the order it is driven. Per mover, for the
  * trip under way: pick its variant, since the minute it started (it moves when the trip is stretched), free its
- * minutes with no jam, path the index of its path in paths and at the edge it is on at the last take; on: the movers
- * on the road at the last take.
+ * minutes with no jam, path the index of its path in paths, at the edge it is on at the last take and left the share
+ * of that edge still to drive; on: the movers on the road at the last take.
  */
 export type RoadUse = {
   paths: (Uint16Array | undefined)[]; cum: Map<Uint16Array, Float32Array>
-  pick: Int8Array; since: Int32Array; free: Float32Array; path: Int32Array; at: Int32Array; on: number[]
+  pick: Int8Array; since: Int32Array; free: Float32Array; path: Int32Array; at: Int32Array; left: Float32Array; on: number[]
 }
 
 /**
@@ -54,7 +54,7 @@ export const roadUse = (w: World, routes: Routes, ends: (agent: number, leg: num
       ;[there, back].forEach((es, k) => { if (es) { add(es); paths[((2 * j + leg) * 2 + k) * VARIANTS + v] = es } })
     }
   }))
-  return { paths, cum, pick: new Int8Array(n), since: new Int32Array(n).fill(-(2 ** 31)), free: new Float32Array(n), path: new Int32Array(n), at: new Int32Array(n), on: [] }
+  return { paths, cum, pick: new Int8Array(n), since: new Int32Array(n).fill(-(2 ** 31)), free: new Float32Array(n), path: new Int32Array(n), at: new Int32Array(n), left: new Float32Array(n), on: [] }
 }
 
 /** What a driver who follows the live traffic weighs a path by: the free time of each edge, and the slowness of its bucket. */
@@ -79,10 +79,16 @@ const choose = (w: World, use: RoadUse, i: number, base: number, mode: number, l
   return best
 }
 
-/** The travel time of a path from its edge `from` to its end over its free time, by the slowness of `live`. */
-const slowerOn = (es: Uint16Array, from: number, live: Live) => {
+/**
+ * The travel time of a path from its edge `from` to its end over its free time, by the slowness of `live`; `left` is
+ * the share of edge `from` still to drive.
+ */
+export const slowerOn = (es: ArrayLike<number>, from: number, live: Live, left = 1) => {
   let free = 0, jam = 0
-  for (let k = from; k < es.length; k++) { const f = live.time[es[k]]; free += f; jam += f * live.slower[live.grid.cellOf[es[k]]] }
+  for (let k = from; k < es.length; k++) {
+    const f = live.time[es[k]] * (k === from ? left : 1)
+    free += f; jam += f * live.slower[live.grid.cellOf[es[k]]]
+  }
   return free ? jam / free : 1
 }
 
@@ -111,7 +117,8 @@ export const loadNow = (w: World, use: RoadUse, out: Float32Array, onRoad?: (age
     const c = use.cum.get(es)!, d = p * c[c.length - 1]
     let lo = 0, hi = c.length - 1
     while (lo < hi) { const m = (lo + hi) >> 1; if (c[m] < d) lo = m + 1; else hi = m }
-    use.at[j] = lo
+    const before = lo ? c[lo - 1] : 0
+    use.at[j] = lo; use.left[j] = c[lo] > before ? (c[lo] - d) / (c[lo] - before) : 1
     out[es[lo]] += w.city.perAgent * PCU[leg ? w.playMode[i] : w.mode[i]]
     onRoad?.(i, es[lo])
   }
@@ -214,7 +221,7 @@ const retime = (w: World, use: RoadUse, live: Live) => {
   const t = now(w)
   for (const j of use.on) {
     const i = w.movers[j], out1 = t < w.dep[i] + w.dur1[i], start = out1 ? w.dep[i] : w.ret[i], dur = out1 ? w.dur1[i] : w.dur2[i]
-    stretch(w, i, t + (1 - (t - start) / dur) * use.free[j] * slowerOn(use.paths[use.path[j]]!, use.at[j], live))
+    stretch(w, i, t + (1 - (t - start) / dur) * use.free[j] * slowerOn(use.paths[use.path[j]]!, use.at[j], live, use.left[j]))
     use.since[j] = out1 ? w.dep[i] : w.ret[i]
   }
 }

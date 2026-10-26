@@ -5,7 +5,7 @@ import { init, now, type City } from './core.ts'
 import { cityFrom } from './city.ts'
 import { networks } from './paths.ts'
 import { workNodes } from './jobs.ts'
-import { cellKey, cellMax, extraTime, gridOf, levels, stepper } from './traffic.ts'
+import { cellKey, cellMax, extraTime, gridOf, levels, slowerOn, stepper, type Live } from './traffic.ts'
 import type { GraphJson } from './route.ts'
 
 const pub = (f: string) => JSON.parse(readFileSync(new URL(`../../public/${f}`, import.meta.url), 'utf8'))
@@ -68,4 +68,11 @@ test('a trip to work ends at a fixed street node of its village, at most 4 per v
     for (const u of ends) expect(net.road.street[u]).toBe(1)
     expect(at(7, v)).toBe(at(7, v))
   }
+})
+
+test('the slowness of the rest of a path counts only the part of the current edge still to drive', () => {
+  // Two edges of the same free time, at 4 and 1 times it; 90% of the first is driven: (0.1 x 4 + 1 x 1) / 1.1.
+  const live = { grid: { cellOf: Int32Array.from([0, 1]) }, time: Float64Array.from([10, 10]), slower: Float64Array.from([4, 1]) } as unknown as Live
+  expect(slowerOn([0, 1], 0, live, 0.1)).toBeCloseTo(1.4 / 1.1, 9)
+  expect(slowerOn([0, 1], 0, live)).toBeCloseTo(2.5, 9)
 })
