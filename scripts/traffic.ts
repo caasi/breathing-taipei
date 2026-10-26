@@ -65,6 +65,8 @@ const run = (capacity: number) => {
       for (const back of [0, 1]) {
         const start = back ? w.ret[i] : w.dep[i], end = back ? w.ret[i] + w.dur2[i] : w.dep[i] + w.dur1[i], seen = trips[back].get(i)
         if (!seen && t < start && start < 1440 && peaks[back].includes(Math.floor(start / 60))) trips[back].set(i, [start, end - start])
+        // A jam on the way to work can move the leaving time before the trip home starts: count from the real start.
+        else if (back && seen?.length === 2 && t < start) { seen[0] = start; seen[1] = end - start }
         else if (!back && t >= end) done(0, i, end)
       }
     }
