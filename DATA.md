@@ -23,7 +23,7 @@ The app reads the files in `web/public/`. This file lists the source, the licens
 | `mrt-graph.json` | MRT graph built from OpenStreetMap lines and station positions | B, H | ODbL 1.0 (lines) and Open Government Data License (station positions) |
 | `transit.json` | MRT, light rail, railway, high speed rail, motorway and trunk lines, stations, and airport | H | ODbL 1.0 |
 | `night.json` | Businesses of the night-time groups in each village | J, F | Open Government Data License |
-| `road-routes.bin` (not in git, about 53.6 MB, 9.9 MB with `gzip -6`, on 2026-10-27) | Road paths of the app's run, made by `pnpm routes` before dev and build | G, and A to F and J through the model | Open Government Data License (Taipei shape file of G and source D not confirmed) |
+| `road-routes.bin` (not in git, about 53.7 MB, 9.9 MB with `gzip -6`, on 2026-10-27) | Road paths of the app's run, made by `pnpm routes` before dev and build | G, and A to F and J through the model | Open Government Data License (Taipei shape file of G and source D not confirmed) |
 | `calendar.json` | Each day from 2026-01-01 to 2034-12-31: workday, Saturday off or other day off, holiday name, lunar date, the solar term that starts that day, and the commemorative days and festivals that are not days off | K, L, M | Open Government Data License |
 | `people.json` | The top 20 surnames of each district by sex, and the 300 most common surnames of Taiwan | N, O, C, D | Open Government Data License |
 | `towns.json`, `villages2-topo.json` | District, county and village boundaries (TopoJSON). `towns.json` holds the 41 districts of the two cities from the `towns` object of `towns-10t.json`, and its whole `counties` object | F, I | MIT (package) and Open Government Data License (boundaries) |
