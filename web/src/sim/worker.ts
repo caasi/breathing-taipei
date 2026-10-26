@@ -9,7 +9,7 @@ import { cityFrom, MODES } from './city.ts'
 import { networks, readRoutes, roadNode, routeKey, tripPaths, type Batch, type Routes } from './paths.ts'
 import type { GraphJson } from './route.ts'
 import { workNodes } from './jobs.ts'
-import { gridOf, levels, liveOf, roadUse, take as takeTraffic, type Grid, type Live, type RoadUse } from './traffic.ts'
+import { gridOf, levels, liveOf, roadUse, stepper, take as takeTraffic, type Grid, type Live, type RoadUse } from './traffic.ts'
 
 export type Level = 'district' | 'village'
 export type ToWorker =
@@ -59,9 +59,10 @@ let idx = new Uint32Array(0) // agent of each sampled trip
 // The plan last sent for each sampled trip: a new plan always changes the departure, and a jam (traffic.ts) a leg.
 let sentDep = new Int32Array(0), sentDur1 = new Uint16Array(0), sentDur2 = new Uint16Array(0)
 let use: RoadUse | undefined, grid: Grid | undefined, live: Live | undefined, load = new Float32Array(0), jam = new Uint8Array(0)
-let jamSlot = -1, jamAt = -Infinity, trafficOn = false
-// The traffic is taken once per 15 simulated minutes and at most every 250 ms: one take costs 7 to 15 ms on a desktop.
-const JAM_MINUTES = 15, JAM_MS = 250
+let trafficOn = false, lastCells = new Uint8Array(0), jamRng = mulberry32(0)
+// The traffic is taken at each boundary of 15 simulated minutes, whatever the speed, so a seed gives the same run at
+// any speed. One take costs 7 to 15 ms on a desktop (2026-10-26), so at 8x (32 takes a second) it is the main cost.
+const JAM_MINUTES = 15
 // A jam event comes from a road traveller on an edge at least this slow (traffic.ts levels: 1 + 254 x slowness; red
 // from slowness 0.43). ponytail: at most one jam event a take, and one a day for each character; by eye.
 const JAM_FROM = 1 + Math.round(0.43 * 254), ANGRY_FROM = 1 + Math.round(0.75 * 254)
@@ -121,6 +122,22 @@ function* bothPaths(trips: Trips, coords: [number, number][], graphs: Awaited<ty
   }
 }
 
+/** Advances the model by `minutes`, and takes the traffic at each boundary of JAM_MINUTES that it reaches. */
+let stepWithTraffic = stepper(JAM_MINUTES, world => takeTrafficNow(world))
+
+const takeTrafficNow = (world: World) => {
+  if (!use || !grid || !live) return
+  const onRoad: number[] = []
+  const cells = takeTraffic(world, use, load, live, (i, e) => onRoad.push(i, e)), next = levels(load, grid, cells, new Uint8Array(load.length))
+  // The jam events need the traffic with the layer off too; the page gets the levels only while it shows them.
+  const changed = next.some((v, e) => v !== jam[e])
+  jam = next; lastCells = cells
+  if (trafficOn && changed) { extra.traffic = next; extra.cells = cells }
+  const stuck: number[] = []
+  for (let k = 0; k < onRoad.length; k += 2) if (next[onRoad[k + 1]] >= JAM_FROM) stuck.push(k)
+  if (stuck.length && onJam) { const k = stuck[Math.floor(jamRng() * stuck.length)]; onJam(onRoad[k], onRoad[k + 1], next[onRoad[k + 1]]) }
+}
+
 const frame = () => {
   // On a pause the clock stops, and the model goes on to it in steps of the last speed, at most MAX_FRAMES + 1 a
   // callback, so within a few callbacks the dots (on the clock) and the shown time (the model) agree. The model can end
@@ -135,7 +152,7 @@ const frame = () => {
   // paused page costs almost nothing. After a change of speed one frame goes out anyway: the page takes the worker
   // clock only from a frame of its latest change, and a frame from before it can have moved the model past its clock.
   if (n === 0 && !owed && !pending && !newEvents.length && !Object.keys(extra).length) return
-  for (let k = n; k > 0; k--) advance(w, step)
+  for (let k = n; k > 0; k--) stepWithTraffic(w, step)
   extra.replans = replans(w)
   const c = counts(w, MODES.length)
   const ms = performance.now() - t
@@ -147,17 +164,6 @@ const frame = () => {
     const b = pending.next()
     if (b.done) { pending = undefined; break }
     paths.push(b.value); routed += b.value.ks.length
-  }
-  const slot = Math.floor((w.day * 1440 + w.minute) / JAM_MINUTES)
-  if (use && grid && live && slot !== jamSlot && performance.now() - jamAt >= JAM_MS) {
-    jamSlot = slot; jamAt = performance.now()
-    const onRoad: number[] = []
-    const cells = takeTraffic(w, use, load, live, (i, e) => onRoad.push(i, e)), next = levels(load, grid, cells, new Uint8Array(load.length))
-    // The jam events need the traffic with the layer off too; the page gets the levels only while it shows them.
-    if (trafficOn && next.some((v, e) => v !== jam[e])) { jam = next; extra.traffic = next; extra.cells = cells }
-    const stuck: number[] = []
-    for (let k = 0; k < onRoad.length; k += 2) if (next[onRoad[k + 1]] >= JAM_FROM) stuck.push(k)
-    if (stuck.length && onJam) { const k = stuck[Math.floor(Math.random() * stuck.length)]; onJam(onRoad[k], onRoad[k + 1], next[onRoad[k + 1]]) }
   }
   const msg: FromWorker = { ...extra, paths, routed, minute: w.minute, day: w.day, counts: c.nodes, road: c.road, away: c.away, ms, events: newEvents, clock: clock.minute, at: performance.timeOrigin + t, since }
   newEvents = []
@@ -180,7 +186,7 @@ const draw = (world: World, graphs: Awaited<typeof net>) => {
 }
 // Every road traveller of the run, on the paths of the routes file. Without the file there is no traffic.
 const traffic = (world: World, graphs: Awaited<typeof net>, roadJson: GraphJson, village: boolean, roadNames: RoadNames) => {
-  use = undefined; jamSlot = -1; jam = new Uint8Array(0)
+  use = undefined; jam = new Uint8Array(0); lastCells = new Uint8Array(0); stepWithTraffic = stepper(JAM_MINUTES, takeTrafficNow)
   routes.then(known => {
     if (!known || world !== w) return
     const node = new Map<number, number>(), at = (v: number) => node.get(v) ?? node.set(v, roadNode(graphs, coords, v)).get(v)!
@@ -199,8 +205,8 @@ onmessage = async (e: MessageEvent<ToWorker>) => {
     since = m.at; owed = true
     return
   }
-  // A layer switched on gets the traffic of now at the next frame, also when the levels did not change since it was off.
-  if (m.type === 'traffic') { trafficOn = m.on; jamSlot = -1; jam = new Uint8Array(0); return }
+  // Showing the layer sends the traffic of the last take; it never adds a take, so the run does not depend on the toggle.
+  if (m.type === 'traffic') { trafficOn = m.on; if (trafficOn && jam.length) { extra.traffic = jam; extra.cells = lastCells }; return }
   if (m.type === 'sample') { every = m.every; if (w) net.then(g => { if (w) extra = { ...extra, trips: draw(w, g) } }); return }
   // The old world stops now. The clock of the new run stands at minute 0 until the page is ready for it and sends a
   // speed, as the clock of the page does.
@@ -211,7 +217,7 @@ onmessage = async (e: MessageEvent<ToWorker>) => {
   // The async handler would otherwise reject without a message, and onerror does not see a rejection.
   try {
     const [[od2, villages, signal, roadJson, , night, cal, people, roadNames], graphs] = await Promise.all([data, net])
-    onJam = undefined
+    onJam = undefined; jamRng = mulberry32(m.seed + 3)
     const c = cityFrom({ ...od2, villages, signal, night }, m.perAgent, m.level, day => kindAt(cal as Calendar, m.startDay + day))
     w = init(c.city, m.seed)
     const world = w, districtOf = Array.from(w.home, h => (m.level === 'village' ? villages[h].town : c.nodes[h]))

@@ -1,4 +1,4 @@
-import { where, now, slowDown, ROAD, PLAY, GONE, type World } from './core.ts'
+import { advance, where, now, slowDown, ROAD, PLAY, GONE, type World } from './core.ts'
 import { ROAD_MODES, VARIANTS } from './paths.ts'
 import { BUS, SCOOTER } from './city.ts'
 import { freeTime, type GraphJson } from './route.ts'
@@ -157,6 +157,22 @@ export const slowness = (load: ArrayLike<number>, grid: Grid, capacity = CAPACIT
 /** Per bucket, 0 (free) to 255 (SLOWEST or slower). */
 export const cellLevels = (load: ArrayLike<number>, grid: Grid, capacity = CAPACITY) =>
   Uint8Array.from(slowness(load, grid, capacity), x => Math.round(255 * Math.min(1, (x - 1) / (SLOWEST - 1))))
+
+/**
+ * A step function that advances the model and calls onEdge at each boundary of `period` minutes that it reaches, once,
+ * whatever the steps: the same boundaries for one step of a day or for many small ones (a sum of fractional minutes can
+ * stop just short of a boundary and reach it again, so the last boundary is kept).
+ */
+export const stepper = (period: number, onEdge: (w: World) => void) => {
+  let last = -Infinity
+  return (w: World, minutes: number) => {
+    for (let left = minutes; left > 0;) {
+      const t = now(w), edge = (Math.floor(t / period) + 1) * period, d = Math.min(left, edge - t)
+      advance(w, d); left -= d
+      if (d === edge - t && edge !== last) { last = edge; onEdge(w) }
+    }
+  }
+}
 
 /** One take of the traffic: the load now, with the routes chosen by the last take, then the slowness for the next. */
 export const take = (w: World, use: RoadUse, load: Float32Array, live: Live, onRoad?: (agent: number, edge: number) => void, capacity = CAPACITY) => {
