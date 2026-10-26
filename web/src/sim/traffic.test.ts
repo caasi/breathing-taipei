@@ -22,7 +22,7 @@ test('the stepper takes each boundary once, at the same times for any steps', ()
     }
     const once = at([total]), many = at(steps)
     expect(many).toEqual(once)
-    expect(once.length).toBe(Math.floor(total / 15 + 1e-9))
+    expect(once.length).toBe(Math.floor(total / 15))
   }))
 })
 
