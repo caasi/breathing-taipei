@@ -71,7 +71,9 @@ for x in ways:
     pts = [(g["lon"], g["lat"]) for g in x["geometry"]]
     for a, b in zip(pts, pts[1:]):
         seg = (a, b, kind(x["tags"]), label(x["tags"]))
-        for c in {(math.floor(p[0] / CELL), math.floor(p[1] / CELL)) for p in (a, b, ((a[0] + b[0]) / 2, (a[1] + b[1]) / 2))}:
+        # Every cell along the segment: a segment can be over 1 km long, much longer than a cell.
+        n = math.ceil(max(abs(b[0] - a[0]), abs(b[1] - a[1])) / CELL) + 1
+        for c in {(math.floor((a[0] + (b[0] - a[0]) * k / n) / CELL), math.floor((a[1] + (b[1] - a[1]) * k / n) / CELL)) for k in range(n + 1)}:
             grid[c].append(seg)
 
 graph = json.load(open(sys.argv[2] + "/road-graph.json"))
