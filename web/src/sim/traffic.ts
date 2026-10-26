@@ -14,9 +14,10 @@ export const CAPACITY = 219
 const CELL = 0.005, ACROSS = 0.55
 // ponytail: the travel time over free time at which the colour of a road is at its end (dark red); chosen by eye.
 const SLOWEST = 1 / 0.3
-// ponytail: the share of drivers and bus riders who follow the live traffic (a map app) when they leave; the others take
-// their usual, fastest route. A guess. A scooter always takes the streets-only variant.
-const NAV = 0.6, SCOOTER = 2
+// ponytail: the share of drivers who follow the live traffic (a map app) when they leave; the others take their usual,
+// fastest route. A guess. A scooter always takes the streets-only variant. A bus keeps its fixed route (the fastest
+// variant stands in for it), and a jam still slows it.
+const NAV = 0.6, BUS = 1, SCOOTER = 2
 
 /**
  * The road paths of each mover j (its index in w.movers), with their cumulative free time (route.ts freeTime, which
@@ -49,6 +50,7 @@ export const liveOf = (road: GraphJson, grid: Grid): Live => ({
 
 const choose = (w: World, use: RoadUse, i: number, base: number, mode: number, live?: Live) => {
   if (mode === SCOOTER) return 1
+  if (mode === BUS) return 0
   // Its own hash, apart from the temper of the jam events (worker.ts).
   if (!live || (Math.imul(i + 1, 2246822519) >>> 0) / 2 ** 32 >= NAV) return 0
   let best = 0, least = Infinity
