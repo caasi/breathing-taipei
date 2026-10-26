@@ -179,8 +179,11 @@ for x in json.load(open(sys.argv[6]))["elements"]:
 cells = collections.defaultdict(list)
 mid = lambda a, b: ((a[0] + b[0]) / 2, (a[1] + b[1]) / 2)
 cell = lambda p: (math.floor(p[0] / OWC), math.floor(p[1] / OWC))
-for k, (a, b, _) in enumerate(oneways): cells[cell(mid(a, b))].append(k)
-near = lambda p, reach: [k for i in range(-reach, reach + 1) for j in range(-reach, reach + 1) for k in cells[(cell(p)[0] + i, cell(p)[1] + j)]]
+# Every cell along a segment: a segment can be about 1 km long, much longer than a cell (names.py does the same).
+for k, (a, b, _) in enumerate(oneways):
+    n = math.ceil(max(abs(b[0] - a[0]), abs(b[1] - a[1])) / OWC) + 1
+    for c in {cell((a[0] + (b[0] - a[0]) * i / n, a[1] + (b[1] - a[1]) * i / n)) for i in range(n + 1)}: cells[c].append(k)
+near = lambda p, reach: {k for i in range(-reach, reach + 1) for j in range(-reach, reach + 1) for k in cells[(cell(p)[0] + i, cell(p)[1] + j)]}
 heading = lambda a, b: math.atan2(b[1] - a[1], (b[0] - a[0]) * math.cos(math.radians(a[1])))
 turn = lambda h1, h2: abs((h1 - h2 + math.pi) % (2 * math.pi) - math.pi)
 def gap(p, a, b):
@@ -193,16 +196,16 @@ def gap(p, a, b):
 def paired(k):
     """A segment of a divided road: a segment of the same name runs the other way within PAIR_M of its middle."""
     a, b, name = oneways[k]
-    # Segments are indexed by their middle; a long one can have its middle far off, so look 6 cells (about 300 m) away.
+    # 3 cells (about 150 m) hold every segment within PAIR_M.
     return any(oneways[j][2] == name and gap(mid(a, b), *oneways[j][:2]) <= PAIR_M and turn(heading(a, b), heading(*oneways[j][:2])) > 2.4
-               for j in near(mid(a, b), 6) if j != k)
+               for j in near(mid(a, b), 3) if j != k)
 alone = {k for k in range(len(oneways)) if not paired(k)}
 streets_one = 0
 for a in list(road.adj):
     for b in list(road.adj[a]):
         if a > b or road.cls.get((a, b)) or (a, b) in road.one or (b, a) in road.one: continue
         p, h = mid(road.xy[a], road.xy[b]), heading(road.xy[a], road.xy[b])
-        best = min(((gap(p, *oneways[k][:2]), k) for k in near(p, 4) if k in alone), default=None)
+        best = min(((gap(p, *oneways[k][:2]), k) for k in near(p, 1) if k in alone), default=None)
         if not best or best[0] > NEAR_M: continue
         d = turn(h, heading(*oneways[best[1]][:2]))
         if d < math.pi / 6: road.one.add((a, b)); streets_one += 1
