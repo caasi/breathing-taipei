@@ -151,6 +151,8 @@ for x in ways:
     at_grade = t["highway"] == "trunk" and not t.get("bridge") and not t.get("tunnel")
     for i, (n, p) in enumerate(zip(x["nodes"], pts)):
         end = i in (0, len(pts) - 1) and uses[n] == 1
+        # ponytail: a free end looks up to 2 cells (about 240 m) away for a street, and an at-grade point only in its own
+        # cell; guesses. A larger reach joins a road to a street that it does not meet.
         v = street(p, 2) if end else street(p, 0) if at_grade else None
         if v is not None: road.link(osm[n], v, cls=3); road.raw.setdefault((osm[n], v), [p, road.xy[v]]); road.raw.setdefault((v, osm[n]), [road.xy[v], p])
 

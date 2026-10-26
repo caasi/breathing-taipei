@@ -10,8 +10,8 @@
  * each variant of paths.ts (VARIANTS) that differs from the variant before it. A way back is kept only when one of its
  * variants is not the way there reversed (one-way roads).
  * Run it again after a change to the road graph, the routing code, the model, or the app's seed or
- * PER_AGENT. The worker ignores a file for another road graph; for a stale model it routes the trips
- * that the file does not hold.
+ * PER_AGENT. The worker ignores a file for another road graph. For a stale model, the dots route the
+ * trips that the file does not hold, but those trips add no road load and no jams (traffic.ts roadUse).
  */
 import { readFileSync, writeFileSync } from 'node:fs'
 import { init } from '../web/src/sim/core.ts'

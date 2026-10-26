@@ -18,6 +18,8 @@ import json, math, sys, collections
 if __name__ == "__main__" and len(sys.argv) != 3:
     sys.exit(__doc__)
 
+# ponytail: the farthest that a named road can be from the middle of an edge and still name it; a guess. A larger value
+# names more edges, and more wrongly at a crossing.
 MAX_M = 30
 # The OSM highway kinds that may name an edge of each class (scripts/graphs.py: 0 street, 1 國道, 2 快速道路, 3 ramp).
 KINDS = {
