@@ -90,11 +90,13 @@ export function Travellers({ tracks, trips, clock, byMode, view, traffic }: Prop
       return b
     }
     const xyBuffer = buffer('xy', xy, 2), modeBuffer = buffer('mode', mode, 1), slowBuffer = buffer('slow', slow, 1)
-    let raf = 0, drawn = ''
+    // The levels arrive as a new array; a new one counts as a change, so a paused map still recolours its dots.
+    let raf = 0, drawn = '', levels: Uint8Array | undefined, turn = 0
     const draw = () => {
       raf = requestAnimationFrame(draw)
       const m = clock(), w = fit(gl, canvas), v = view$.current, cells = traffic.current
-      const key = `${m} ${w} ${canvas.height} ${v.k} ${v.x} ${v.y} ${mode$.current} ${routedBatches} ${cells?.level.length ?? 0}`
+      if (cells?.level !== levels) { levels = cells?.level; turn++ }
+      const key = `${m} ${w} ${canvas.height} ${v.k} ${v.x} ${v.y} ${mode$.current} ${routedBatches} ${turn}`
       // A paused clock with nothing new draws nothing; the canvas keeps the last picture.
       if (key === drawn) return
       drawn = key
