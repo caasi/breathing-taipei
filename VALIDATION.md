@@ -36,7 +36,7 @@ For a road section, the slowness at a peak is the median of its speed at night (
 | Evening | TDX | 1.10 | 1.49 | 2.81 | 3.71 |
 | Evening | Model | 1.12 | 1.47 | 2.28 | 3.29 |
 
-The model is a little slower than TDX in the morning. `BETA` and `MOST` were chosen to make these spreads match (DATA.md). The TDX speeds are mostly from vehicle detectors at one point of a road, so they leave out the wait at traffic lights. The slowness of the model leaves it out too.
+The model is a little slower than TDX in the morning. `BETA` and `MOST` were chosen to make these spreads match (DATA.md). The TDX speeds are mostly from vehicle detectors at one point of a road, so they leave out the wait at traffic lights. The slowness of a bucket in the model has no term for the lights either: they are in the free time of a trip.
 
 ## Hotspots
 

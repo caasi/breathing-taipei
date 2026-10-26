@@ -62,7 +62,7 @@ let sentDep = new Int32Array(0), sentDur1 = new Uint16Array(0), sentDur2 = new U
 let use: RoadUse | undefined, grid: Grid | undefined, live: Live | undefined, load = new Float32Array(0), jam = new Uint8Array(0)
 let trafficOn = false, lastCells = new Uint8Array(0), jamRng = mulberry32(0)
 // ponytail: the traffic is taken at each boundary of 15 simulated minutes (a guess; scripts/traffic.ts fits with the
-// same step), whatever the speed, so a seed gives the same run at any speed. One take costs 7 to 15 ms on a desktop (2026-10-26), so at 8x (32 takes a second) it is the main cost.
+// same step), whatever the speed, so a seed gives the same run at any speed. One take costs 7 to 26 ms at the morning peak in Node on an i7-7700 (2026-10-27), so at 8x (32 takes a second) it is the main cost.
 const JAM_MINUTES = 15
 // A jam event comes from a road traveller on an edge at least this slow (traffic.ts levels: 1 + 254 x the colour level
 // of levelsOf; red from 0.43, 2 times the free time; angry from 0.75, 2.75 times). ponytail: at most one jam event a take, and one a day for each character; by eye.

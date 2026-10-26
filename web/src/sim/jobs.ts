@@ -1,7 +1,7 @@
 import { roadNode, type networks } from './paths.ts'
 
 // ponytail: the most street nodes that the trips to work of one village end at; more spreads the load into more of its
-// streets, and grows the routes file (about 15 MB with one node per village). A guess.
+// streets, and grows the routes file (DATA.md gives its size). A guess.
 const ENDS = 4
 
 /**

@@ -1,7 +1,8 @@
 #!/bin/bash
 # Download TDX historical road traffic: one gzipped ndjson file per endpoint and day. TDX is paid by volume (a day of
 # 台北市 sections is about 0.5 GB), so the files stay outside the repository; DATA.md (source P) gives what we used.
-# Usage: TDX_CLIENT_ID=... TDX_CLIENT_SECRET=... sh scripts/tdx.sh OUT_DIR DATE...   (DATE: yyyy-MM-dd)
+# Usage: TDX_CLIENT_ID=... TDX_CLIENT_SECRET=... bash scripts/tdx.sh OUT_DIR DATE...   (DATE: yyyy-MM-dd)
+# It exits 1 when a file could not be downloaded in 3 tries.
 set -u
 OUT=$1; shift; mkdir -p "$OUT"
 token() {
@@ -21,9 +22,12 @@ get() { # name, path under Historical/Road/Traffic, date
     if [ "$code" = 200 ]; then mv "$f.part" "$f"; echo "ok $f"; sleep 13; return; fi
     echo "$code on $1 $3, try $try" >&2; rm -f "$f.part"; sleep 30; T=$(token)
   done
+  failed=1
 }
+failed=0
 for d in "$@"; do
   get section-taipei Section/City/Taipei "$d"; get shape-taipei SectionShape/City/Taipei "$d"
   get section-freeway Section/Freeway "$d"; get shape-freeway SectionShape/Freeway "$d"
   get live-taipei Live/City/Taipei "$d"; get live-freeway Live/Freeway "$d"
 done
+exit $failed

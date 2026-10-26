@@ -163,7 +163,7 @@ export function Traffic({ lines, proj, levels, fadeSeconds, view, running, shown
       return t
     }
     // Units 0 and 1: the slowness before and after the last update. Units 2 and 3: the baked cover and edges.
-    const rows = Math.ceil(lines.length / ROW), shown = new Uint8Array(rows * ROW), next = new Uint8Array(rows * ROW)
+    const rows = Math.ceil(lines.length / ROW), before = new Uint8Array(rows * ROW), next = new Uint8Array(rows * ROW)
     gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1)
     const slowness = [0, 1].map(unit => { const t = texture(unit); gl.texStorage2D(gl.TEXTURE_2D, 1, gl.R8, ROW, rows); return t })
     const baked = [2, 3].map(texture), frame = gl.createFramebuffer()
@@ -230,8 +230,8 @@ export function Traffic({ lines, proj, levels, fadeSeconds, view, running, shown
       if (t !== uploaded) {
         // ponytail: a new level during a fade starts from the old target, not from the colour on the screen, so it can
         // jump a little at a high speed. Keep the shown levels on the CPU if that shows.
-        shown.set(next); next.fill(0); next.set(t.subarray(0, next.length))
-        upload(0, shown); upload(1, next); uploaded = t; start = drawn ? now : -Infinity; settled = false
+        before.set(next); next.fill(0); next.set(t.subarray(0, next.length))
+        upload(0, before); upload(1, next); uploaded = t; start = drawn ? now : -Infinity; settled = false
       }
       // The dashes move while the clock runs, so the lines are drawn again each frame then; the glow only when the
       // colours change.
