@@ -19,6 +19,7 @@ The app reads the files in `web/public/`. This file lists the source, the licens
 | `signal.json` | Weekday daytime (07:00 to 13:00) and night population of each district | E | Open Government Data License |
 | `road-graph.json` | Road graph built from bus route shapes | G | Open Government Data License (Taipei file not confirmed) |
 | `road-lines.json` | The real shape of each edge of `road-graph.json`, for the map | G | Open Government Data License (Taipei file not confirmed) |
+| `road-names.json` | The name of each edge of `road-graph.json`, for the jam events | H | ODbL |
 | `mrt-graph.json` | MRT graph built from OpenStreetMap lines and station positions | B, H | ODbL 1.0 (lines) and Open Government Data License (station positions) |
 | `transit.json` | MRT, light rail, railway, high speed rail, motorway and trunk lines, stations, and airport | H | ODbL 1.0 |
 | `night.json` | Businesses of the night-time groups in each village | J, F | Open Government Data License |
@@ -126,6 +127,7 @@ Note: The data.gov.tw entry for the Taipei shape file was not found. The license
 - `CAPACITY`, 54 people per km of road in a cell: fitted by `scripts/traffic.ts`. On the workday 2026-10-27 (seed 42, 10 people per agent, village level), the extra travel time of the people on the roads of the cells of 台北市, from 07:00 to 09:45, is 64.6%. This is the morning congestion level of 台北市 in the TomTom Traffic Index 2025 (https://www.tomtom.com/traffic-index/city/taipei/, read on 2026-10-26). It is a scale factor, not a physical capacity: the road graph has the shapes of bus routes and the 國道 and 快速道路 of OSM, every road of a cell has the same capacity whatever its lanes, and the load holds only the agents of the model.
 - With this capacity, the evening level (17:00 to 19:45) is 11.5%. TomTom gives 92% for the evening. The model has fewer people on the road in the evening than in the morning, and it has no trips such as school runs or shopping.
 - The cell of the road load (`CELL`, 0.01 degrees, about 1 km): a guess. Each trip takes one shortest path, so on single edges only about 3,000 of the 29,404 edges had any load, and a few of them showed 14 to 25 times the free time (measured on 2026-10-26). The people per km of road in a cell stand in for the flow of BPR.
+- Jam events (`web/src/sim/worker.ts`), all by eye: at most one each take of the traffic, at most one each day for each character, from a road at red or worse (slowness 0.43). A character's temper is fixed by its index: about 55% go by the jam (angry from slowness 0.75, else stuck), 20% go blank, and on the way to work 17% work by phone and 8% take leave before noon (after noon they work by phone). Taking leave does not change the plan.
 - The colours of the map are chosen by eye: a free road is a faint white line, and a slow road turns orange at 1/0.7, red at 1/0.5 and dark red at 1/0.3 times the free time, with the colours between them blended.
 
 ## Processing
@@ -159,6 +161,7 @@ The raw downloads are in `data/`, which git ignores (678 MB on 2026-10-24). Only
 | `osm/rail.json` | H | `transit.py`, `graphs.py` |
 | `osm/stations.json`, `osm/airport.json`, `osm-hw/hw.json` | H | `transit.py` |
 | `osm-hw/highways.json` (query: `scripts/queries/highways.overpassql`) | H | `graphs.py` |
+| `osm/streets.json` (query: `scripts/queries/streets.overpassql`, OSM data of 2026-10-26T15:55:11Z) | H | `names.py` |
 | `bus/tpe_GetBusShape.gz`, `ntpc-transit/ntpc_GetBusShape.gz` | G | `graphs.py` |
 | `calendar/office-115.csv` | K | `days.py`, `od.py` |
 | `calendar/office-116.csv` | K | `days.py` |
@@ -180,6 +183,7 @@ Some scripts read a file that another script writes into `web/public/`:
 | `signal.json` | `telecom.py` | (none) |
 | `transit.json` | `transit.py` | (none) |
 | `road-graph.json`, `road-lines.json`, `mrt-graph.json` | `graphs.py` | (none) |
+| `road-names.json` | `names.py` | `road-graph.json`, `road-lines.json` |
 | `calendar.json` | `days.py` | (none) |
 | `od2.json` | `od.py` | `towns.json` |
 | `people.json` | `people.py` | `villages2.json` |
