@@ -16,16 +16,19 @@ export const FASTER = [1, 80 / 25, 60 / 25, 40 / 25]
 // or more edges meet; half of it goes to each edge that ends there, so the time of an edge does not depend on its way.
 export const SIGNAL = 25 / 3.6 * 30
 
-/** The free time of each edge, in metres of street: its length over its speed, and half a traffic light at each end where streets meet. */
-export const freeTime = (j: GraphJson) => {
+/**
+ * The free time of each edge, in metres of street: its length over its speed, and with `lights` (the road graph; the
+ * MRT has none) half a traffic light at each end where streets meet.
+ */
+export const freeTime = (j: GraphJson, lights = false) => {
   const deg = new Int32Array(j.lon.length)
   for (const [a, b] of j.edges) { deg[a]++; deg[b]++ }
   return Float64Array.from(j.edges, ([a, b, metres, , cls = 0]) =>
-    metres / FASTER[cls] + (cls ? 0 : ((deg[a] >= 3 ? 1 : 0) + (deg[b] >= 3 ? 1 : 0)) * SIGNAL / 2))
+    metres / FASTER[cls] + (cls || !lights ? 0 : ((deg[a] >= 3 ? 1 : 0) + (deg[b] >= 3 ? 1 : 0)) * SIGNAL / 2))
 }
 
-export const graphFrom = (j: GraphJson): Graph => {
-  const n = j.lon.length, deg = new Int32Array(n + 1), street = new Uint8Array(n), time = freeTime(j)
+export const graphFrom = (j: GraphJson, lights = false): Graph => {
+  const n = j.lon.length, deg = new Int32Array(n + 1), street = new Uint8Array(n), time = freeTime(j, lights)
   for (const [a, b] of j.edges) { deg[a + 1]++; deg[b + 1]++ }
   for (let i = 0; i < n; i++) deg[i + 1] += deg[i]
   const fill = deg.slice(0, n), m = deg[n]

@@ -1,6 +1,6 @@
 import { expect, test } from 'vitest'
 import fc from 'fast-check'
-import { freeTime, graphFrom, graphHash, tree, pathTo, type GraphJson } from './route.ts'
+import { freeTime, graphFrom, graphHash, tree, pathTo, SIGNAL, type GraphJson } from './route.ts'
 
 // Random connected-or-not graphs of 2-12 nodes; some edges carry in-between points.
 const graphArb = fc.integer({ min: 2, max: 12 }).chain(n => fc.record({
@@ -65,4 +65,11 @@ test('the graph hash changes when one coordinate, edge end, geometry point or we
   expect(graphHash(graphFrom({ ...j, edges: [[0, 1, 1, []], [1, 2, 1, [121.515, 25.016]]] }))).not.toBe(h)
   expect(graphHash(graphFrom({ ...j, edges: [[0, 1, 2, []], [1, 2, 1, [121.515, 25.015]]] }))).not.toBe(h)
   expect(graphHash(graphFrom(j))).toBe(h)
+})
+
+test('traffic lights add half a wait at each end where 3 or more streets meet, and only with lights', () => {
+  // A star: node 0 meets 1, 2 and 3; edge 3-4 is a 國道 (class 1), which never has lights.
+  const j: GraphJson = { lon: [0, 0, 0, 0, 0], lat: [0, 0, 0, 0, 0], edges: [[0, 1, 100, []], [0, 2, 100, []], [0, 3, 100, []], [3, 4, 320, [], 1]] }
+  expect(Array.from(freeTime(j))).toEqual([100, 100, 100, 100])
+  expect(Array.from(freeTime(j, true))).toEqual([100 + SIGNAL / 2, 100 + SIGNAL / 2, 100 + SIGNAL / 2, 100])
 })

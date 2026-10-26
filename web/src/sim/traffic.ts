@@ -44,7 +44,7 @@ export const roadUse = (w: World, pathOf: (agent: number, leg: number, variant: 
 /** What a driver who follows the live traffic weighs a path by: the free time of each edge, and the slowness of its bucket. */
 export type Live = { grid: Grid; time: Float64Array; slower: Float64Array }
 export const liveOf = (road: GraphJson, grid: Grid): Live => ({
-  grid, time: freeTime(road), slower: new Float64Array(grid.km.length).fill(1),
+  grid, time: freeTime(road, true), slower: new Float64Array(grid.km.length).fill(1),
 })
 
 const choose = (w: World, use: RoadUse, i: number, base: number, mode: number, live?: Live) => {

@@ -10,7 +10,7 @@ export const ROAD_MODES = new Set([1, 2, 3]) // bus, scooter, car follow bus rou
 export const KNOWN_BATCH = 2000
 
 export const networks = (road: GraphJson, mrt: GraphJson) => {
-  const r = graphFrom(road), m = graphFrom(mrt)
+  const r = graphFrom(road, true), m = graphFrom(mrt)
   // Stations a passenger can actually reach (one station is not joined to any OSM line).
   const any = Object.values(mrt.stations!)[0], reach = tree(m, any).dist
   const stations = new Set(Object.values(mrt.stations!).filter(s => Number.isFinite(reach[s])))
