@@ -132,17 +132,18 @@ const quads = (lines: RoadLines, proj: GeoProjection) => {
   return { xy: f(xy), normal: f(normal), across: f(across), edge: f(edge), along: f(along) }
 }
 
-type Props = { lines: RoadLines; proj: GeoProjection; levels: Uint8Array; fadeSeconds: number; view: View; running: boolean }
+type Props = { lines: RoadLines; proj: GeoProjection; levels: Uint8Array; fadeSeconds: number; view: View; running: boolean; shown: boolean }
 
 /**
  * The road network, with its slow edges (traffic.ts) in colour. The network is drawn into textures once per view; a
  * change of levels uploads one byte per edge, and the colours move from the levels before to the new ones over
  * `fadeSeconds`.
  */
-export function Traffic({ lines, proj, levels, fadeSeconds, view, running }: Props) {
+export function Traffic({ lines, proj, levels, fadeSeconds, view, running, shown }: Props) {
   const ref = useRef<HTMLCanvasElement>(null)
   const target = useRef(levels), view$ = useRef(view), fade = useRef(fadeSeconds), running$ = useRef(running)
-  target.current = levels; view$.current = view; fade.current = fadeSeconds; running$.current = running
+  const shown$ = useRef(shown)
+  target.current = levels; view$.current = view; fade.current = fadeSeconds; running$.current = running; shown$.current = shown
   const geometry = useMemo(() => quads(lines, proj), [lines, proj])
   useWebGL2(ref, { antialias: false }, (gl, canvas) => {
     const bake = program(gl, BAKE_VS, BAKE_FS), show = program(gl, SHOW_VS, SHOW_FS)
@@ -222,6 +223,8 @@ export function Traffic({ lines, proj, levels, fadeSeconds, view, running }: Pro
     }
     let raf = 0, network = '', drawn = '', uploaded: Uint8Array | undefined, start = -Infinity, settled = false, flow = 0, last = performance.now()
     const draw = () => {
+      // A hidden layer draws nothing, and draws again in full when it shows.
+      if (!shown$.current) { drawn = ''; last = performance.now(); raf = requestAnimationFrame(draw); return }
       const now = performance.now(), w = fit(gl, canvas), v = view$.current, t = target.current, key = `${w} ${canvas.height} ${v.k} ${v.x} ${v.y}`
       if (key !== network) { drawNetwork(v); network = key; drawn = '' }
       if (t !== uploaded) {
@@ -272,5 +275,5 @@ export function Traffic({ lines, proj, levels, fadeSeconds, view, running }: Pro
       ;[bake, show, down, up, glow].forEach(p => gl.deleteProgram(p))
     }
   }, [geometry])
-  return <canvas ref={ref} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none' }} />
+  return <canvas ref={ref} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none', visibility: shown ? 'visible' : 'hidden' }} />
 }
