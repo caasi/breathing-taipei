@@ -16,7 +16,7 @@ import { withPublic, type SimEvent } from './sim/events.ts'
 import { clockAt, respeed, READY_MS, type Clock } from './sim/pace.ts'
 import { hhmm, H2 } from './ui/format.ts'
 
-const SPEEDS = [0, 1, 2, 4, 8]
+const SPEEDS = [1, 2, 4, 8]
 // Simulated hours per second at 1x. Half an hour, so that the events do not come too fast and a slow device keeps up.
 const HOURS_AT_1X = 0.5
 const EVERY = [2, 5, 10, 20, 50]
@@ -42,6 +42,9 @@ const SIDE_PANEL = { position: 'absolute', top: 16, bottom: 16, overflowY: 'auto
 const SpinnerIcon = () => <span className="spin" style={{ display: 'inline-block', width: 24, height: 24 }}>
   <svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true" style={{ display: 'block' }}>
     <circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeDasharray={`${Math.PI * 9 * 1.5} ${Math.PI * 9 * 0.5}`} /></svg></span>
+// The play and pause marks of a video player, as tall as the text of the speed buttons.
+const PlayPause = ({ paused }: { paused: boolean }) => <svg viewBox="0 0 10 10" width="10" height="10" aria-hidden="true" style={{ display: 'block' }}>
+  {paused ? <path d="M1 0 L9 5 L1 10 Z" fill="currentColor" /> : <path d="M1 0 H4 V10 H1 Z M6 0 H9 V10 H6 Z" fill="currentColor" />}</svg>
 const HIDDEN = { position: 'absolute', width: 1, height: 1, overflow: 'hidden', clipPath: 'inset(50%)', whiteSpace: 'nowrap' } as const
 const ICON_BUTTON = { width: 40, height: 40, marginRight: 8, padding: 8, border: 0, borderRadius: 20, color: '#fff', cursor: 'pointer' }
 const InfoIcon = () => <svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true">
@@ -93,7 +96,9 @@ export function App() {
   // Display settings belong to this viewer, so they stay in this browser; the policies (usePolicies) are in the URL.
   const policies = usePolicies()
   // A pause is not restored: a viewer who comes back to a stopped page at 00:00 sees nothing move.
-  const [speed, setSpeed] = useStored('speed', 1, s => (s === '0' ? undefined : oneOf(SPEEDS)(s)))
+  const [speed, setSpeed] = useStored('speed', 1, oneOf(SPEEDS))
+  // Apart from the speed, and not stored: a page always opens running.
+  const [paused, setPaused] = useState(false)
   const [level, setLevel] = useStored<Level>('level', 'village', oneOf(['district', 'village'] as const))
   const [dot, setDot] = useStored('dot', 50, oneOf(EVERY.map(e => e * PER_AGENT)))
   const every = dot / PER_AGENT
@@ -123,7 +128,7 @@ export function App() {
   // The start of a new run whose clock stands until the page is ready: state for the icon, a ref for the logic, so a
   // click between a start and its render does not read an old value. deadline: when the run starts anyway.
   const [waiting, setWaiting] = useState<number>()
-  const waitRef = useRef<number>(), deadline = useRef(0), speedRef = useRef(speed)
+  const waitRef = useRef<number>(), deadline = useRef(0), speedRef = useRef(paused ? 0 : speed)
   // The clock of the dots (pace.ts), the model minute of the last message, and the change of speed that the clock uses.
   const last = useRef<Clock & { model: number; since: number }>({ minute: 0, at: 0, perMs: 0, model: 0, since: 0 })
   const toggle = (k: string) => setShow(s => { const n = new Set(s); n.has(k) ? n.delete(k) : n.add(k); return n })
@@ -215,7 +220,7 @@ export function App() {
   // goes on would only use the battery.
   const resume = () => startClock(document.hidden ? 0 : speedRef.current * HOURS_AT_1X)
   // While a new run waits, a change of speed is kept for its start.
-  useEffect(() => { speedRef.current = speed; if (waitRef.current === undefined) resume() }, [speed])
+  useEffect(() => { speedRef.current = paused ? 0 : speed; if (waitRef.current === undefined) resume() }, [speed, paused])
   useEffect(() => {
     const on = () => { if (waitRef.current === undefined) resume() }
     document.addEventListener('visibilitychange', on)
@@ -297,7 +302,9 @@ export function App() {
   const people = (pick: (node: string) => boolean) => padded(s ? nodes.reduce((sum, n, i) => pick(n) ? sum + s.counts[i] : sum, 0) * PER_AGENT : 0, 7)
   const settings = <>
     <h2 style={H2}>顯示</h2>
-    <p>{SPEEDS.map(v => <button key={v} onClick={() => setSpeed(v)} style={{ marginRight: 4, fontWeight: v === speed ? 'bold' : 'normal' }}>{v === 0 ? '暫停' : `${v}x`}</button>)}
+    <p><button onClick={() => setPaused(p => !p)} aria-label={paused ? '繼續' : '暫停'} title={paused ? '繼續' : '暫停'}
+      style={{ marginRight: 8, verticalAlign: 'middle', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 26, height: 21 }}><PlayPause paused={paused} /></button>
+      {SPEEDS.map(v => <button key={v} onClick={() => setSpeed(v)} style={{ marginRight: 4, verticalAlign: 'middle', fontWeight: v === speed ? 'bold' : 'normal' }}>{v}x</button>)}
       <span style={{ marginLeft: 12 }}>{(['district', 'village'] as Level[]).map(l => <button key={l} onClick={() => { if (l !== level) { if (onScreen && startDay !== undefined) setDayOffset(onScreen.runStart - startDay + (s?.day ?? 0)); setLevel(l) } }}
         style={{ marginRight: 4, fontWeight: l === level ? 'bold' : 'normal' }}>{l === 'district' ? '區' : '里'}</button>)}</span>
       <span style={NOTE}>1x 是每秒半小時。切換區、里會從當天 00:00 重新模擬。</span></p>
@@ -354,7 +361,7 @@ export function App() {
       {!faded && towns && projection && <Outline towns={towns} proj={projection} view={view} pop={pop} />}
       <div className="reveal" style={{ position: 'absolute', inset: 0, opacity: revealed ? 1 : 0, filter: revealed ? 'none' : 'blur(8px)' }}>
       {ready && <>
-        <HeatMap towns={towns} villages={villages} level={onScreen?.level ?? level} nodes={nodes} counts={s.counts} perAgent={PER_AGENT} proj={projection} transit={transit} show={layers} rate={rate} roads={roads} traffic={traffic} speed={speed * HOURS_AT_1X} view={view} />
+        <HeatMap towns={towns} villages={villages} level={onScreen?.level ?? level} nodes={nodes} counts={s.counts} perAgent={PER_AGENT} proj={projection} transit={transit} show={layers} rate={rate} roads={roads} traffic={traffic} speed={paused ? 0 : speed * HOURS_AT_1X} view={view} />
         {dots && dotTrips && <Travellers tracks={dotRun!.tracks} trips={dotTrips} clock={clock} byMode={byMode} traffic={cellTraffic} view={view} />}
       </>}
       </div>

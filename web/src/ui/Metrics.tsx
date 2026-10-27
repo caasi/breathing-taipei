@@ -21,11 +21,9 @@ export function Metrics({ ms }: { ms: number }) {
   const canvas = useRef<HTMLCanvasElement>(null), simMs = useRef(ms)
   simMs.current = ms
   useEffect(() => {
-    const c = canvas.current!, g = c.getContext('2d')!, dpr = devicePixelRatio, font = `${FONT_PX}px ui-monospace, monospace`
-    g.font = font
-    // Wide enough for the longest line; the text is drawn from the right, so it keeps its right edge.
-    const w = Math.ceil(g.measureText('SIM 999.9ms · FPS 999 ↓999↑999').width) + 2
-    c.width = w * dpr; c.height = (FONT_PX + 4) * dpr; c.style.width = `${w}px`; c.style.height = `${FONT_PX + 4}px`
+    const c = canvas.current!, g = c.getContext('2d')!, dpr = devicePixelRatio, font = `${FONT_PX}px ui-monospace, monospace`, h = FONT_PX + 4
+    // The canvas is as wide as its text, so the layout (index.html .top-row) alone puts it left or right.
+    let w = 0
     const frames: number[] = [], at: number[] = []
     // The time of an animation frame is the start of the frame, which can be before performance.now() of this effect.
     let raf = 0, last = -1, drawn = 0
@@ -36,14 +34,20 @@ export function Metrics({ ms }: { ms: number }) {
       if (frames.length && now - drawn >= REDRAW_MS) {
         drawn = now
         const recent = at.filter(t => t > now - 1000).length, sorted = frames.slice().sort((a, b) => a - b)
-        g.setTransform(dpr, 0, 0, dpr, 0, 0); g.clearRect(0, 0, w, FONT_PX + 4)
-        g.font = font; g.fillStyle = '#ccc'; g.textBaseline = 'top'; g.textAlign = 'right'
-        g.fillText(`SIM ${Math.min(999.9, simMs.current).toFixed(1).padStart(5, '0')}ms · FPS ${fps(recent)} ↓${fps(tail(sorted, true))}↑${fps(tail(sorted, false))}`, w - 1, 2)
+        const text = `SIM ${Math.min(999.9, simMs.current).toFixed(1).padStart(5, '0')}ms · FPS ${fps(recent)} ↓${fps(tail(sorted, true))}↑${fps(tail(sorted, false))}`
+        g.font = font
+        const tw = Math.ceil(g.measureText(text).width) + 2
+        // A new size clears the canvas and its state; it changes only when a figure gets another digit.
+        if (tw !== w) { w = tw; c.width = w * dpr; c.height = h * dpr; c.style.width = `${w}px`; c.style.height = `${h}px` }
+        g.setTransform(dpr, 0, 0, dpr, 0, 0); g.clearRect(0, 0, w, h)
+        g.font = font; g.fillStyle = '#ccc'; g.textBaseline = 'top'
+        g.fillText(text, 1, 2)
       }
       raf = requestAnimationFrame(tick)
     }
     raf = requestAnimationFrame(tick)
     return () => cancelAnimationFrame(raf)
   }, [])
-  return <canvas ref={canvas} aria-hidden style={{ display: 'block' }} />
+  // Empty until the first line; a canvas with no size is 300 x 150.
+  return <canvas ref={canvas} aria-hidden width={0} height={0} style={{ display: 'block' }} />
 }

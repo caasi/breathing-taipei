@@ -56,7 +56,7 @@ Display settings:
 
 | Key | Values | Default |
 |---|---|---|
-| `speed` | `0` (pause), `1`, `2`, `4`, `8`: 1 is half a simulated hour per second, 8 is 4 hours | `1` |
+| `speed` | `1`, `2`, `4`, `8`: 1 is half a simulated hour per second, 8 is 4 hours. The play and pause button is apart from it, and a pause is not kept | `1` |
 | `metrics` | `1` shows at the top of the map the time of the model in each frame of the worker, the frame rate, and the frame rate of the slowest and the fastest 1% of the frames of the last 10 s. `0` hides it | `0` |
 | `level` | `village`, `district`. A switch starts a new run at 00:00 of the day on the clock | `village` |
 | `color` | `rate`, `density` | `rate` |
