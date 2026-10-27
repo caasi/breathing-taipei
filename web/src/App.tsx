@@ -28,7 +28,6 @@ const LAYER_BOXES: [string, string][] = [...LAYERS, ['traffic', '路況']]
 const PER_AGENT = 10
 // Plans are made ahead of their departure, so the newest events are not all shown yet: keep more than the list shows.
 const KEEP_EVENTS = 3 * MAX_EVENTS
-// On a phone the clock sits right of the title, and a long holiday name wraps instead of running under it.
 // The English subtitle at this share of the title size is a little narrower than 台北鼓動; the user chose it by eye.
 const SUBTITLE_SCALE = 0.46
 const WINDOWS = [15, 30, 60, KEEP] // simulated minutes the change rate can look back; history keeps the longest
@@ -95,9 +94,8 @@ export function App() {
   const [s, setS] = useState<FromWorker>()
   // Display settings belong to this viewer, so they stay in this browser; the policies (usePolicies) are in the URL.
   const policies = usePolicies()
-  // A pause is not restored: a viewer who comes back to a stopped page at 00:00 sees nothing move.
   const [speed, setSpeed] = useStored('speed', 1, oneOf(SPEEDS))
-  // Apart from the speed, and not stored: a page always opens running.
+  // Apart from the speed, and not stored: a viewer who comes back to a stopped page at 00:00 would see nothing move.
   const [paused, setPaused] = useState(false)
   const [level, setLevel] = useStored<Level>('level', 'village', oneOf(['district', 'village'] as const))
   const [dot, setDot] = useStored('dot', 50, oneOf(EVERY.map(e => e * PER_AGENT)))
@@ -321,7 +319,7 @@ export function App() {
     <p>台北市 {people(inTaipei)} 人，新北市 {people(n => !inTaipei(n))} 人，路上 {padded(road.reduce((a, b) => a + b, 0) * PER_AGENT, 6)} 人，外地 {padded((s?.away ?? 0) * PER_AGENT, 6)} 人</p>
     <p style={{ fontSize: 13 }}>{MODES.map((m, k) => <span key={m} style={{ marginRight: 10, whiteSpace: 'nowrap', display: 'inline-block' }}>
       <span style={{ color: MODE_COLOURS[k] }}>●</span> {m} {padded((road[k] ?? 0) * PER_AGENT, 6)}</span>)}</p>
-    {dotTrips && <p>{padded(dotTrips.home.length, 6)} 點{routed < 2 * dotTrips.home.length ? `，路網計算中 ${padded(Math.floor(50 * routed / dotTrips.home.length), 2)}%` : ''}</p>}
+    {dotTrips && <p>追蹤 {padded(dotTrips.home.length, 6)} 個移動單位{routed < 2 * dotTrips.home.length ? `，路網計算中 ${padded(Math.floor(50 * routed / dotTrips.home.length), 2)}%` : ''}</p>}
     {/* The note under the text of the checkbox, not under the box. */}
     <p><label style={{ display: 'flex', alignItems: 'baseline' }}><input type="checkbox" checked={metrics} onChange={() => setMetrics(on => !on)} />
       <span>效能指標<span style={NOTE}>在右上角：模擬每幀的毫秒數、畫面 fps，以及最慢、最快 1% 幀的 fps。</span></span></label></p>

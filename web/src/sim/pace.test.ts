@@ -64,7 +64,7 @@ test('a step of 0 (no speed yet that was not a pause) makes no step', () => {
 })
 
 test('after a slow-down, the model goes on at the next callback, even when it was ahead of the clock', () => {
-  // At 8x the model can be up to half a step (8 minutes) ahead of the clock. At 1x a step is 2 minutes, so without
+  // At 8x the model can be up to half a step (8 minutes) ahead of the clock. At 1 simulated hour a second a step is 2 minutes, so without
   // moving the clock up to the model, the model would wait about 4 frames.
   const model = 100 + 0.4 * STEP, slow = 60 / 1000, c: Clock = { minute: 0, at: 0, perMs: 0 }
   respeed(c, 100, model, 0, slow)
