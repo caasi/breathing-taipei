@@ -143,7 +143,7 @@ const plan = (w: World, i: number, after: number): number => {
     const mode = gone ? w.mode[i] : w.playMode[i], end = (day + 1) * MINUTES_PER_DAY
     trip(w, i, gone ? GONE : PLAY, dep, to, mode, leave)
     // Leave for home early enough to be in by 24:00, when the two legs leave room for it. An earlier hour can have a
-    // longer way home, so the way home is timed again at each move. The time to leave only moves earlier, so this ends;
+    // longer way home (City.minutes takes the hour), so the way home is timed again at each move. The time to leave only moves earlier, so this ends;
     // it stops at the arrival at the place, where the two legs alone pass midnight.
     while (w.ret[i] + w.dur2[i] > end) {
       const ret = Math.max(dep + w.dur1[i], end - w.dur2[i])

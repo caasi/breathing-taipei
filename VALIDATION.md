@@ -65,7 +65,7 @@ These roads jam at the peaks in the news of 2026. The table gives the slowness o
 | 台北橋 | 自由時報, 2026-10-15 | Not found | Not found |
 
 - 港墘路, 木柵路, 舊宗路 and 堤頂大道 jam in the model in the morning. 國道1號 jams in the evening, but only a little in the morning: since a 國道 bucket counts the whole length of its edges, the load of the 國道 is spread over more km than before (DATA.md). 承德路 and 環東大道 are slow at part of the peak only, so their median over the whole peak is low.
-- The bridges from 新北 to the west are almost free (重陽橋, 台北橋, and 華翠大橋 in the evening); so is 艋舺大道. Their traffic comes from 三重, 蘆洲, 新莊 and 板橋, and from other counties, and the model has no commuters from other counties ([#21](https://github.com/caasi/breathing-taipei/issues/21)).
+- The bridges from 新北 to the west are almost free (重陽橋, 台北橋, and 華翠大橋 in the evening); so is 艋舺大道. The model has no commuters from other counties ([#21](https://github.com/caasi/breathing-taipei/issues/21)), but it has those of 三重, 蘆洲, 新莊 and 板橋, and at 08:00 重陽橋 carried only 1 to 2 car agents (measured by a review on 2026-10-27). Not checked: why so few of them take these bridges.
 - 中正路 and 至善路, near the works of the MRT 環狀線, are only a little slow: the model has no road works.
 - 瑞光路 is only a little slow. A trip is placed along its whole path, so nothing waits at the end of the trip; that needs a queue model ([#25](https://github.com/caasi/breathing-taipei/issues/25)).
 - 台北橋 has no name of its own in `road-names.json`. Not checked: the OSM way of the bridge probably carries the name of its road.
