@@ -29,7 +29,7 @@ Other facts from the search:
 
 ## Performance metrics
 
-The setting `metrics` shows one line at the top of the map, right of the clock when the row has room (else below it, and on a phone under the title): `SIM <ms>ms | FPS <fps> ↓<1% low>↑<1% top>` (`web/src/ui/Metrics.tsx`). The user chose the format after the performance monitor of the Steam overlay.
+The setting `metrics` shows one line at the top of the map, right of the clock when the row has room, else on the right below it: `SIM <ms>ms | FPS <fps> ↓<1% low>↑<1% top>` (`web/src/ui/Metrics.tsx`). The user chose the format after the performance monitor of the Steam overlay.
 
 - The performance monitor of the Steam overlay (June 2025) shows the frame rate with its minimum and maximum, a graph of the frame rate over time, and the frames of frame generation apart from the game frames. An article of Jon Peddie Research of 2025-06-20 (https://www.jonpeddie.com/?p=49409), checked: the minimum and the maximum are "sampled over one-second intervals", and a minimum "usually less than half the average" is red, as a likely stutter. Steam Support, "Understanding the In-Game Overlay Performance Monitor" (https://help.steampowered.com/en/faqs/view/3462-CD4C-36BD-5767), not checked: the page shows its text only with JavaScript.
 - Our line is not the same figure. `↓` and `↑` are the 1% low and 1% top of the frames of the last 10 s (the mean frame of the slowest and of the fastest 1%), not the minimum of each second; tools such as RivaTuner give a 1% low (from a search result, not checked). `SIM` is the time that the worker spends on the model in one frame.

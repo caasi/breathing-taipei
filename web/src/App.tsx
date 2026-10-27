@@ -17,7 +17,8 @@ import { clockAt, respeed, READY_MS, type Clock } from './sim/pace.ts'
 import { hhmm, H2 } from './ui/format.ts'
 
 const SPEEDS = [1, 2, 4, 8]
-// Simulated hours per second at 1x. Half an hour, so that the events do not come too fast and a slow device keeps up.
+// Simulated hours per second at 1x. Half an hour, as the user chose, so that the events do not come too fast and a slow
+// device keeps up more easily (below about 7.5 worker callbacks a second it still falls behind, AGENTS.md).
 const HOURS_AT_1X = 0.5
 const EVERY = [2, 5, 10, 20, 50]
 // 國道 and 快速道路 are part of the traffic layer, which draws them with the streets.
