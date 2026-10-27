@@ -33,3 +33,18 @@ The setting `metrics` shows one line at the top of the map, right of the clock w
 
 - The performance monitor of the Steam overlay (June 2025) shows the frame rate with its minimum and maximum, a graph of the frame rate over time, and the frames of frame generation apart from the game frames. An article of Jon Peddie Research of 2025-06-20 (https://www.jonpeddie.com/?p=49409), checked: the minimum and the maximum are "sampled over one-second intervals", and a minimum "usually less than half the average" is red, as a likely stutter. Steam Support, "Understanding the In-Game Overlay Performance Monitor" (https://help.steampowered.com/en/faqs/view/3462-CD4C-36BD-5767), not checked: the page shows its text only with JavaScript.
 - Our line is not the same figure. `↓` and `↑` are the 1% low and 1% top of the frames of the last 10 s (the mean frame of the slowest and of the fastest 1%), not the minimum of each second; tools such as RivaTuner give a 1% low (from a search result, not checked). `SIM` is the time that the worker spends on the model in one frame.
+
+## Shortest paths
+
+Collected on 2026-10-27 by an agent search, when the routes file had to hold the road path of any pair of street nodes; the user asked to keep them.
+
+Used: contraction hierarchies (`web/src/sim/ch.ts`, built by `scripts/routes.ts`).
+
+- Robert Geisberger, Peter Sanders, Dominik Schultes, Daniel Delling, "Contraction Hierarchies: Faster and Simpler Hierarchical Routing in Road Networks", WEA 2008 (https://ae.iti.kit.edu/english/1498.php), not checked: the paper itself was not opened. Order the nodes, remove them from the least important one up, and add a shortcut for each shortest path through a removed node. A query searches up the order from both ends; each shortcut unpacks into its two arcs. The edge difference as the order, the witness search and stall-on-demand in our code follow this method, from memory of it.
+- Measured on our road graph (15,070 nodes, 2026-10-27, Node): all three variants of `paths.ts` give 120,036 shortcuts and a file of 1,050,726 bytes, against 54,592,250 bytes for the old file of precomputed paths. One query took about 0.25 ms against 3 to 4 ms for a Dijkstra search of the whole graph, and 900 random pairs gave the same cost as Dijkstra.
+
+Not used:
+
+- Compressed path databases: a first-move table (the first edge of the shortest path for each pair), rows and columns reordered, then run-length encoded. Ben Strasser, Adi Botea, Daniel Harabor, "Compressing Optimal Paths with Run Length Encoding", JAIR 54 (2015) 593–629 (https://mlanthology.org/jair/2015/strasser2015jair-compressing), not checked: from a search summary. Queries near 100 ns; the build needs the full n x n table.
+- SILC: for each node, the other nodes grouped by the first neighbour on their shortest path, stored as regions in a quadtree. Jagan Sankaranarayanan, Houman Alborzi, Hanan Samet, ACM GIS 2005 (https://www.cs.umd.edu/users/hjs/pubs/silc2005.pdf), not checked: from a search summary; a survey gives O(n^1.5) space.
+- Hub labels and transit node routing: per node a small set of hubs with their distances. Fast for distances, and a path needs more structure. Survey: Hannah Bast et al., "Route Planning in Transportation Networks", 2016 (https://arxiv.org/abs/1504.05140), not checked: only the abstract was read.

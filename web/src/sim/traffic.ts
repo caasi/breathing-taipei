@@ -1,5 +1,5 @@
 import { advance, where, now, stretch, ROAD, PLAY, GONE, type World } from './core.ts'
-import { pathIn, ROAD_MODES, routeKey, VARIANTS, type Routes } from './paths.ts'
+import { ROAD_MODES, VARIANTS, type Routes } from './paths.ts'
 import { ACCESS, BUS, SCOOTER } from './city.ts'
 import { freeTime, type GraphJson } from './route.ts'
 
@@ -53,21 +53,27 @@ export type RoadUse = {
 }
 
 /**
- * ends gives the road nodes of agent i's trip (leg 0 to work, 1 to its day-off place). The way home is the path from
- * the far end in `routes` when the file holds it (a one-way road made it differ), else the way there reversed.
+ * ends gives the road nodes of agent i's trip (leg 0 to work, 1 to its day-off place); the way home is the path from
+ * the far end. It first finds every path (routes.fill), yielding between parts, so the worker can spread it over frames.
  */
-export const roadUse = (w: World, routes: Routes, ends: (agent: number, leg: number) => [number, number], time: ArrayLike<number>): RoadUse => {
+export function* roadUse(w: World, routes: Routes, ends: (agent: number, leg: number) => [number, number], time: ArrayLike<number>): Generator<void, RoadUse> {
   const cum = new Map<Uint16Array, Float32Array>(), n = w.movers.length, paths: (Uint16Array | undefined)[] = new Array(4 * n * VARIANTS)
   const add = (es: Uint16Array) => { if (!cum.has(es)) { const c = new Float32Array(es.length); let s = 0; es.forEach((e, j) => (c[j] = s += time[e])); cum.set(es, c) } }
-  const flipped = new Map<Uint16Array, Uint16Array>(), flip = (es: Uint16Array) => flipped.get(es) ?? flipped.set(es, es.slice().reverse()).get(es)!
-  w.movers.forEach((i, j) => [w.mode[i], w.playMode[i]].forEach((mode, leg) => {
-    if (!ROAD_MODES.has(mode)) return
-    const [a, b] = ends(i, leg), own = routes.has(routeKey(b, a))
+  const legs: [number, number, number, number][] = [] // mover index, leg, from, to
+  for (let j = 0; j < n; j++) {
+    const i = w.movers[j]
+    if (ROAD_MODES.has(w.mode[i])) legs.push([j, 0, ...ends(i, 0)])
+    if (ROAD_MODES.has(w.playMode[i])) legs.push([j, 1, ...ends(i, 1)])
+    if (j % 20000 === 19999) yield
+  }
+  yield* routes.fill(legs.flatMap(([, , a, b]) => [[a, b], [b, a]] as [number, number][]))
+  for (let k = 0; k < legs.length; k++) {
+    const [j, leg, a, b] = legs[k]
     for (let v = 0; v < VARIANTS; v++) {
-      const there = pathIn(routes, a, b, v), back = own ? pathIn(routes, b, a, v) : there && flip(there)
-      ;[there, back].forEach((es, k) => { if (es) { add(es); paths[((2 * j + leg) * 2 + k) * VARIANTS + v] = es } })
+      ;[routes.path(a, b, v), routes.path(b, a, v)].forEach((es, back) => { if (es) { add(es); paths[((2 * j + leg) * 2 + back) * VARIANTS + v] = es } })
     }
-  }))
+    if (k % 2000 === 1999) yield
+  }
   return { paths, cum, pick: new Int8Array(n), since: new Int32Array(n).fill(-(2 ** 31)), free: new Float32Array(n), path: new Int32Array(n), at: new Int32Array(n), left: new Float32Array(n), on: [] }
 }
 
