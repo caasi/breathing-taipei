@@ -44,7 +44,8 @@ export type Routes = {
 /**
  * File layout, all Uint16: graph hash (low, high), layout (3), then per variant: the rank of each node, the number of
  * shortcuts (low, high), and per shortcut its left and right arc (each low, high).
- * The hash ties the file to its road graph; a file for another graph, or of another length, is ignored.
+ * The hash ties the file to its road graph; a file for another graph, of another length, or with a shortcut that does
+ * not fit its hierarchy is ignored.
  * Limits: fewer than 65,536 road nodes and road edges, as a path is a Uint16Array of edge ids (writeRoutes throws
  * beyond them). The hash does not cover the routing costs: after a change to them, run `pnpm routes` again (dev and
  * build do).
@@ -70,7 +71,7 @@ export const readRoutes = (data: Uint16Array, g: Graph): Routes | undefined => {
     if (i + 4 * count > data.length) return undefined
     const shortcuts = new Uint32Array(2 * count)
     for (let k = 0; k < 2 * count; k++, i += 2) shortcuts[k] = data[i] + data[i + 1] * 65536
-    hs.push(hierarchyOf(g, w, rank, shortcuts))
+    try { hs.push(hierarchyOf(g, w, rank, shortcuts)) } catch { return undefined }
   }
   return i === data.length ? routesOf(hs) : undefined
 }

@@ -56,11 +56,13 @@ test('a batch (fill) finds the same paths as one query at a time, and a variant 
   expect(shared).toBeGreaterThan(0)
 }, 120_000)
 
-test('a routes file for another road graph, cut short or with a word too many is ignored', () => {
+test('a routes file for another road graph, cut short, with a word too many or with a shortcut that does not fit is ignored', () => {
   const rank = Uint16Array.from({ length: g.lon.length }, (_, v) => v), file = writeRoutes(g, [0, 1, 2].map(() => ({ rank, shortcuts: new Uint32Array(0) })))
   expect(readRoutes(file, g)).toBeDefined()
   expect(readRoutes(file.subarray(0, file.length - 1), g)).toBeUndefined()
   expect(readRoutes(Uint16Array.from([...file, 0]), g)).toBeUndefined()
+  const later = writeRoutes(g, [0, 1, 2].map(() => ({ rank, shortcuts: Uint32Array.from([10 ** 6, 0]) }))) // an arc after it
+  expect(readRoutes(later, g)).toBeUndefined()
   file[0] ^= 1 // the hash of another graph
   expect(readRoutes(file, g)).toBeUndefined()
 })
