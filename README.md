@@ -130,7 +130,7 @@ The model uses real open data, but some parts are estimates. The list below show
 - The bus hours and the MRT hours are those of a workday.
 - The bus hours come from the first and last buses in the route files of both cities: most first buses leave at 05:00 or later, and most last buses leave before 24:00. A few routes run until 00:30. The MRT hours come from the MRT data: on a workday 43 trips start in hour 05 and 36,483 in hour 06. Hour 00 still has 10,471 trips (the last trains), but the model counts hour 00 as closed.
 - A district-level run drops a night-time trip that stays in the home district, because the district is the node. With seed 42 it has 36,210 dinner visitors against 80,560 at village level.
-- Cars and buses use the bus routes and the 國道 and 快速道路, and scooters the bus routes only, not the full road network.
+- Cars, buses and scooters use the streets of the bus routes (with the one-way rules of OSM) and the 國道 and 快速道路, not the full road network. A scooter takes the streets only.
 
 ## Tests
 
