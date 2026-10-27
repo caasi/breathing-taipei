@@ -54,7 +54,8 @@ const originals = (g: Graph, slotW: ArrayLike<number>) => {
   return slots
 }
 
-// ponytail: a witness search settles at most this many nodes. A search cut short adds a shortcut that a longer one
+// ponytail: a witness search settles at most this many nodes (the paper limits the hops or the size of the search, and
+// gives no number; 200 is ours). A search cut short adds a shortcut that a longer one
 // would have found unneeded: the paths stay exact, the file grows (all three weightings about 1 MB at 200, 2026-10-27).
 const WITNESS_LIMIT = 200
 
@@ -102,7 +103,8 @@ export const contract = (g: Graph, slotW: ArrayLike<number>) => {
     }
     return { pairs, degree: ins.size + outs.size }
   }
-  // The edge difference with the removed neighbours, a common priority (REFERENCES.md); updated lazily.
+  // The edge difference plus the deleted neighbours (Geisberger et al. 2008, section 3), with equal weights; the paper
+  // weights them 190:120 and also recomputes the neighbours of a contracted node. `removed` counts arcs, not neighbours.
   const priority = (v: number) => { const { pairs, degree } = needed(v); return pairs.length - degree + removed[v] }
   const queue = new Heap()
   for (let v = 0; v < n; v++) queue.push(v, priority(v))
@@ -153,8 +155,9 @@ export type Space = { nodes: Int32Array; dist: Float64Array; arc: Int32Array; pr
 
 /**
  * Searches of one hierarchy, on scratch arrays that each search clears after it. A node that a higher node reaches by
- * a shorter way is stalled (Geisberger et al. 2008, "stall-on-demand"): its arcs are not searched. Its distance can be
- * too long, so it is never the best meeting node; the paths stay exact (paths.test.ts).
+ * a shorter way is stalled (Geisberger et al. 2008, section 4, "stall-on-demand", without its propagation to further
+ * nodes): its arcs are not searched. Its distance can be too long, so it is never the best meeting node; the paths stay
+ * exact (paths.test.ts).
  */
 export const searcher = (h: Hierarchy) => {
   const n = h.rank.length, dist = new Float64Array(n).fill(Infinity), arc = new Int32Array(n), pos = new Int32Array(n)
