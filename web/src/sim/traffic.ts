@@ -38,9 +38,13 @@ export const PCU = [0, 2 / 20, 0.4 / 1.2, 1 / 1.4, 0, 0]
  * holds the traffic lights), so a traveller is placed by time and waits longer where streets meet: path
  * ((2j + leg) x 2 + back) x VARIANTS + v is the variant v (paths.ts) of its trip to work (leg 0) or to its day-off
  * place (leg 1), on the way there (back 0) or home (back 1), each listed in the order it is driven. Per mover, for the
- * trip under way: pick its variant, since the minute it started (it moves when the trip is stretched), free its
- * minutes with no jam, path the index of its path in paths, at the edge it is on at the last take and left the share
- * of that edge still to drive; on: the movers on the road at the last take.
+ * trip under way:
+ * - pick: the variant it drives.
+ * - since: the minute the trip started. It moves when the trip is stretched.
+ * - free: the minutes of the trip with no jam.
+ * - path: the index of its path in paths.
+ * - at: the edge it is on at the last take. left: the share of that edge still to drive.
+ * on: the movers on the road at the last take.
  */
 export type RoadUse = {
   paths: (Uint16Array | undefined)[]; cum: Map<Uint16Array, Float32Array>
