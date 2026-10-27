@@ -8,21 +8,28 @@ This file lists the changes that a user of the site can see, for each version. T
 
 ### Added
 
-- The setting `metrics` (#28) shows at the top of the map the time of the model in each frame, the frame rate, and the frame rate of the slowest and the fastest 1% of the frames (`SIM 003.9ms | FPS 60 ↓48↑61`). It is off by default, and replaces the line of figures in the settings panel.
+- Traffic: the roads of the two cities, with the 國道 and 快速道路, in thin lines on the map. A slow road turns orange, red, then dark red, and glows; dashes move along the roads in use, slower where the traffic is slow. The setting `traffic` shows or hides the layer; the simulation takes the traffic in both cases (#27).
+- Jams make trips longer. The bus, scooter and car dots take the colour of the slowest road of their place (#27).
+- Jam events: a character stuck on a road, by the name of the road or the nearest village, gets angry, waits, goes blank, starts work by phone, or asks for an hour of leave to come late. A character that a jam made late to work also leaves work later, and the event of its way home says so (#27).
+- The setting `metrics` shows at the top of the map the time of the model in each frame, the frame rate, and the frame rate of the slowest and the fastest 1% of the frames (`SIM 003.9ms | FPS 60 ↓48↑61`). It is off by default, and replaces the line of figures in the settings panel (#28).
 - The map shows the other counties around Taipei and New Taipei, and the sea in a darker colour (#22).
-- Traffic (#27): the roads of the two cities, with the 國道 and 快速道路, in thin lines on the map. A slow road turns orange, red, then dark red, and glows; dashes move along the roads in use, slower where the traffic is slow. The setting `traffic` shows or hides the layer; the simulation takes the traffic in both cases.
-- Jams make trips longer (#27). The bus, scooter and car dots take the colour of the slowest road of their place.
-- Jam events (#27): a character stuck on a road, by the name of the road or the nearest village, gets angry, waits, goes blank, starts work by phone, or asks for an hour of leave to come late. A character that a jam made late to work also leaves work later, and the event of its way home says so.
+- While the run waits for the road paths, 路網 N% next to the spinner shows the share of the paths found (#31).
 
 ### Changed
 
-- The district level shows the same run as the village level (#35): each district is the sum of its villages. A switch of the level keeps the run and its clock; before, it started a new run at 00:00. At district level the events name the district only.
+- The jobs of 內湖科技園區 are in the villages of the park, from its company list. The commuters to 內湖區 now go to these villages (#27).
+- The district and the village in an event are in two tones of blue, not grey (#27).
+- The borders of the villages and districts are in the blue of the place names of the events, so that they stay apart from the roads (#27).
+- The simulation runs at half the speed: 1x is half a simulated hour a second, and 8x is 4 hours. The events come more slowly, and a slow device keeps up more easily (#28).
+- The pause is a play and pause button, apart from the speed buttons 1x to 8x, so a pause keeps the speed for when the run goes on (#28).
+- The settings give the number of dots as 追蹤 N 個移動單位 (#28).
+- The road paths come from a file of about 1 MB that holds contraction hierarchies, not precomputed paths: the page finds the shortest path of any trip on the roads. A run starts when the page has found the paths of every trip on the roads. The settings no longer show the share of the dots' road paths (#31).
+- The district level shows the same run as the village level: each district is the sum of its villages. A switch of the level keeps the run and its clock; before, it started a new run at 00:00. At district level the events name the district only (#35).
 - While the run waits for the road paths, the map fades in halfway; it becomes clear when the run starts (#35).
-- The road paths come from a file of about 1 MB (#31), not 54.6 MB (10 MB with gzip): the page finds the shortest path of any trip on the roads with contraction hierarchies. A run starts when the page has found the paths of every trip on the roads.
-- The simulation runs at half the speed (#28): 1x is half a simulated hour a second, and 8x is 4 hours. The events come more slowly, and a slow device keeps up more easily.
-- The pause is a play and pause button (#28), apart from the speed buttons 1x to 8x, so a pause keeps the speed for when the run goes on.
-- The borders of the villages and districts are in the blue of the place names of the events (#27), so that they stay apart from the roads.
-- The `highway` layer is gone (#27): the traffic layer draws the 國道 and 快速道路.
+
+### Removed
+
+- The `highway` layer: the traffic layer draws the 國道 and 快速道路 (#27).
 
 ### Fixed
 
