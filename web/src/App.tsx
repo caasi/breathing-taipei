@@ -153,8 +153,9 @@ export function App() {
     w.onmessage = (e: MessageEvent<FromWorker | WorkerError>) => {
       if ('error' in e.data) { if (e.data.start === started.current) setRunError(e.data.error); return }
       const m = e.data
-      // Frames of an earlier run can still be on their way after a start (also the first frame of a run that a quick
-      // second switch replaced); their day and nodes would be read with the new start and level.
+      // Frames of an earlier run can still be on their way after a new run starts (also the first frame of a run that
+      // a second new run replaced); their day and nodes would be read with the new start. Today a run starts once per
+      // page; a setting that starts the run again (for example a policy, #8) needs this.
       if (m.start !== undefined) { if (m.start !== started.current) return; shown.current = m.start; setOnScreen(next.current) }
       else if (shown.current !== started.current) return
       if (m.nodes) setNodes(m.nodes)
@@ -201,9 +202,8 @@ export function App() {
     // The new world starts at minute 0, and both clocks stand there until the page has drawn the first frame. The page
     // is busy while it builds the new run; a clock that ran then would jump when the page draws again.
     const l = last.current, now = performance.now(), since = performance.timeOrigin + now
-    // The dots of the old run stay where they are; a second switch before the new run shows keeps the same picture.
-    // The dots on the screen freeze at the time of the frame on the screen, so they agree with the map and the clock. A
-    // second switch before the new run shows keeps the same freeze.
+    // The dots of the old run stay where they are until the new run shows, and freeze at the time of the frame on the
+    // screen, so they agree with the map and the clock. A second new run before the first one shows keeps the freeze.
     const on = dotRuns.current.get(tripsId)
     if (on && frozen.current?.run !== on.run) frozen.current = { run: on.run, minute: l.model }
     respeed(l, 0, 0, now, 0); l.model = 0; l.since = since
@@ -391,7 +391,7 @@ export function App() {
       </div>
       {/* Always there, so a screen reader reads the change. */}
       {/* In the bottom right of the map, left of the panels on a desktop. It shows from the first paint until the
-          run of the selected level and day is on the screen and started, also in the paint right after a click. */}
+          run of the selected day is on the screen and started, also in the paint right after a new run starts. */}
       <div role="status" style={{ position: 'absolute', right: box.w - fit.x - fit.w + 16, bottom: 16, color: '#fff', pointerEvents: 'none' }}>
         {(waiting !== undefined || onScreen !== runStart) && !runError && !loadError && <>
           {/* The share of the road paths found; the run starts at 100%. Not read out: it changes every frame. Left of the
