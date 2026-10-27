@@ -235,16 +235,18 @@ export function App() {
   // The worker posts up to 30 times a second while the clock runs; between posts the dots move on the extrapolated clock.
   // Dots of a frozen run stand at its minute; the dots of the next run, once shown, follow the clock.
   const clock = () => { const f = frozen.current; return f && dotRun?.run === f.run ? f.minute : clockAt(last.current, performance.now()) }
-  // Change per hour over the last rateWindow minutes, as a share of the node's residents.
+  // Change per hour over the last rateWindow minutes, as a share of the node's residents. Before two frames of the run,
+  // no change: an undefined rate colours by density, and the map then faded from density to the rate colours.
   const rate = useMemo(() => {
     const h = history
-    if (colourBy !== 'rate' || !h.length) return undefined
-    const last = h[h.length - 1], first = since(h, rateWindow)
-    if (last.t === first.t) return undefined
-    const out = new Float32Array(last.counts.length), perHour = 60 / (last.t - first.t)
+    if (colourBy !== 'rate') return undefined
+    if (!h.length) return new Float32Array(nodes.length)
+    const last = h[h.length - 1], first = since(h, rateWindow), out = new Float32Array(last.counts.length)
+    if (last.t === first.t) return out
+    const perHour = 60 / (last.t - first.t)
     for (let i = 0; i < out.length; i++) out[i] = (last.counts[i] - first.counts[i]) * perHour / Math.max(1, homes[i])
     return out
-  }, [history, homes, colourBy, rateWindow])
+  }, [history, homes, colourBy, rateWindow, nodes])
   const ready = projection && villages && s && nodes.length === s.counts.length
   // The map fades in from the blurred outline at its first frame; one animation frame later, so the start state paints.
   const [revealed, setRevealed] = useState(false), [faded, setFaded] = useState(false)

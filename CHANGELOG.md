@@ -20,6 +20,10 @@ This file lists the changes that a user of the site can see, for each version. T
 - The borders of the villages and districts are in the blue of the place names of the events, so that they stay apart from the roads.
 - The `highway` layer is gone: the traffic layer draws the 國道 and 快速道路.
 
+### Fixed
+
+- With the colour by change rate, the map started in the colours of the density and faded to the colours of the rate. It now starts with no change.
+
 ## [0.1.5] - 2026-10-26
 
 ### Fixed
