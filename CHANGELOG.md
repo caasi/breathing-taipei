@@ -14,7 +14,7 @@ This file lists the changes that a user of the site can see, for each version. T
 
 ### Changed
 
-- The road paths come from a file of about 1 MB, not 54.6 MB (10 MB with gzip): the page finds the shortest path of any trip on the roads with contraction hierarchies. The traffic of the first hours of a run fills in while the page finds the paths.
+- The road paths come from a file of about 1 MB, not 54.6 MB (10 MB with gzip): the page finds the shortest path of any trip on the roads with contraction hierarchies. A run starts when the page has found the paths of every trip on the roads.
 - The simulation runs at half the speed: 1x is half a simulated hour a second, and 8x is 4 hours. The events come more slowly, and a slow device keeps up more easily.
 - The pause is a play and pause button, apart from the speed buttons 1x to 8x, so a pause keeps the speed for when the run goes on.
 - The borders of the villages and districts are in the blue of the place names of the events, so that they stay apart from the roads.

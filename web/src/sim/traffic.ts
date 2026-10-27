@@ -54,41 +54,33 @@ export type RoadUse = {
 
 /**
  * ends gives the road nodes of agent i's trip (leg 0 to work, 1 to its day-off place); the way home is the path from
- * the far end. `use` holds no path at first: `filling` finds them (routes.fill), yielding between parts so the worker
- * can spread it over frames, and puts them in, the trips that leave first first. So the traffic can start at once: a
- * trip on the road without its path yet adds no load, and adds it from the first take after its path is in.
+ * the far end. `use` holds no path until `filling` has found them all (routes.fill), yielding between parts so the
+ * worker can spread it over frames. The run waits for it (worker.ts), so the traffic of a seed does not depend on how
+ * fast the device finds the paths.
  */
 export const roadUse = (w: World, routes: Routes, ends: (agent: number, leg: number) => [number, number], time: ArrayLike<number>) => {
   const cum = new Map<Uint16Array, Float32Array>(), n = w.movers.length, paths: (Uint16Array | undefined)[] = new Array(4 * n * VARIANTS)
   const use: RoadUse = { paths, cum, pick: new Int8Array(n), since: new Int32Array(n).fill(-(2 ** 31)), free: new Float32Array(n), path: new Int32Array(n), at: new Int32Array(n), left: new Float32Array(n), on: [] }
   const add = (es: Uint16Array) => { if (!cum.has(es)) { const c = new Float32Array(es.length); let s = 0; es.forEach((e, j) => (c[j] = s += time[e])); cum.set(es, c) } }
   function* filling() {
-    const legs: [number, number, number, number, number][] = [] // departure, mover index, leg, from, to
+    const legs: [number, number, number, number][] = [] // mover index, leg, from, to
     for (let j = 0; j < n; j++) {
-      // The leg of the current plan leaves at dep; the other one not before the next day.
-      const i = w.movers[j], current = w.dest[i] === PLAY ? 1 : 0
-      if (ROAD_MODES.has(w.mode[i])) legs.push([w.dep[i] + (current === 0 ? 0 : 1440), j, 0, ...ends(i, 0)])
-      if (ROAD_MODES.has(w.playMode[i])) legs.push([w.dep[i] + (current === 1 ? 0 : 1440), j, 1, ...ends(i, 1)])
+      const i = w.movers[j]
+      if (ROAD_MODES.has(w.mode[i])) legs.push([j, 0, ...ends(i, 0)])
+      if (ROAD_MODES.has(w.playMode[i])) legs.push([j, 1, ...ends(i, 1)])
       if (j % 20000 === 19999) yield
     }
-    legs.sort((x, y) => x[0] - y[0])
-    yield
-    // ponytail: parts of 4,000 legs, by eye; a smaller part gives the first trips their paths sooner.
-    for (let s = 0; s < legs.length; s += 4000) {
-      const part = legs.slice(s, s + 4000)
-      yield* routes.fill(part.flatMap(([, , , a, b]) => [[a, b], [b, a]] as [number, number][]))
-      for (let k = 0; k < part.length; k++) {
-        const [, j, leg, a, b] = part[k]
-        // A variant with no path (a pair that the streets alone do not connect) drives the variant before it.
-        ;[[a, b], [b, a]].forEach(([x, y], back) => {
-          for (let v = 0, last: Uint16Array | undefined; v < VARIANTS; v++) {
-            const es = routes.path(x, y, v) ?? last
-            if (es) { add(es); paths[((2 * j + leg) * 2 + back) * VARIANTS + v] = es; last = es }
-          }
-        })
-        if (k % 500 === 499) yield
-      }
-      yield
+    yield* routes.fill(legs.flatMap(([, , a, b]) => [[a, b], [b, a]] as [number, number][]))
+    for (let k = 0; k < legs.length; k++) {
+      const [j, leg, a, b] = legs[k]
+      // A variant with no path (a pair that the streets alone do not connect) drives the variant before it.
+      ;[[a, b], [b, a]].forEach(([x, y], back) => {
+        for (let v = 0, last: Uint16Array | undefined; v < VARIANTS; v++) {
+          const es = routes.path(x, y, v) ?? last
+          if (es) { add(es); paths[((2 * j + leg) * 2 + back) * VARIANTS + v] = es; last = es }
+        }
+      })
+      if (k % 500 === 499) yield
     }
   }
   return { use, filling: filling() }

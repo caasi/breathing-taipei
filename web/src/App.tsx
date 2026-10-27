@@ -264,17 +264,18 @@ export function App() {
   }, [revealed])
   // After the render that shows new trips (a new run or a new dot density), the older ones go.
   useEffect(() => { for (const id of dotRuns.current.keys()) if (id < tripsId) dotRuns.current.delete(id) }, [tripsId])
-  // The new run starts when the map of its first frame is on the screen, or at the deadline. The effect depends on
-  // whether the map is ready, not on each frame.
-  const drawn = !!ready && shown.current === waiting
+  // The new run starts when the map of its first frame is on the screen, or at the deadline, and in both cases only
+  // when the worker has found the road paths: a run that started before would depend on the speed of the device. The
+  // effect depends on whether the map is ready, not on each frame.
+  const routing = shown.current === waiting && !!s?.routing, drawn = !!ready && shown.current === waiting && !routing
   useEffect(() => {
-    if (waiting === undefined) return
+    if (waiting === undefined || routing) return
     const go = () => { waitRef.current = undefined; setWaiting(undefined); resume() }
     // Two animation frames: the browser paints the new run before the first one ends, and the clock starts after it.
     if (drawn) { let raf = requestAnimationFrame(() => { raf = requestAnimationFrame(go) }); return () => cancelAnimationFrame(raf) }
     const timer = setTimeout(go, Math.max(0, deadline.current - performance.now()))
     return () => clearTimeout(timer)
-  }, [waiting, drawn])
+  }, [waiting, drawn, routing])
   const [size, setSize] = useState({ w: innerWidth, h: innerHeight })
   useEffect(() => { const on = () => setSize({ w: innerWidth, h: innerHeight }); addEventListener('resize', on); return () => removeEventListener('resize', on) }, [])
   const taipei = useMemo(() => projection && taipeiIn(towns, projection), [projection])
