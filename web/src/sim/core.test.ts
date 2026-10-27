@@ -108,6 +108,29 @@ describe('core properties', () => {
     expect(bad).toEqual([])
   })
 
+  test('an outing that a jam makes arrive after 00:00 still leaves an outing for the next day', () => {
+    // Every day is off and the agents go out at 07:00 or 16:00 (the morning trips make them commuters), for 150
+    // minutes. A jam one minute after the start asks for 600 more minutes, so an agent that left at 16:00 arrives at
+    // its place after 00:00 and is home on the next day, before 16:00.
+    const od = Array.from({ length: 24 }, (_, h) => [[0, h === 7 || h === 16 ? 10 : 0], [0, 0]])
+    const city: City = { od, group: [0, 1], homes: [200, 0], to: [0, 1], perAgent: 10, modeOf: () => 0, minutes: () => 150,
+      off: { kindOf: () => 1, od: [od, od], out: [[1, 1], [1, 1]], away: [0, 0] } }
+    const late = new Set<string>(), bad: string[] = []
+    for (let seed = 0; seed < 20; seed++) {
+      const w = init(city, seed), left = new Set<number>()
+      for (let t = 0; t < 2 * MINUTES_PER_DAY; t++, advance(w, 1)) for (const i of w.movers) {
+        if (t < MINUTES_PER_DAY && t === w.dep[i] + 1 && w.dur1[i]) {
+          stretch(w, i, t + 600)
+          if (w.dep[i] + w.dur1[i] >= MINUTES_PER_DAY) late.add(`${seed} ${i}`)
+        }
+        if (t >= MINUTES_PER_DAY && w.dur1[i] && w.dep[i] === t) left.add(i)
+      }
+      for (const k of late) if (k.startsWith(`${seed} `) && !left.has(+k.split(' ')[1])) bad.push(`seed ${k}`)
+    }
+    expect(late.size).toBeGreaterThan(0)
+    expect(bad).toEqual([])
+  })
+
   test('the share of commuters out on a day off does not grow over a run of days off', () => {
     const od = Array.from({ length: 24 }, () => [[0, 3000], [3000, 0]]) // morning trips above the 20,000 residents: everyone commutes
     const city: City = { od, group: [0, 1], homes: [2000, 0], to: [1, 1], perAgent: 10, modeOf: () => 0, minutes: () => 10,
