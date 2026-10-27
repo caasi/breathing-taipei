@@ -40,13 +40,17 @@ test('every bucket has the lanes of its class, also a named road (real data)', (
   road.edges.forEach(([, , , , cls = 0], e) => expect(grid.lanes[grid.cellOf[e]]).toBe([1, 3, 2, 0.5][cls]))
 })
 
-test('each cell key a dot can read is unique and holds the slowest bucket of its cell, and a named road counts at most the width of a cell', () => {
+test('each cell key a dot can read is unique and holds the slowest bucket of its cell, and a named street counts at most the width of a cell, a named 國道, 快速道路 or ramp its whole length', () => {
   const road: GraphJson = pub('road-graph.json'), names = pub('road-names.json'), grid = gridOf(road, names.edge)
   expect(new Set(grid.keys).size).toBe(grid.keys.length)
   const buckets = Uint8Array.from(grid.km, (_, b) => (b * 37) % 256), max = cellMax(grid, buckets)
   buckets.forEach((v, b) => expect(max[grid.cellIn[b]]).toBeGreaterThanOrEqual(v))
   road.edges.forEach(([a, b], e) => expect(grid.keys[grid.cellIn[grid.cellOf[e]]]).toBe(cellKey((road.lon[a] + road.lon[b]) / 2, (road.lat[a] + road.lat[b]) / 2)))
-  road.edges.forEach((_, e) => { if (names.edge[e] >= 0) expect(grid.km[grid.cellOf[e]]).toBeLessThanOrEqual(0.55) })
+  road.edges.forEach(([, , m, , cls = 0], e) => {
+    if (names.edge[e] < 0) return
+    if (cls) expect(grid.km[grid.cellOf[e]]).toBeGreaterThanOrEqual(m / 1000 - 1e-9)
+    else expect(grid.km[grid.cellOf[e]]).toBeLessThanOrEqual(0.55)
+  })
 })
 
 test('a level is 0 on an edge with no traveller, else 1 to 255, and the travel time stays at most MOST times the free time and grows with the load', () => {

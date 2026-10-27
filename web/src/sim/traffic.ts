@@ -155,13 +155,13 @@ export type Grid = { cellOf: Int32Array; km: Float64Array; lanes: Float64Array; 
 // From 121°E and 24°N, so that a key fits in an Int32Array.
 export const cellKey = (lon: number, lat: number) => Math.floor((lon - 121) / CELL) * 10_000 + Math.floor((lat - 24) / CELL)
 export const gridOf = (road: GraphJson, name: ArrayLike<number> = []): Grid => {
-  const ids = new Map<string, number>(), cells = new Map<number, number>(), cellIn: number[] = [], lanes: number[] = []
+  const ids = new Map<string, number>(), cells = new Map<number, number>(), cellIn: number[] = [], lanes: number[] = [], classes: number[] = []
   const cellOf = Int32Array.from(road.edges, ([a, b, , , cls = 0, one], e) => {
     // A heading in [-45°, 135°) or the other half, from the first node to the second.
     const heading = one ? (Math.atan2(road.lat[b] - road.lat[a], road.lon[b] - road.lon[a]) + Math.PI / 4 + 2 * Math.PI) % (2 * Math.PI) < Math.PI ? ':+' : ':-' : ''
     const c = cellKey((road.lon[a] + road.lon[b]) / 2, (road.lat[a] + road.lat[b]) / 2), id = `${4 * c + cls}:${name[e] ?? -1}${heading}`
     if (!ids.has(id)) {
-      ids.set(id, ids.size); lanes.push(LANES[cls])
+      ids.set(id, ids.size); lanes.push(LANES[cls]); classes.push(cls)
       if (!cells.has(c)) cells.set(c, cells.size)
       cellIn.push(cells.get(c)!)
     }
@@ -169,9 +169,11 @@ export const gridOf = (road: GraphJson, name: ArrayLike<number> = []): Grid => {
   })
   const km = new Float64Array(ids.size)
   road.edges.forEach(([, , m], e) => (km[cellOf[e]] += m / 1000))
-  // ponytail: a named road counts at most the width of a cell (ACROSS km). Its edges in one cell can add up to much more,
-  // from the shapes of many bus routes and from small roads near it that took its name (瑞光路: 7.9 km in one cell).
-  if (name.length) ids.forEach((b, id) => { if (!/:-1(:[+-])?$/.test(id)) km[b] = Math.min(km[b], ACROSS) })
+  // ponytail: a named street counts at most the width of a cell (ACROSS km). Its edges in one cell can add up to much more,
+  // from the shapes of many bus routes and from small roads near it that took its name (瑞光路: 7.9 km in one cell). A
+  // 國道, 快速道路 or ramp comes from OSM with one edge per piece, so it keeps its length: one edge between two
+  // interchanges can be several km, all in the cell of its middle.
+  if (name.length) ids.forEach((b, id) => { if (!/:-1(:[+-])?$/.test(id) && !classes[b]) km[b] = Math.min(km[b], ACROSS) })
   km.forEach((k, b) => (km[b] = Math.max(k, SHORTEST)))
   return { cellOf, km, lanes: Float64Array.from(lanes), keys: Int32Array.from(cells.keys()), cellIn: Int32Array.from(cellIn) }
 }
