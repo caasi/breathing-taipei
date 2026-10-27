@@ -225,6 +225,7 @@ const traffic = (world: World, graphs: Awaited<typeof net>, roadJson: GraphJson,
   routes.then(known => {
     if (world !== w) return
     if (!known) { routing = false; return }
+    known.clear() // the paths of an earlier run
     const node = new Map<number, number>(), at = (v: number) => node.get(v) ?? node.set(v, roadNode(graphs, coords, v)).get(v)!
     const metres = Float32Array.from(roadJson.edges, e => e[2])
     load = new Float32Array(metres.length); grid = gridOf(roadJson, roadNames.edge); live = liveOf(roadJson, grid); extra.cellKeys = grid.keys

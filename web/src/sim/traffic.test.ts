@@ -89,7 +89,7 @@ test('the slowness of the rest of a path counts only the part of the current edg
 test('a variant with no path drives the variant before it, so a scooter whose streets alone do not connect its ends still loads the road', () => {
   const w = { movers: Uint32Array.from([0]), mode: Uint8Array.from([SCOOTER]), playMode: Uint8Array.from([4]), dest: Uint8Array.from([0]), dep: Int32Array.from([0]) } as unknown as World
   const fastest = Uint16Array.from([0, 1])
-  const routes: Routes = { path: (a, b, v) => (v === 0 && a !== b ? fastest : undefined), *fill() {} }
+  const routes: Routes = { path: (a, b, v) => (v === 0 && a !== b ? fastest : undefined), *fill() {}, clear() {} }
   const use = fullRoadUse(w, routes, () => [5, 9], [1, 1])
   expect(use.paths.slice(0, VARIANTS)).toEqual([fastest, fastest, fastest])
 })
