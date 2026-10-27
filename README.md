@@ -158,9 +158,11 @@ The tests with real data:
 - One makes sure that short trips in a district without MRT trips inside it follow the morning peak, not an even spread: more than 10 times as many leave at 08:00 as at 05:00.
 - One makes sure that, at 00:00 and at 02:00, the overnight and nightlife workers at work are within 10% of the number that their businesses give. The test computes that number from `night.json` and the guesses.
 - One makes sure that no early-shift, nightlife, or night-out agent uses the MRT or a bus, and that most dinner visitors do not use the MRT.
-- One routes a sample of road trips, writes and reads them in the format of `road-routes.bin`, and makes sure that every road trip then comes from the file and equals the routed path.
-- One makes sure that a routes file for another road graph, a file cut inside a record, or a file that ends in a partial record is not used.
-- Where `web/public/road-routes.bin` exists, one makes sure that it matches the road graph and holds every road trip of the app's run at both levels.
+- One builds the contraction hierarchies of the real road graph, as `scripts/routes.ts` does, and makes sure that every variant of 100 random paths has the cost of a Dijkstra search, so no path drives a one-way road against its way.
+- One makes sure that a batch of paths (`fill`) gives the same paths as one query at a time.
+- One makes sure that the dots of road trips take their paths from the routes file, with no routing in the page, and that a dot goes home on its own path when that is not the way there reversed.
+- One makes sure that a routes file for another road graph, a file cut short, or a file with a word too many is not used.
+- Where `web/public/road-routes.bin` exists, one makes sure that it is the file that `scripts/routes.ts` makes from the road graph.
 
 ## Known gaps
 
