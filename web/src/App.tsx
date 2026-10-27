@@ -269,7 +269,8 @@ export function App() {
   // The map fades in from the blurred outline in two steps: half at its first frame, while the run still waits for the
   // road paths, and the rest when the run starts. Each step one animation frame later, so the state before it paints.
   const [revealed, setRevealed] = useState(0), [faded, setFaded] = useState(false)
-  const step = !ready ? 0 : waiting === undefined ? 2 : 1
+  // A run that fails after its first frame never stops waiting; the map then clears, under the error.
+  const step = !ready ? 0 : waiting === undefined || runError ? 2 : 1
   useEffect(() => {
     if (step <= revealed) return
     const raf = requestAnimationFrame(() => setRevealed(step))
