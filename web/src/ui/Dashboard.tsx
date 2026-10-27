@@ -45,7 +45,7 @@ export const recent = (events: SimEvent[], now: number, limit = MAX_EVENTS) =>
 
 type EventsProps = { events: SimEvent[]; now: number; dayLabel: (day: number) => string; placeOf: PlaceOf }
 
-// Memoized: the page also renders on state that the list does not use (fps, routing progress), and the props of the list
+// Memoized: the page also renders on state that the list does not use (routing progress), and the props of the list
 // change only with a new minute, a new event or a new day, so while the clock stands the list does not render again.
 export const Events = memo(function Events({ events, now, dayLabel, placeOf }: EventsProps) {
   const happened = recent(events, now), dayOf = (e: SimEvent) => Math.floor(e.t / 1440)

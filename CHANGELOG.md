@@ -6,6 +6,7 @@ This file lists the changes that a user of the site can see, for each version. T
 
 ### Added
 
+- The setting `metrics` shows at the top of the map the time of the model in each frame, the frame rate, and the frame rate of the slowest and the fastest 1% of the frames (`SIM 003.9ms | FPS 60 ↓48↑61`). It is off by default, and replaces the line of figures in the settings panel.
 - The map shows the other counties around Taipei and New Taipei, and the sea in a darker colour.
 - Traffic: the roads of the two cities, with the 國道 and 快速道路, in thin lines on the map. A slow road turns orange, red, then dark red, and glows; dashes move along the roads in use, slower where the traffic is slow. The setting `traffic` shows or hides the layer; the simulation takes the traffic in both cases.
 - Jams make trips longer. The bus, scooter and car dots take the colour of the slowest road of their place.
@@ -13,6 +14,8 @@ This file lists the changes that a user of the site can see, for each version. T
 
 ### Changed
 
+- The simulation runs at half the speed: 1x is half a simulated hour a second, and 8x is 4 hours. The events come more slowly, and a slow device keeps up more easily.
+- The pause is a play and pause button, apart from the speed buttons 1x to 8x, so a pause keeps the speed for when the run goes on.
 - The borders of the villages and districts are in the blue of the place names of the events, so that they stay apart from the roads.
 - The `highway` layer is gone: the traffic layer draws the 國道 and 快速道路.
 

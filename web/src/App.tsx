@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { Metrics } from './ui/Metrics.tsx'
 import { HeatMap, Land, Outline, SEA, projectionFor, taipeiIn, type Transit } from './ui/HeatMap.tsx'
 import { Travellers, MODE_COLOURS, addBatches, type CellTraffic, type Track } from './ui/Travellers.tsx'
 import type { RoadLines } from './ui/Traffic.tsx'
@@ -15,7 +16,10 @@ import { withPublic, type SimEvent } from './sim/events.ts'
 import { clockAt, respeed, READY_MS, type Clock } from './sim/pace.ts'
 import { hhmm, H2 } from './ui/format.ts'
 
-const SPEEDS = [0, 1, 2, 4, 8]
+const SPEEDS = [1, 2, 4, 8]
+// Simulated hours per second at 1x. Half an hour, as the user chose, so that the events do not come too fast and a slow
+// device keeps up more easily (below about 7.5 worker callbacks a second it still falls behind, AGENTS.md).
+const HOURS_AT_1X = 0.5
 const EVERY = [2, 5, 10, 20, 50]
 // 國道 and 快速道路 are part of the traffic layer, which draws them with the streets.
 const LAYERS: [string, string][] = [['mrt', '捷運'], ['lrt', '輕軌'], ['tra', '台鐵'], ['hsr', '高鐵'], ['airport', '機場']]
@@ -25,19 +29,22 @@ const LAYER_BOXES: [string, string][] = [...LAYERS, ['traffic', '路況']]
 const PER_AGENT = 10
 // Plans are made ahead of their departure, so the newest events are not all shown yet: keep more than the list shows.
 const KEEP_EVENTS = 3 * MAX_EVENTS
-// On a phone the clock sits right of the title, and a long holiday name wraps instead of running under it.
-const TITLE_ROOM = 116
 // The English subtitle at this share of the title size is a little narrower than 台北鼓動; the user chose it by eye.
 const SUBTITLE_SCALE = 0.46
 const WINDOWS = [15, 30, 60, KEEP] // simulated minutes the change rate can look back; history keeps the longest
 // A node is a village code (台北市 is county 63000) or a district name.
 const inTaipei = (node: string) => node.startsWith('63000') || node.startsWith('台北市')
 const ALERT = { position: 'absolute', top: 72, left: 16, margin: 0, color: '#ff8b6b' } as const
+// The note of a setting, in grey on the line below it.
+const NOTE = { display: 'block', marginTop: 4, fontSize: 12, color: '#aaa' } as const
 const SIDE_PANEL = { position: 'absolute', top: 16, bottom: 16, overflowY: 'auto', padding: '0 12px', boxSizing: 'border-box', background: 'rgba(33, 29, 29, 0.85)', borderRadius: 4 } as const
 // Turns in a CSS animation of an HTML box (index.html), which the browser can run while the main thread builds a run.
 const SpinnerIcon = () => <span className="spin" style={{ display: 'inline-block', width: 24, height: 24 }}>
   <svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true" style={{ display: 'block' }}>
     <circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeDasharray={`${Math.PI * 9 * 1.5} ${Math.PI * 9 * 0.5}`} /></svg></span>
+// The play and pause marks of a video player.
+const PlayPause = ({ paused }: { paused: boolean }) => <svg viewBox="0 0 10 10" width="10" height="10" aria-hidden="true" style={{ display: 'block' }}>
+  {paused ? <path d="M1 0 L9 5 L1 10 Z" fill="currentColor" /> : <path d="M1 0 H4 V10 H1 Z M6 0 H9 V10 H6 Z" fill="currentColor" />}</svg>
 const HIDDEN = { position: 'absolute', width: 1, height: 1, overflow: 'hidden', clipPath: 'inset(50%)', whiteSpace: 'nowrap' } as const
 const ICON_BUTTON = { width: 40, height: 40, marginRight: 8, padding: 8, border: 0, borderRadius: 20, color: '#fff', cursor: 'pointer' }
 const InfoIcon = () => <svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true">
@@ -88,8 +95,9 @@ export function App() {
   const [s, setS] = useState<FromWorker>()
   // Display settings belong to this viewer, so they stay in this browser; the policies (usePolicies) are in the URL.
   const policies = usePolicies()
-  // A pause is not restored: a viewer who comes back to a stopped page at 00:00 sees nothing move.
-  const [speed, setSpeed] = useStored('speed', 1, s => (s === '0' ? undefined : oneOf(SPEEDS)(s)))
+  const [speed, setSpeed] = useStored('speed', 1, oneOf(SPEEDS))
+  // Apart from the speed, and not stored: a viewer who comes back to a stopped page at 00:00 would see nothing move.
+  const [paused, setPaused] = useState(false)
   const [level, setLevel] = useStored<Level>('level', 'village', oneOf(['district', 'village'] as const))
   const [dot, setDot] = useStored('dot', 50, oneOf(EVERY.map(e => e * PER_AGENT)))
   const every = dot / PER_AGENT
@@ -98,22 +106,11 @@ export function App() {
   const unplaced = useRef<Batch[]>([])
   const [dots, setDots] = useStored('dots', true, bool, fromBool)
   const [byMode, setByMode] = useStored('mode', false, bool, fromBool)
+  const [metrics, setMetrics] = useStored('metrics', false, bool, fromBool)
   const [colourBy, setColourBy] = useStored<'density' | 'rate'>('color', 'rate', oneOf(['density', 'rate'] as const))
   const [history, setHistory] = useState<Entry[]>([])
   const [personal, setPersonal] = useState<SimEvent[]>([]) // the personal events from the worker; the newest KEEP_EVENTS stay
   const [homes, setHomes] = useState(new Uint32Array(0))
-  const [fps, setFps] = useState(0)
-  // The rate of animation frames, counted here and not in a layer, so it goes on when the dots are hidden.
-  useEffect(() => {
-    let raf = 0, frames = 0, since = performance.now()
-    const tick = (now: number) => {
-      frames++
-      if (now - since > 1000) { setFps(frames * 1000 / (now - since)); frames = 0; since = now }
-      raf = requestAnimationFrame(tick)
-    }
-    raf = requestAnimationFrame(tick)
-    return () => cancelAnimationFrame(raf)
-  }, [])
   // A file the page loads once stays failed until reload; a run error belongs to the current run.
   const [loadError, setLoadError] = useState<string>()
   const [open, setOpen] = useState<'info' | 'settings' | 'policies'>()
@@ -130,7 +127,7 @@ export function App() {
   // The start of a new run whose clock stands until the page is ready: state for the icon, a ref for the logic, so a
   // click between a start and its render does not read an old value. deadline: when the run starts anyway.
   const [waiting, setWaiting] = useState<number>()
-  const waitRef = useRef<number>(), deadline = useRef(0), speedRef = useRef(speed)
+  const waitRef = useRef<number>(), deadline = useRef(0), speedRef = useRef(paused ? 0 : speed)
   // The clock of the dots (pace.ts), the model minute of the last message, and the change of speed that the clock uses.
   const last = useRef<Clock & { model: number; since: number }>({ minute: 0, at: 0, perMs: 0, model: 0, since: 0 })
   const toggle = (k: string) => setShow(s => { const n = new Set(s); n.has(k) ? n.delete(k) : n.add(k); return n })
@@ -220,9 +217,9 @@ export function App() {
   }
   // The clock runs at the chosen speed, but stands while the tab is hidden: a hidden page draws nothing, and a run that
   // goes on would only use the battery.
-  const resume = () => startClock(document.hidden ? 0 : speedRef.current)
+  const resume = () => startClock(document.hidden ? 0 : speedRef.current * HOURS_AT_1X)
   // While a new run waits, a change of speed is kept for its start.
-  useEffect(() => { speedRef.current = speed; if (waitRef.current === undefined) resume() }, [speed])
+  useEffect(() => { speedRef.current = paused ? 0 : speed; if (waitRef.current === undefined) resume() }, [speed, paused])
   useEffect(() => {
     const on = () => { if (waitRef.current === undefined) resume() }
     document.addEventListener('visibilitychange', on)
@@ -302,12 +299,14 @@ export function App() {
   // A desktop always shows the policies and has no icon to close them, so a phone's open policy panel closes when the window turns into a desktop.
   useEffect(() => { if (!phone && open === 'policies') setOpen(undefined) }, [phone])
   const people = (pick: (node: string) => boolean) => padded(s ? nodes.reduce((sum, n, i) => pick(n) ? sum + s.counts[i] : sum, 0) * PER_AGENT : 0, 7)
-  const settings = <>
+  const settings = <div className="settings">
     <h2 style={H2}>顯示</h2>
-    <p>{SPEEDS.map(v => <button key={v} onClick={() => setSpeed(v)} style={{ marginRight: 4, fontWeight: v === speed ? 'bold' : 'normal' }}>{v === 0 ? '暫停' : `${v}x`}</button>)}
+    <p><button onClick={() => setPaused(p => !p)} aria-label={paused ? '繼續' : '暫停'} title={paused ? '繼續' : '暫停'}
+      style={{ marginRight: 8, width: 28 }}><PlayPause paused={paused} /></button>
+      {SPEEDS.map(v => <button key={v} onClick={() => setSpeed(v)} style={{ marginRight: 4, fontWeight: v === speed ? 'bold' : 'normal' }}>{v}x</button>)}
       <span style={{ marginLeft: 12 }}>{(['district', 'village'] as Level[]).map(l => <button key={l} onClick={() => { if (l !== level) { if (onScreen && startDay !== undefined) setDayOffset(onScreen.runStart - startDay + (s?.day ?? 0)); setLevel(l) } }}
         style={{ marginRight: 4, fontWeight: l === level ? 'bold' : 'normal' }}>{l === 'district' ? '區' : '里'}</button>)}</span>
-      <br /><small>切換區、里會從當天 00:00 重新模擬。</small></p>
+      <span style={NOTE}>1x 是每秒半小時。切換區、里會從當天 00:00 重新模擬。</span></p>
     <p><label><input type="checkbox" checked={dots} onChange={() => setDots(!dots)} />路上的人</label>，1 點 = {every * PER_AGENT} 人：
       {EVERY.map(v => <button key={v} onClick={() => setDot(v * PER_AGENT)} style={{ marginLeft: 4, fontWeight: v === every ? 'bold' : 'normal' }}>{v * PER_AGENT}</button>)}
       <label style={{ marginLeft: 8 }}><input type="checkbox" checked={byMode} onChange={() => setByMode(!byMode)} />依交通方式上色</label></p>
@@ -321,13 +320,15 @@ export function App() {
     <p>台北市 {people(inTaipei)} 人，新北市 {people(n => !inTaipei(n))} 人，路上 {padded(road.reduce((a, b) => a + b, 0) * PER_AGENT, 6)} 人，外地 {padded((s?.away ?? 0) * PER_AGENT, 6)} 人</p>
     <p style={{ fontSize: 13 }}>{MODES.map((m, k) => <span key={m} style={{ marginRight: 10, whiteSpace: 'nowrap', display: 'inline-block' }}>
       <span style={{ color: MODE_COLOURS[k] }}>●</span> {m} {padded((road[k] ?? 0) * PER_AGENT, 6)}</span>)}</p>
-    {dotTrips && <p>{padded(dotTrips.home.length, 6)} 點{routed < 2 * dotTrips.home.length ? `，路網計算中 ${padded(Math.floor(50 * routed / dotTrips.home.length), 2)}%` : ''}</p>}
-    <p>模擬每幀 {padded(s?.ms ?? 0, 2, 1)} ms，畫面 {padded(fps, 3)} fps</p>
+    {dotTrips && <p>追蹤 {padded(dotTrips.home.length, 6)} 個移動單位{routed < 2 * dotTrips.home.length ? `，路網計算中 ${padded(Math.floor(50 * routed / dotTrips.home.length), 2)}%` : ''}</p>}
+    {/* The note under the text of the checkbox, not under the box. */}
+    <p><label style={{ display: 'flex', alignItems: 'baseline' }}><input type="checkbox" checked={metrics} onChange={() => setMetrics(on => !on)} />
+      <span>效能指標<span style={NOTE}>在右上角：模擬每幀的毫秒數、畫面 fps，以及最慢、最快 1% 幀的 fps。</span></span></label></p>
     </div>
-  </>
+  </div>
   const info = <>
     <p>台北鼓動模擬台北市與新北市的日子，從你打開頁面的這一天起：平日早上人們湧入各里、傍晚離開，假日則出門走走或離開雙北。這是個人的業餘專案，起於 2026-10-24 的市政 debug 松，但沒有報名參賽。</p>
-    <p style={{ fontSize: 12, color: '#aaa' }}>人口密度：現在每平方公里的人數（對數，300 到 100,000）。人口變化率：最近 {rateWindow} 分鐘、每小時的人數變化除以居民數，橘色是流入，藍綠色是流出，滿格是 ±30%。區名下是現在的人數。新北調淡。點：路上的人。捷運沿捷運線，公車、機車、汽車沿公車路線，步行和自行車走直線。1x = 每秒 1 小時。</p>
+    <p style={{ fontSize: 12, color: '#aaa' }}>人口密度：現在每平方公里的人數（對數，300 到 100,000）。人口變化率：最近 {rateWindow} 分鐘、每小時的人數變化除以居民數，橘色是流入，藍綠色是流出，滿格是 ±30%。區名下是現在的人數。新北調淡。點：路上的人。捷運沿捷運線，公車、機車、汽車沿公車路線，步行和自行車走直線。1x = 每秒半小時。</p>
     <p style={{ fontSize: 12, color: '#aaa' }}>
       {/* ODbL and the Open Government Data License both ask for credit where people see the map. */}
       地圖資料：© <a href="https://www.openstreetmap.org/copyright" style={{ color: '#ccc' }}>OpenStreetMap contributors</a>（ODbL）；
@@ -359,7 +360,7 @@ export function App() {
       {!faded && towns && projection && <Outline towns={towns} proj={projection} view={view} pop={pop} />}
       <div className="reveal" style={{ position: 'absolute', inset: 0, opacity: revealed ? 1 : 0, filter: revealed ? 'none' : 'blur(8px)' }}>
       {ready && <>
-        <HeatMap towns={towns} villages={villages} level={onScreen?.level ?? level} nodes={nodes} counts={s.counts} perAgent={PER_AGENT} proj={projection} transit={transit} show={layers} rate={rate} roads={roads} traffic={traffic} speed={speed} view={view} />
+        <HeatMap towns={towns} villages={villages} level={onScreen?.level ?? level} nodes={nodes} counts={s.counts} perAgent={PER_AGENT} proj={projection} transit={transit} show={layers} rate={rate} roads={roads} traffic={traffic} speed={paused ? 0 : speed * HOURS_AT_1X} view={view} />
         {dots && dotTrips && <Travellers tracks={dotRun!.tracks} trips={dotTrips} clock={clock} byMode={byMode} traffic={cellTraffic} view={view} />}
       </>}
       </div>
@@ -369,19 +370,25 @@ export function App() {
       <div role="status" style={{ position: 'absolute', right: box.w - fit.x - fit.w + 16, bottom: 16, color: '#fff', pointerEvents: 'none' }}>
         {(waiting !== undefined || onScreen?.level !== level || onScreen.runStart !== runStart) && !runError && !loadError && <><SpinnerIcon /><span style={HIDDEN}>準備中</span></>}
       </div>
-      <header style={{ position: 'absolute', top: 16, left: 16, pointerEvents: 'none' }}>
-        <h1 style={{ margin: 0, fontSize: titleSize, fontWeight: 'bold', color: '#fff' }}>台北鼓動</h1>
-        {/* Centred on the Chinese title alone: a flex row with no width of its own overflows evenly to both sides. */}
-        <p style={{ margin: 0, width: 0, minWidth: '100%', display: 'flex', justifyContent: 'center', whiteSpace: 'nowrap',
-          fontSize: titleSize * SUBTITLE_SCALE, fontVariantCaps: 'small-caps', letterSpacing: '0.05em', color: '#ccc' }}>Breathing Taipei</p>
-      </header>
-      {/* A phone's map is too narrow for the clock between the title and the edge, so it moves to the right. */}
-      <div style={{ position: 'absolute', top: 16, left: fit.x + (phone ? TITLE_ROOM : 16), width: fit.w - (phone ? TITLE_ROOM + 16 : 32), textAlign: phone ? 'right' : 'center', color: '#fff', pointerEvents: 'none', fontVariantNumeric: 'tabular-nums' }}>
-        <p style={{ margin: 0, fontSize: phone ? 16 : 24 }}>{date?.roc}{s && ` ${hhmm(s.minute)}`}</p>
-        <p style={{ margin: 0, fontSize: phone ? 12 : 14, color: '#ccc' }}>{date && [date.lunar, date.term].filter(Boolean).join('　')}
-          {date?.holiday && <span style={{ color: '#db6a41' }}>　{date.holiday}</span>}
-          {/* Blue: commemorated, not a day off; orange: a day off. */}
-          {date?.observances && <span style={{ color: '#8fb8de' }}>　{date.observances}</span>}</p>
+      {/* index.html (.top-row) places the title, the clock and the metrics. */}
+      <div className="top" style={{ position: 'absolute', top: 16, left: fit.x + 16, width: fit.w - 32 }}>
+        <div className={phone ? 'top-row phone' : 'top-row'}>
+          {/* As wide as the title, so the subtitle centres on it. */}
+          <header style={{ justifySelf: 'start' }}>
+            <h1 style={{ margin: 0, fontSize: titleSize, fontWeight: 'bold', color: '#fff' }}>台北鼓動</h1>
+            {/* Centred on the Chinese title alone: a flex row with no width of its own overflows evenly to both sides. */}
+            <p style={{ margin: 0, width: 0, minWidth: '100%', display: 'flex', justifyContent: 'center', whiteSpace: 'nowrap',
+              fontSize: titleSize * SUBTITLE_SCALE, fontVariantCaps: 'small-caps', letterSpacing: '0.05em', color: '#ccc' }}>Breathing Taipei</p>
+          </header>
+          <div style={{ justifySelf: phone ? 'end' : 'center', textAlign: phone ? 'right' : 'center', color: '#fff', fontVariantNumeric: 'tabular-nums' }}>
+            <p style={{ margin: 0, fontSize: phone ? 16 : 24 }}>{date?.roc}{s && ` ${hhmm(s.minute)}`}</p>
+            <p style={{ margin: 0, fontSize: phone ? 12 : 14, color: '#ccc' }}>{date && [date.lunar, date.term].filter(Boolean).join('　')}
+              {date?.holiday && <span style={{ color: '#db6a41' }}>　{date.holiday}</span>}
+              {/* Blue: commemorated, not a day off; orange: a day off. */}
+              {date?.observances && <span style={{ color: '#8fb8de' }}>　{date.observances}</span>}</p>
+          </div>
+          {metrics && <div className="metrics"><Metrics ms={s?.ms ?? 0} /></div>}
+        </div>
       </div>
       </div>
       {loadError && <p role="alert" style={{ ...ALERT, width: fit.w - 32 }}>無法載入地圖資料：{loadError}</p>}

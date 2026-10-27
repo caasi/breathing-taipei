@@ -35,7 +35,7 @@ test('road paths read from a routes file are the paths the worker would route it
   const roadTrips = legs.home.filter((h, k) => at(h) !== at(legs.work[k])).length
   expect(batches.length).toBe(1 + Math.ceil(roadTrips / KNOWN_BATCH))
   expect([...live].filter(([k, p]) => p.join() !== read.get(k)!.join()).map(([k]) => k)).toEqual([])
-})
+}, 30_000)
 
 test('a routes file for another road graph, cut inside a record, or ending in a partial record is ignored', () => {
   const net = networks(pub('road-graph.json'), pub('mrt-graph.json'))

@@ -3,7 +3,7 @@ import fc from 'fast-check'
 import { clockAt, FRAME_MS, MAX_FRAMES, READY_MS, respeed, stepsTo, type Clock } from './pace.ts'
 import { mulberry32 } from './rng.ts'
 
-const PER_MS = 8 * 60 / 1000, STEP = PER_MS * FRAME_MS // 8x
+const PER_MS = 8 * 60 / 1000, STEP = PER_MS * FRAME_MS // 8 simulated hours a second, more than the fastest button (8x is 4)
 // The worker loop without the model: for callbacks that come the given number of ms apart, the steps of each one.
 const run = (gaps: number[]) => {
   let c: Clock = { minute: 0, at: 0, perMs: PER_MS }, model = 0
@@ -46,7 +46,7 @@ test('a long gap (a tab back from the background) counts as MAX_FRAMES frames', 
 
 test('a clock far ahead of the model is made up over several callbacks, at most MAX_FRAMES + 1 steps in each', () => {
   // Several changes of speed with no callback between them can put the clock far ahead: each one starts a new cap.
-  // At 1x a step is 2 minutes: without the cap, 95 minutes ahead gave 49 steps in the next callback.
+  // At 1 simulated hour a second a step is 2 minutes: without the cap, 95 minutes ahead gave 49 steps in the next callback.
   const slow = 60 / 1000, step = slow * FRAME_MS, c: Clock = { minute: 95, at: 0, perMs: slow }
   let model = 0
   const steps = Array.from({ length: 20 }, (_, k) => {
@@ -64,7 +64,7 @@ test('a step of 0 (no speed yet that was not a pause) makes no step', () => {
 })
 
 test('after a slow-down, the model goes on at the next callback, even when it was ahead of the clock', () => {
-  // At 8x the model can be up to half a step (8 minutes) ahead of the clock. At 1x a step is 2 minutes, so without
+  // At 8 simulated hours a second the model can be up to half a step (8 minutes) ahead of the clock. At 1 simulated hour a second a step is 2 minutes, so without
   // moving the clock up to the model, the model would wait about 4 frames.
   const model = 100 + 0.4 * STEP, slow = 60 / 1000, c: Clock = { minute: 0, at: 0, perMs: 0 }
   respeed(c, 100, model, 0, slow)
@@ -186,7 +186,7 @@ test('the clock of the page never goes back in a run, for any timing of callback
       [[{ gap: 0, load: READY_MS + 1000, delay: 0 }, { gap: READY_MS, ready: true, delay: 0 }, ...Array(80).fill({ gap: FRAME_MS, delay: 0 })]],
       // A frame of a new run that waits: the worker clock must stand at minute 0, so the page clock does too.
       [[{ gap: 0, load: 0, delay: 0 }, { gap: FRAME_MS, delay: 0 }]],
-      // At 8x a frame rounds the model to minute 16 and is on its way when the page pauses at minute 12. The frame
+      // At 8 simulated hours a second a frame rounds the model to minute 16 and is on its way when the page pauses at minute 12. The frame
       // carries the old since, so it cannot move the page clock: the worker must send a frame after the pause.
       [[{ gap: 20, delay: 10 }, { gap: 5, speed: 0, delay: 0 }, { gap: FRAME_MS, delay: 0 }, { gap: FRAME_MS, delay: 0 }]],
       // A frame message still on its way when the speed changes, which the since check must drop.
