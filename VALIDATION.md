@@ -4,7 +4,7 @@
 
 The model aims to be reasonable, not exact: the present state must match what people in Taipei know, so that a policy has a believable baseline. A policy run keeps the constants of the baseline and does not refit them (DATA.md, "Figures in the code").
 
-All model figures below are from the app's run: seed 42, 10 people per agent, village level, the workday 2026-10-27, a take of the traffic every 15 minutes from 00:15. They were measured on 2026-10-27 with `BETA` 1, `MOST` 4, `CAPACITY` 15.7, buckets of at least 0.1 km (`SHORTEST`), and the one-way streets of OSM.
+All model figures below are from the app's run: seed 42, 10 people per agent, village level, the workday 2026-10-27, a take of the traffic every 15 minutes from 00:15. They were measured on 2026-10-27 with `BETA` 1, `MOST` 4, `CAPACITY` 10.9, buckets of at least 0.1 km (`SHORTEST`), and the one-way streets of OSM.
 
 ## How to get the figures again
 
@@ -20,8 +20,8 @@ The extra time is the time on the road over the time on the road with no jam, su
 
 | Peak | TomTom | Model | |
 |---|---|---|---|
-| Morning, trips that leave from 07:00 to 09:59 | 64.6% | 64.8% | The fit target of `CAPACITY` |
-| Evening, trips that leave from 17:00 to 19:59 | 92% | 30.2% | Not matched |
+| Morning, trips that leave from 07:00 to 09:59 | 64.6% | 64.3% | The fit target of `CAPACITY` |
+| Evening, trips that leave from 17:00 to 19:59 | 92% | 33.0% | Not matched |
 
 TomTom does not give the hours of its rush hours (KNOWN-ISSUES.md). The other sources also say that the evening is slower than the morning. 聯合報 gave the mean speed of 34 main roads of 台北市 in the spring of 2026: 21.6 km/h at the morning peak and 18.4 km/h at the evening peak ([聯合報, 2026-09-09](https://udn.com/news/story/7323/9744004)). In the model, the evening is faster than the morning.
 
@@ -32,11 +32,11 @@ For a road section, the slowness at a peak is the median of its speed at night (
 | Peak | Source | Median | 90th percentile | 99th percentile | Most |
 |---|---|---|---|---|---|
 | Morning | TDX | 1.06 | 1.41 | 2.49 | 3.62 |
-| Morning | Model | 1.01 | 1.37 | 2.46 | 3.16 |
+| Morning | Model | 1.01 | 1.54 | 2.82 | 3.74 |
 | Evening | TDX | 1.10 | 1.49 | 2.81 | 3.71 |
-| Evening | Model | 1.00 | 1.29 | 2.12 | 3.26 |
+| Evening | Model | 1.00 | 1.40 | 2.30 | 3.59 |
 
-The model is close to TDX in the morning, and a little freer in the evening. `BETA` and `MOST` were chosen to make these spreads match (DATA.md). The TDX speeds are mostly from vehicle detectors at one point of a road, so they leave out the wait at traffic lights. The slowness of a bucket in the model has no term for the lights either: they are in the free time of a trip.
+In the morning the slowest 10% and 1% of the roads in the model are slower than in TDX; in the evening the model is a little freer. `BETA` and `MOST` were chosen to make these spreads match (DATA.md). The TDX speeds are mostly from vehicle detectors at one point of a road, so they leave out the wait at traffic lights. The slowness of a bucket in the model has no term for the lights either: they are in the free time of a trip.
 
 ## Hotspots
 
@@ -44,29 +44,29 @@ These roads jam at the peaks in the news of 2026. The table gives the slowness o
 
 | Road | News | Model, morning | Model, evening |
 |---|---|---|---|
-| 堤頂大道 | 內科, [自由時報, 2026-08-16](https://news.ltn.com.tw/news/politics/breakingnews/5542049) | 1.51 (66 of 498) | 1.34 (83 of 521) |
-| 國道1號 | 內湖 to 東湖, [壹蘋, 2024-12-17](https://news.nextapple.com/life/20241217/8739F70DC238E402DB822D8E3B2BDAFB) | 2.46 (11) | 3.25 (2) |
-| 承德路 | Afternoon peak, 臺北市政府交通局, report of 115年7月 | 1.31 (108) | 1.33 (85) |
-| 洲美快速道路 | Entry ramp, 臺北市政府交通局, report of 115年7月 | 1.11 (228) | 1.14 (171) |
-| 舊宗路 | 內科, [Entropy Clinic, 重新檢討「內湖很塞」](https://entropyclinic.substack.com/p/9a2) | 1.55 (60) | 1.62 (38) |
-| 環東大道 | 國3 at 環東大道, a jam of the 2026 Lunar New Year (a search result; no weekday source) | 1.23 (143) | 1.27 (102) |
-| 中興橋 | [自由時報, 2026-10-15](https://news.ltn.com.tw/news/life/breakingnews/5606731) | 1.47 (75) | 1.34 (81) |
-| 港墘路 | 內科, 自由時報, 2026-08-16 | 1.38 (88) | 1.42 (67) |
-| 重慶北路四段 | To 國1, 臺北市政府交通局, report of 115年7月 | 1.16 (180) | 1.15 (162) |
-| 中華路二段 | [聯合報, 2026-01-20](https://udn.com/news/story/7323/9276593) | 1.27 (118) | 1.33 (88) |
-| 木柵路 | 臺北市道安會報, 2026-06 (a search result; the record was not read) | 1.70 (46) | 1.58 (41) |
-| 瑞光路 | 臺北市道安會報, 2026-06 | 1.25 (128) | 1.15 (160) |
-| 中正路 | 臺北市道安會報, 2026-06; the model has many roads of this name, and the table takes the slowest | 1.11 (227) | 1.16 (155) |
-| 至善路 | 臺北市道安會報, 2026-06 | 1.17 (176) | 1.22 (127) |
-| 華翠大橋 | 聯合報, 2026-01-20 | 1.27 (117) | 1.03 (280) |
-| 民權東路六段 | 內科, Entropy Clinic | 1.15 (183) | 1.13 (188) |
-| 重陽橋 | 自由時報, 2026-10-15 | 1.06 (275) | 1.00 (331) |
-| 艋舺大道 | 聯合報, 2026-01-20 | 1.00 (323) | 1.00 (322) |
+| 堤頂大道 | 內科, [自由時報, 2026-08-16](https://news.ltn.com.tw/news/politics/breakingnews/5542049) | 1.67 (76 of 497) | 1.49 (81 of 522) |
+| 國道1號 | 內湖 to 東湖, [壹蘋, 2024-12-17](https://news.nextapple.com/life/20241217/8739F70DC238E402DB822D8E3B2BDAFB) | 1.55 (90) | 2.89 (4) |
+| 承德路 | Afternoon peak, 臺北市政府交通局, report of 115年7月 | 1.44 (109) | 1.54 (72) |
+| 洲美快速道路 | Entry ramp, 臺北市政府交通局, report of 115年7月 | 1.15 (230) | 1.12 (221) |
+| 舊宗路 | 內科, [Entropy Clinic, 重新檢討「內湖很塞」](https://entropyclinic.substack.com/p/9a2) | 1.71 (72) | 1.79 (43) |
+| 環東大道 | 國3 at 環東大道, a jam of the 2026 Lunar New Year (a search result; no weekday source) | 1.08 (260) | 1.11 (227) |
+| 中興橋 | [自由時報, 2026-10-15](https://news.ltn.com.tw/news/life/breakingnews/5606731) | 1.61 (81) | 1.69 (52) |
+| 港墘路 | 內科, 自由時報, 2026-08-16 | 1.95 (50) | 1.61 (63) |
+| 重慶北路四段 | To 國1, 臺北市政府交通局, report of 115年7月 | 1.23 (183) | 1.16 (202) |
+| 中華路二段 | [聯合報, 2026-01-20](https://udn.com/news/story/7323/9276593) | 1.43 (113) | 1.41 (97) |
+| 木柵路 | 臺北市道安會報, 2026-06 (a search result; the record was not read) | 1.92 (52) | 1.75 (48) |
+| 瑞光路 | 臺北市道安會報, 2026-06 | 1.33 (140) | 1.19 (179) |
+| 中正路 | 臺北市道安會報, 2026-06; the model has many roads of this name, and the table takes the slowest | 1.25 (173) | 1.19 (181) |
+| 至善路 | 臺北市道安會報, 2026-06 | 1.31 (146) | 1.27 (133) |
+| 華翠大橋 | 聯合報, 2026-01-20 | 1.40 (115) | 1.03 (296) |
+| 民權東路六段 | 內科, Entropy Clinic | 1.21 (195) | 1.19 (183) |
+| 重陽橋 | 自由時報, 2026-10-15 | 1.08 (270) | 1.00 (328) |
+| 艋舺大道 | 聯合報, 2026-01-20 | 1.00 (322) | 1.00 (319) |
 | 台北橋 | 自由時報, 2026-10-15 | Not found | Not found |
 
-- The 國道, 舊宗路 and 木柵路 jam in the model. 承德路 and 環東大道 are slow at part of the peak only, so their median over the whole peak is low. 堤頂大道 is only a little slow at the median: its slowest bucket, of 0.55 km (the most that a named bucket counts, `ACROSS`), is 1.51 at the median of the morning and 1.92 at its slowest take.
-- The bridges from 新北 to the west (重陽橋, 台北橋, 華翠大橋) are almost free; so is 艋舺大道. Their traffic comes from 三重, 蘆洲, 新莊 and 板橋, and from other counties, and the model has no commuters from other counties ([#21](https://github.com/caasi/breathing-taipei/issues/21)).
-- 中正路 and 至善路, near the works of the MRT 環狀線, are almost free: the model has no road works.
+- 港墘路, 木柵路, 舊宗路 and 堤頂大道 jam in the model in the morning. 國道1號 jams in the evening, but only a little in the morning: since a 國道 bucket counts the whole length of its edges, the load of the 國道 is spread over more km than before (DATA.md). 承德路 and 環東大道 are slow at part of the peak only, so their median over the whole peak is low.
+- The bridges from 新北 to the west are almost free (重陽橋, 台北橋, and 華翠大橋 in the evening); so is 艋舺大道. Their traffic comes from 三重, 蘆洲, 新莊 and 板橋, and from other counties, and the model has no commuters from other counties ([#21](https://github.com/caasi/breathing-taipei/issues/21)).
+- 中正路 and 至善路, near the works of the MRT 環狀線, are only a little slow: the model has no road works.
 - 瑞光路 is only a little slow. A trip is placed along its whole path, so nothing waits at the end of the trip; that needs a queue model ([#25](https://github.com/caasi/breathing-taipei/issues/25)).
 - 台北橋 has no name of its own in `road-names.json`. Not checked: the OSM way of the bridge probably carries the name of its road.
 
