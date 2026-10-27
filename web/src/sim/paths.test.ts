@@ -4,6 +4,7 @@ import { init } from './core.ts'
 import { cityFrom } from './city.ts'
 import { finish, KNOWN_BATCH, networks, readRoutes, ROAD_MODES, roadNode, tripPaths, variantWeights, wayBack, writeRoutes, type Batch, type Routes } from './paths.ts'
 import { contract } from './ch.ts'
+import { SCOOTER } from './city.ts'
 import { tree } from './route.ts'
 import { mulberry32 } from './rng.ts'
 
@@ -89,6 +90,22 @@ test('the first batch of the dots finds no road path, so it goes out before the 
   expect(asked).toBe(0)
   for (const _ of gen);
   expect(asked).toBeGreaterThan(0)
+}, 120_000)
+
+test('a scooter dot with no streets-only path takes the fastest path from the routes file, there and home (real data)', () => {
+  const c = cityFrom(data(), 10, 'village'), w = init(c.city, 42), { routes } = built()
+  const ks = Array.from(w.movers).filter(i => w.mode[i] === SCOOTER).slice(0, 500)
+  const legs = { home: ks.map(i => w.home[i]), work: ks.map(i => w.work[i]), mode: ks.map(i => w.mode[i]) }
+  const noStreets: Routes = { ...routes, path: (a, b, v) => (v === 1 ? undefined : routes.path(a, b, v)) }
+  const at = (v: number) => roadNode(net, c.coords, v), roadTrips = legs.home.filter((h, k) => at(h) !== at(legs.work[k])).length
+  // The first batch, then the known batches; a trip routed in the page would add a batch of its own.
+  expect([...tripPaths(legs, c.coords, net, noStreets)].length).toBe(1 + Math.ceil(roadTrips / KNOWN_BATCH))
+  const own = legs.home.filter((h, k) => {
+    const back = routes.path(at(legs.work[k]), at(h), 0), there = routes.path(at(h), at(legs.work[k]), 0)
+    return !!back && !!there && back.join() !== there.slice().reverse().join()
+  }).length
+  expect(own).toBeGreaterThan(0)
+  expect([...wayBack(legs, c.coords, net, noStreets)].reduce((s, b) => s + b.ks.length, 0)).toBe(own)
 }, 120_000)
 
 test('a dot goes home on its own path when that is not the way there reversed, from the far end to home (real data)', () => {

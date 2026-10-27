@@ -78,6 +78,9 @@ export const readRoutes = (data: Uint16Array, g: Graph): Routes | undefined => {
 }
 
 const same = (a: Uint16Array, b: Uint16Array) => a.length === b.length && a.every((e, k) => e === b[k])
+/** The path a dot drives: a scooter the streets-only variant, or the fastest where the streets alone do not connect. */
+const dotPath = (routes: Routes, a: number, b: number, mode: number) =>
+  (mode === SCOOTER ? routes.path(a, b, 1) : undefined) ?? routes.path(a, b, 0)
 
 const routesOf = (hs: Hierarchy[]): Routes => {
   const n = hs[0].rank.length, found = new Map<number, Uint16Array | null>(), search = hs.map(searcher), scratch = dense(n)
@@ -176,8 +179,7 @@ export function* tripPaths(legs: Leg, coords: [number, number][], net: ReturnTyp
   // The road paths are looked up after the first batch, so the dots that need none do not wait for them.
   yield pack(first, firstParts)
   for (const k of onRoad) {
-    // A scooter dot takes the streets-only variant, as its road load does (traffic.ts); the others the fastest one.
-    const m = legs.mode[k], a = road(legs.home[k]), edges = routes?.path(a, road(legs.work[k]), m === SCOOTER ? 1 : 0)
+    const a = road(legs.home[k]), edges = routes && dotPath(routes, a, road(legs.work[k]), legs.mode[k])
     if (edges) { known.push(k); knownFrom.push(a); knownEdges.push(edges) }
     else (roadFrom.get(a) ?? roadFrom.set(a, []).get(a)!).push(k)
   }
@@ -199,8 +201,8 @@ export function* wayBack(legs: Leg, coords: [number, number][], net: ReturnType<
   const at = new Map<number, number>(), road = (v: number) => at.get(v) ?? at.set(v, roadNode(net, coords, v)).get(v)!
   const ks: number[] = [], parts: number[][] = []
   for (let k = 0; k < legs.home.length; k++) {
-    const m = legs.mode[k], a = road(legs.work[k]), b = road(legs.home[k]), v = m === SCOOTER ? 1 : 0
-    const edges = ROAD_MODES.has(m) ? routes.path(a, b, v) : undefined, there = edges && routes.path(b, a, v)
+    const m = legs.mode[k], a = road(legs.work[k]), b = road(legs.home[k])
+    const edges = ROAD_MODES.has(m) ? dotPath(routes, a, b, m) : undefined, there = edges && dotPath(routes, b, a, m)
     if (!edges || !there || same(edges, there.slice().reverse())) continue
     ks.push(k); parts.push([...coords[legs.work[k]], ...pathAlong(net.road, a, edges), ...coords[legs.home[k]]])
     if (ks.length === KNOWN_BATCH) { yield pack(ks.splice(0), parts.splice(0)) }
