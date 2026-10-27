@@ -4,7 +4,8 @@ import { useEffect, useRef, type CSSProperties } from 'react'
 // 60 fps (600 frames, the 6 slowest), short enough to show a change of speed or layer soon.
 const WINDOW_MS = 10_000, REDRAW_MS = 500, FONT_PX = 12
 
-const fps = (n: number) => Math.min(999, Math.round(n))
+// Zero-padded to 2 digits (SIM to 000.0), so the line does not move as the figures change.
+const fps = (n: number) => String(Math.min(999, Math.round(n))).padStart(2, '0')
 // The fps of the mean frame of the slowest (or fastest) 1% of the frames, at least one.
 export const tail = (sorted: number[], slow: boolean) => {
   const k = Math.max(1, Math.round(sorted.length / 100)), part = slow ? sorted.slice(-k) : sorted.slice(0, k)

@@ -37,7 +37,7 @@ const WINDOWS = [15, 30, 60, KEEP] // simulated minutes the change rate can look
 const inTaipei = (node: string) => node.startsWith('63000') || node.startsWith('台北市')
 const ALERT = { position: 'absolute', top: 72, left: 16, margin: 0, color: '#ff8b6b' } as const
 // The note of a setting, in grey on the line below it.
-const NOTE = { display: 'block', fontSize: 12, color: '#aaa' } as const
+const NOTE = { display: 'block', marginTop: 4, fontSize: 12, color: '#aaa' } as const
 const SIDE_PANEL = { position: 'absolute', top: 16, bottom: 16, overflowY: 'auto', padding: '0 12px', boxSizing: 'border-box', background: 'rgba(33, 29, 29, 0.85)', borderRadius: 4 } as const
 // Turns in a CSS animation of an HTML box (index.html), which the browser can run while the main thread builds a run.
 const SpinnerIcon = () => <span className="spin" style={{ display: 'inline-block', width: 24, height: 24 }}>
@@ -316,8 +316,9 @@ export function App() {
     <p style={{ fontSize: 13 }}>{MODES.map((m, k) => <span key={m} style={{ marginRight: 10, whiteSpace: 'nowrap', display: 'inline-block' }}>
       <span style={{ color: MODE_COLOURS[k] }}>●</span> {m} {padded((road[k] ?? 0) * PER_AGENT, 6)}</span>)}</p>
     {dotTrips && <p>{padded(dotTrips.home.length, 6)} 點{routed < 2 * dotTrips.home.length ? `，路網計算中 ${padded(Math.floor(50 * routed / dotTrips.home.length), 2)}%` : ''}</p>}
-    <p><label><input type="checkbox" checked={metrics} onChange={() => setMetrics(on => !on)} />效能指標</label>
-      <span style={NOTE}>在右上角：模擬每幀的毫秒數、畫面 fps，以及最慢、最快 1% 幀的 fps。</span></p>
+    {/* The note under the text of the checkbox, not under the box. */}
+    <p><label style={{ display: 'flex', alignItems: 'baseline' }}><input type="checkbox" checked={metrics} onChange={() => setMetrics(on => !on)} />
+      <span>效能指標<span style={NOTE}>在右上角：模擬每幀的毫秒數、畫面 fps，以及最慢、最快 1% 幀的 fps。</span></span></label></p>
     </div>
   </>
   const info = <>
