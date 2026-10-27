@@ -1,5 +1,6 @@
 import { GONE, PLAY, STAY } from './core.ts'
 import { isoAt, kindAt, type Calendar } from './calendar.ts'
+import { BUS, SCOOTER } from './city.ts'
 
 /**
  * One event: t in minutes since 00:00 of day 0. A personal event follows one agent (a character: 10 people at the
@@ -46,8 +47,8 @@ export const actionOf = (e: Extract<SimEvent, { kind: 'personal' }>, placeOf: Pl
 
 /** The sentence after the name for a jam (kind 'jam'). */
 export const jamOf = (e: Extract<SimEvent, { kind: 'jam' }>, placeOf: PlaceOf) => {
-  const near = placeOf(e.near), at = e.road ?? `${near.village || near.town}附近`, bus = e.mode === 1
-  const by = bus ? '坐的公車' : e.mode === 2 ? '騎機車' : '開車'
+  const near = placeOf(e.near), at = e.road ?? `${near.village || near.town}附近`, bus = e.mode === BUS
+  const by = bus ? '坐的公車' : e.mode === SCOOTER ? '騎機車' : '開車'
   switch (e.mood) {
     case 'angry': return bus ? `坐的公車卡在${at}，越等越火大` : `${by}塞在${at}，半天沒前進，氣到想罵人`
     case 'stuck': return bus ? `坐的公車卡在${at}，車上的人都在看錶` : `${by}卡在${at}，走走停停，只能等`
