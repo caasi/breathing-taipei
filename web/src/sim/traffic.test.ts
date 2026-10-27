@@ -3,9 +3,10 @@ import fc from 'fast-check'
 import { existsSync, readFileSync } from 'node:fs'
 import { advance, init, now, where, ROAD, type City, type World } from './core.ts'
 import { cityFrom } from './city.ts'
-import { networks, readRoutes, roadNode } from './paths.ts'
+import { networks, readRoutes, roadNode, VARIANTS, type Routes } from './paths.ts'
+import { SCOOTER } from './city.ts'
 import { workNodes } from './jobs.ts'
-import { cellKey, cellMax, extraTime, MOST, gridOf, levels, liveOf, roadUse, slowerOn, stepper, take, type Live } from './traffic.ts'
+import { cellKey, cellMax, extraTime, MOST, gridOf, levels, liveOf, fullRoadUse, slowerOn, stepper, take, type Live } from './traffic.ts'
 import type { GraphJson } from './route.ts'
 
 const pub = (f: string) => JSON.parse(readFileSync(new URL(`../../public/${f}`, import.meta.url), 'utf8'))
@@ -85,6 +86,14 @@ test('the slowness of the rest of a path counts only the part of the current edg
   expect(slowerOn([0, 1], 0, live)).toBeCloseTo(2.5, 9)
 })
 
+test('a variant with no path drives the variant before it, so a scooter whose streets alone do not connect its ends still loads the road', () => {
+  const w = { movers: Uint32Array.from([0]), mode: Uint8Array.from([SCOOTER]), playMode: Uint8Array.from([4]), dest: Uint8Array.from([0]), dep: Int32Array.from([0]) } as unknown as World
+  const fastest = Uint16Array.from([0, 1])
+  const routes: Routes = { path: (a, b, v) => (v === 0 && a !== b ? fastest : undefined), *fill() {}, clear() {} }
+  const use = fullRoadUse(w, routes, () => [5, 9], [1, 1])
+  expect(use.paths.slice(0, VARIANTS)).toEqual([fastest, fastest, fastest])
+})
+
 // The app's run on the real data, with its routes file (made by `pnpm routes`, not in git).
 const bin = new URL('../../public/road-routes.bin', import.meta.url)
 const appRun = () => {
@@ -94,7 +103,7 @@ const appRun = () => {
   const routes = readRoutes(new Uint16Array(b.buffer, b.byteOffset, b.byteLength / 2), net.road)!
   const node = new Map<number, number>(), at = (v: number) => node.get(v) ?? node.set(v, roadNode(net, c.coords, v)).get(v)!
   const workAt = workNodes(net, c.coords, true), grid = gridOf(road, pub('road-names.json').edge), live = liveOf(road, grid)
-  const use = roadUse(w, routes, (i, leg) => [at(w.home[i]), leg ? at(w.play[i]) : workAt(i, w.work[i])], live.time)
+  const use = fullRoadUse(w, routes, (i, leg) => [at(w.home[i]), leg ? at(w.play[i]) : workAt(i, w.work[i])], live.time)
   return { w, use, live, load: new Float32Array(road.edges.length) }
 }
 const plans = (w: World) => [Int32Array.from(w.dep), Uint16Array.from(w.dur1), Int32Array.from(w.ret), Uint16Array.from(w.dur2)]

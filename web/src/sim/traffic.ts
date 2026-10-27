@@ -1,5 +1,5 @@
 import { advance, where, now, stretch, ROAD, PLAY, GONE, type World } from './core.ts'
-import { pathIn, ROAD_MODES, routeKey, VARIANTS, type Routes } from './paths.ts'
+import { ROAD_MODES, VARIANTS, type Routes } from './paths.ts'
 import { ACCESS, BUS, SCOOTER } from './city.ts'
 import { freeTime, type GraphJson } from './route.ts'
 
@@ -53,22 +53,45 @@ export type RoadUse = {
 }
 
 /**
- * ends gives the road nodes of agent i's trip (leg 0 to work, 1 to its day-off place). The way home is the path from
- * the far end in `routes` when the file holds it (a one-way road made it differ), else the way there reversed.
+ * ends gives the road nodes of agent i's trip (leg 0 to work, 1 to its day-off place); the way home is the path from
+ * the far end. `use` holds no path until `filling` has found them all (routes.fill), yielding between parts so the
+ * worker can spread it over frames. The run waits for it (worker.ts), so the traffic of a seed does not depend on how
+ * fast the device finds the paths.
  */
-export const roadUse = (w: World, routes: Routes, ends: (agent: number, leg: number) => [number, number], time: ArrayLike<number>): RoadUse => {
+export const roadUse = (w: World, routes: Routes, ends: (agent: number, leg: number) => [number, number], time: ArrayLike<number>) => {
   const cum = new Map<Uint16Array, Float32Array>(), n = w.movers.length, paths: (Uint16Array | undefined)[] = new Array(4 * n * VARIANTS)
+  const use: RoadUse = { paths, cum, pick: new Int8Array(n), since: new Int32Array(n).fill(-(2 ** 31)), free: new Float32Array(n), path: new Int32Array(n), at: new Int32Array(n), left: new Float32Array(n), on: [] }
   const add = (es: Uint16Array) => { if (!cum.has(es)) { const c = new Float32Array(es.length); let s = 0; es.forEach((e, j) => (c[j] = s += time[e])); cum.set(es, c) } }
-  const flipped = new Map<Uint16Array, Uint16Array>(), flip = (es: Uint16Array) => flipped.get(es) ?? flipped.set(es, es.slice().reverse()).get(es)!
-  w.movers.forEach((i, j) => [w.mode[i], w.playMode[i]].forEach((mode, leg) => {
-    if (!ROAD_MODES.has(mode)) return
-    const [a, b] = ends(i, leg), own = routes.has(routeKey(b, a))
-    for (let v = 0; v < VARIANTS; v++) {
-      const there = pathIn(routes, a, b, v), back = own ? pathIn(routes, b, a, v) : there && flip(there)
-      ;[there, back].forEach((es, k) => { if (es) { add(es); paths[((2 * j + leg) * 2 + k) * VARIANTS + v] = es } })
+  // Yields the share done: the legs 5%, the paths 85%, putting them in 10%.
+  function* filling(): Generator<number> {
+    const legs: [number, number, number, number][] = [] // mover index, leg, from, to
+    for (let j = 0; j < n; j++) {
+      const i = w.movers[j]
+      if (ROAD_MODES.has(w.mode[i])) legs.push([j, 0, ...ends(i, 0)])
+      if (ROAD_MODES.has(w.playMode[i])) legs.push([j, 1, ...ends(i, 1)])
+      if (j % 20000 === 19999) yield 0.05 * j / n
     }
-  }))
-  return { paths, cum, pick: new Int8Array(n), since: new Int32Array(n).fill(-(2 ** 31)), free: new Float32Array(n), path: new Int32Array(n), at: new Int32Array(n), left: new Float32Array(n), on: [] }
+    for (const done of routes.fill(legs.flatMap(([, , a, b]) => [[a, b], [b, a]] as [number, number][]))) yield 0.05 + 0.85 * done
+    for (let k = 0; k < legs.length; k++) {
+      const [j, leg, a, b] = legs[k]
+      // A variant with no path (a pair that the streets alone do not connect) drives the variant before it.
+      ;[[a, b], [b, a]].forEach(([x, y], back) => {
+        for (let v = 0, last: Uint16Array | undefined; v < VARIANTS; v++) {
+          const es = routes.path(x, y, v) ?? last
+          if (es) { add(es); paths[((2 * j + leg) * 2 + back) * VARIANTS + v] = es; last = es }
+        }
+      })
+      if (k % 500 === 499) yield 0.9 + 0.1 * k / legs.length
+    }
+  }
+  return { use, filling: filling() }
+}
+
+/** roadUse with every path in, for a caller that does not spread the work over frames. */
+export const fullRoadUse = (...args: Parameters<typeof roadUse>) => {
+  const { use, filling } = roadUse(...args)
+  for (const _ of filling);
+  return use
 }
 
 /** What a driver who follows the live traffic weighs a path by: the free time of each edge, and the slowness of its bucket. */

@@ -4,7 +4,7 @@
 
 The model aims to be reasonable, not exact: the present state must match what people in Taipei know, so that a policy has a believable baseline. A policy run keeps the constants of the baseline and does not refit them (DATA.md, "Figures in the code").
 
-All model figures below are from the app's run: seed 42, 10 people per agent, village level, the workday 2026-10-27, a take of the traffic every 15 minutes from 00:15. They were measured on 2026-10-27 with `BETA` 1, `MOST` 4, `CAPACITY` 10.9, buckets of at least 0.1 km (`SHORTEST`), and the one-way streets of OSM.
+All model figures below are from the app's run: seed 42, 10 people per agent, village level, the workday 2026-10-27, a take of the traffic every 15 minutes from 00:15. They were measured on 2026-10-27, with the paths of the contraction hierarchies (`road-routes.bin`), with `BETA` 1, `MOST` 4, `CAPACITY` 10.9, buckets of at least 0.1 km (`SHORTEST`), and the one-way streets of OSM.
 
 ## How to get the figures again
 
@@ -20,8 +20,8 @@ The extra time is the time on the road over the time on the road with no jam, su
 
 | Peak | TomTom | Model | |
 |---|---|---|---|
-| Morning, trips that leave from 07:00 to 09:59 | 64.6% | 64.3% | The fit target of `CAPACITY` |
-| Evening, trips that leave from 17:00 to 19:59 | 92% | 33.0% | Not matched |
+| Morning, trips that leave from 07:00 to 09:59 | 64.6% | 64.5% | The fit target of `CAPACITY` |
+| Evening, trips that leave from 17:00 to 19:59 | 92% | 33.1% | Not matched |
 
 TomTom does not give the hours of its rush hours (KNOWN-ISSUES.md). The other sources also say that the evening is slower than the morning. 聯合報 gave the mean speed of 34 main roads of 台北市 in the spring of 2026: 21.6 km/h at the morning peak and 18.4 km/h at the evening peak ([聯合報, 2026-09-09](https://udn.com/news/story/7323/9744004)). In the model, the evening is faster than the morning.
 
@@ -32,9 +32,9 @@ For a road section, the slowness at a peak is the median of its speed at night (
 | Peak | Source | Median | 90th percentile | 99th percentile | Most |
 |---|---|---|---|---|---|
 | Morning | TDX | 1.06 | 1.41 | 2.49 | 3.62 |
-| Morning | Model | 1.01 | 1.54 | 2.82 | 3.74 |
+| Morning | Model | 1.02 | 1.54 | 2.73 | 3.73 |
 | Evening | TDX | 1.10 | 1.49 | 2.81 | 3.71 |
-| Evening | Model | 1.00 | 1.40 | 2.30 | 3.59 |
+| Evening | Model | 1.00 | 1.39 | 2.27 | 3.25 |
 
 In the morning the slowest 10% and 1% of the roads in the model are slower than in TDX; in the evening the model is a little freer. `BETA` and `MOST` were chosen to make these spreads match (DATA.md). The TDX speeds are mostly from vehicle detectors at one point of a road, so they leave out the wait at traffic lights. The slowness of a bucket in the model has no term for the lights either: they are in the free time of a trip.
 
@@ -44,24 +44,24 @@ These roads jam at the peaks in the news of 2026. The table gives the slowness o
 
 | Road | News | Model, morning | Model, evening |
 |---|---|---|---|
-| 堤頂大道 | 內科, [自由時報, 2026-08-16](https://news.ltn.com.tw/news/politics/breakingnews/5542049) | 1.67 (76 of 497) | 1.49 (81 of 522) |
-| 國道1號 | 內湖 to 東湖, [壹蘋, 2024-12-17](https://news.nextapple.com/life/20241217/8739F70DC238E402DB822D8E3B2BDAFB) | 1.55 (90) | 2.89 (4) |
-| 承德路 | Afternoon peak, 臺北市政府交通局, report of 115年7月 | 1.44 (109) | 1.54 (72) |
-| 洲美快速道路 | Entry ramp, 臺北市政府交通局, report of 115年7月 | 1.15 (230) | 1.12 (221) |
-| 舊宗路 | 內科, [Entropy Clinic, 重新檢討「內湖很塞」](https://entropyclinic.substack.com/p/9a2) | 1.71 (72) | 1.79 (43) |
-| 環東大道 | 國3 at 環東大道, a jam of the 2026 Lunar New Year (a search result; no weekday source) | 1.08 (260) | 1.11 (227) |
-| 中興橋 | [自由時報, 2026-10-15](https://news.ltn.com.tw/news/life/breakingnews/5606731) | 1.61 (81) | 1.69 (52) |
-| 港墘路 | 內科, 自由時報, 2026-08-16 | 1.95 (50) | 1.61 (63) |
-| 重慶北路四段 | To 國1, 臺北市政府交通局, report of 115年7月 | 1.23 (183) | 1.16 (202) |
-| 中華路二段 | [聯合報, 2026-01-20](https://udn.com/news/story/7323/9276593) | 1.43 (113) | 1.41 (97) |
-| 木柵路 | 臺北市道安會報, 2026-06 (a search result; the record was not read) | 1.92 (52) | 1.75 (48) |
-| 瑞光路 | 臺北市道安會報, 2026-06 | 1.33 (140) | 1.19 (179) |
-| 中正路 | 臺北市道安會報, 2026-06; the model has many roads of this name, and the table takes the slowest | 1.25 (173) | 1.19 (181) |
-| 至善路 | 臺北市道安會報, 2026-06 | 1.31 (146) | 1.27 (133) |
-| 華翠大橋 | 聯合報, 2026-01-20 | 1.40 (115) | 1.03 (296) |
-| 民權東路六段 | 內科, Entropy Clinic | 1.21 (195) | 1.19 (183) |
-| 重陽橋 | 自由時報, 2026-10-15 | 1.08 (270) | 1.00 (328) |
-| 艋舺大道 | 聯合報, 2026-01-20 | 1.00 (322) | 1.00 (319) |
+| 堤頂大道 | 內科, [自由時報, 2026-08-16](https://news.ltn.com.tw/news/politics/breakingnews/5542049) | 1.72 (71 of 490) | 1.49 (80 of 520) |
+| 國道1號 | 內湖 to 東湖, [壹蘋, 2024-12-17](https://news.nextapple.com/life/20241217/8739F70DC238E402DB822D8E3B2BDAFB) | 1.54 (90) | 2.90 (3) |
+| 承德路 | Afternoon peak, 臺北市政府交通局, report of 115年7月 | 1.54 (91) | 1.53 (72) |
+| 洲美快速道路 | Entry ramp, 臺北市政府交通局, report of 115年7月 | 1.15 (238) | 1.10 (232) |
+| 舊宗路 | 內科, [Entropy Clinic, 重新檢討「內湖很塞」](https://entropyclinic.substack.com/p/9a2) | 1.58 (82) | 1.79 (42) |
+| 環東大道 | 國3 at 環東大道, a jam of the 2026 Lunar New Year (a search result; no weekday source) | 1.09 (258) | 1.11 (229) |
+| 中興橋 | [自由時報, 2026-10-15](https://news.ltn.com.tw/news/life/breakingnews/5606731) | 1.59 (81) | 1.71 (52) |
+| 港墘路 | 內科, 自由時報, 2026-08-16 | 2.11 (43) | 1.60 (64) |
+| 重慶北路四段 | To 國1, 臺北市政府交通局, report of 115年7月 | 1.17 (225) | 1.15 (198) |
+| 中華路二段 | [聯合報, 2026-01-20](https://udn.com/news/story/7323/9276593) | 1.43 (114) | 1.41 (92) |
+| 木柵路 | 臺北市道安會報, 2026-06 (a search result; the record was not read) | 1.93 (55) | 1.78 (44) |
+| 瑞光路 | 臺北市道安會報, 2026-06 | 1.31 (147) | 1.21 (162) |
+| 中正路 | 臺北市道安會報, 2026-06; the model has many roads of this name, and the table takes the slowest | 1.25 (176) | 1.18 (181) |
+| 至善路 | 臺北市道安會報, 2026-06 | 1.31 (149) | 1.27 (130) |
+| 華翠大橋 | 聯合報, 2026-01-20 | 1.40 (118) | 1.03 (296) |
+| 民權東路六段 | 內科, Entropy Clinic | 1.26 (173) | 1.19 (175) |
+| 重陽橋 | 自由時報, 2026-10-15 | 1.08 (274) | 1.04 (279) |
+| 艋舺大道 | 聯合報, 2026-01-20 | 1.02 (315) | 1.00 (320) |
 | 台北橋 | 自由時報, 2026-10-15 | Not found | Not found |
 
 - 港墘路, 木柵路, 舊宗路 and 堤頂大道 jam in the model in the morning. 國道1號 jams in the evening, but only a little in the morning: since a 國道 bucket counts the whole length of its edges, the load of the 國道 is spread over more km than before (DATA.md). 承德路 and 環東大道 are slow at part of the peak only, so their median over the whole peak is low.

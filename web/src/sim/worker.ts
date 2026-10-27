@@ -6,7 +6,7 @@ import { evenPick, type Mood, type SimEvent } from './events.ts'
 import { mulberry32 } from './rng.ts'
 import { FPS, clockAt, respeed, stepsTo, type Clock } from './pace.ts'
 import { cityFrom, MODES, SCOOTER } from './city.ts'
-import { networks, readRoutes, roadNode, tripPaths, wayBack, type Batch, type Routes } from './paths.ts'
+import { networks, readRoutes, ROAD_MODES, roadNode, tripPaths, wayBack, type Batch, type Routes } from './paths.ts'
 import type { GraphJson } from './route.ts'
 import { workNodes } from './jobs.ts'
 import { cellMax, gridOf, levels, liveOf, roadUse, stepper, take as takeTraffic, type Grid, type Live, type RoadUse } from './traffic.ts'
@@ -31,7 +31,7 @@ export type Replans = { k: Uint32Array; dest: Uint8Array; dep: Int32Array; dur1:
 /** A failure while starting (load, city build, sampling) ends the worker's work; the page shows it instead of waiting. */
 export type WorkerError = { error: string; start: number } // start: the id of the init that failed
 export type FromWorker = {
-  start?: number; nodes?: string[]; homes?: Uint32Array; coords?: [number, number][]; trips?: Trips; replans?: Replans; paths?: Batch[]; routed?: number
+  start?: number; nodes?: string[]; homes?: Uint32Array; coords?: [number, number][]; trips?: Trips; replans?: Replans; paths?: Batch[]
   minute: number; day: number; counts: Uint32Array; road: Uint32Array; away: number; ms: number
   events?: SimEvent[] // personal events of plans made since the last message
   traffic?: Uint8Array // per road edge: 0 no traveller, 1 (free) to 255 (slowest) (traffic.ts levels); sent when it changes
@@ -39,6 +39,8 @@ export type FromWorker = {
   cellKeys?: Int32Array // the key of each cell of the traffic (traffic.ts gridOf keys), sent once a run
   clock: number; at: number // the clock (pace.ts) shows minute `clock` at `at` (performance.timeOrigin + performance.now())
   since: number // the `at` of the change of speed that the clock uses; the page takes the clock only from its latest change
+  routing: boolean // the road paths of the run are not all found yet, so the run must not start (traffic.ts roadUse)
+  roads: number // the share of the road paths found, 0 to 1, while routing
 }
 
 const EVENTS_PER_DAY = 48
@@ -52,17 +54,23 @@ let hoursPerSec = 0, lastHours = 0 // lastHours: the last speed that was not a p
 const clock: Clock = { minute: 0, at: performance.now(), perMs: 0 }
 let since = 0, owed = false // owed: the page has no frame yet with the clock of the latest change of speed
 let extra: Pick<FromWorker, 'start' | 'nodes' | 'homes' | 'coords' | 'trips' | 'replans' | 'traffic' | 'cells' | 'cellKeys'> = {}
-let pending: Generator<Batch> | undefined
+let pending: Generator<Batch | void> | undefined
+// Finds the paths of the road load (traffic.ts roadUse) in the time that the paths of the dots leave.
+let warming: Generator<number> | undefined, roads = 0 // roads: the share of the road paths found
+// The run has a routes file whose road paths are not all found yet; the page holds the clock until they are.
+let routing = false
+// Also when the fill fails: the page waits for routing to end, with no deadline. A frame must carry the change, as a
+// standing clock with nothing to send skips the frame.
+const doneRouting = () => { routing = false; owed = true }
 let newEvents: SimEvent[] = []
 let eventId = 0
-let routed = 0
 let idx = new Uint32Array(0) // agent of each sampled trip
 // The plan last sent for each sampled trip: a new plan always changes the departure, and a jam (traffic.ts) a leg.
 let sentDep = new Int32Array(0), sentDur1 = new Uint16Array(0), sentDur2 = new Uint16Array(0)
 let use: RoadUse | undefined, grid: Grid | undefined, live: Live | undefined, load = new Float32Array(0), jam = new Uint8Array(0)
 let trafficOn = false, lastCells = new Uint8Array(0), jamRng = mulberry32(0)
 // ponytail: the traffic is taken at each boundary of 15 simulated minutes (a guess; scripts/traffic.ts fits with the
-// same step), whatever the speed, so a seed gives the same run at any speed, from the take after the routes file has loaded. One take costs 7 to 26 ms at the morning peak in Node on an i7-7700 (2026-10-27), so at 8x (16 takes a second) it is the main cost.
+// same step), whatever the speed, so a seed gives the same run at any speed: the run starts only when the road paths are found. One take costs 7 to 26 ms at the morning peak in Node on an i7-7700 (2026-10-27), so at 8x (16 takes a second) it is the main cost.
 const JAM_MINUTES = 15
 // A jam event comes from a road traveller on an edge at least this slow (traffic.ts levels: 1 + 254 x the colour level
 // of levelsOf; red from 0.43, 2 times the free time; angry from 0.75, 2.75 times). ponytail: at most one jam event a take, and one a day for each character; by eye.
@@ -76,7 +84,8 @@ const data = Promise.all(['od2.json', 'villages2.json', 'signal.json', 'road-gra
 /** The name of each road edge, from scripts/names.py: edge[e] indexes names, or is -1. */
 type RoadNames = { names: string[]; edge: number[] }
 const net = data.then(([, , , road, mrt]) => networks(road, mrt))
-// Made by `pnpm routes` before dev and build; without it (or for another road graph) the worker routes every road trip itself.
+// Made by `pnpm routes` before dev and build; without it (or for another road graph) the worker routes every road trip
+// of the dots itself, and there is no traffic.
 const routes = Promise.all([net, getOptional('road-routes.bin').catch(() => undefined)])
   .then(([n, file]) => (file ? readRoutes(file, n.road) : undefined))
 // The start handler awaits data and net and reports their failure; routes only feeds the paths. Mark all three
@@ -119,12 +128,25 @@ const replans = (w: World): Replans | undefined => {
  * The paths to work as paths 0..n-1, the paths to the day-off places as paths n..2n-1, then the paths home from them
  * that differ from the way there reversed as paths 2n..3n-1 and 3n..4n-1 (Travellers.tsx).
  */
-// The two take turns, so the dots of a day off do not wait for every road path to work.
-function* bothPaths(trips: Trips, coords: [number, number][], graphs: Awaited<typeof net>, known?: Routes): Generator<Batch> {
+// The two take turns, so the dots of a day off do not wait for every road path to work. The first batch of each needs
+// no road path; then the road paths of the dots are found in a batch (routes.fill), much faster than one at a time.
+function* bothPaths(trips: Trips, coords: [number, number][], graphs: Awaited<typeof net>, known?: Routes): Generator<Batch | void> {
   const n = trips.home.length
   const work = tripPaths(trips, coords, graphs, known)
   const play = tripPaths({ home: trips.home, work: trips.play, mode: trips.playMode }, coords, graphs, known)
-  for (let a = work.next(), b = play.next(); !a.done || !b.done; a = a.done ? a : work.next(), b = b.done ? b : play.next()) {
+  const a0 = work.next(), b0 = play.next()
+  if (!a0.done) yield a0.value
+  if (!b0.done) yield { ...b0.value, ks: b0.value.ks.map(k => k + n) }
+  if (known) {
+    const at = new Map<number, number>(), road = (v: number) => at.get(v) ?? at.set(v, roadNode(graphs, coords, v)).get(v)!
+    const pairs = [[] as [number, number][], [] as [number, number][]] // by the variant a dot drives: 1 for a scooter
+    for (let k = 0; k < n; k++) [[trips.work[k], trips.mode[k]], [trips.play[k], trips.playMode[k]]].forEach(([to, mode]) => {
+      if (ROAD_MODES.has(mode)) pairs[mode === SCOOTER ? 1 : 0].push([road(trips.home[k]), road(to)], [road(to), road(trips.home[k])])
+    })
+    for (const _ of known.fill(pairs[0], [0])) yield
+    for (const _ of known.fill(pairs[1], [0, 1])) yield
+  }
+  for (let a = a0.done ? a0 : work.next(), b = b0.done ? b0 : play.next(); !a.done || !b.done; a = a.done ? a : work.next(), b = b.done ? b : play.next()) {
     if (!a.done) yield a.value
     if (!b.done) yield { ...b.value, ks: b.value.ks.map(k => k + n) }
   }
@@ -163,7 +185,7 @@ const frame = () => {
   // Nothing moves and nothing new is there to send (a pause, a hidden tab, a run that waits): skip the frame, so a
   // paused page costs almost nothing. After a change of speed one frame goes out anyway: the page takes the worker
   // clock only from a frame of its latest change, and a frame from before it can have moved the model past its clock.
-  if (n === 0 && !owed && !pending && !newEvents.length && !Object.keys(extra).length) return
+  if (n === 0 && !owed && !pending && !warming && !newEvents.length && !Object.keys(extra).length) return
   for (let k = n; k > 0; k--) stepWithTraffic(w, step)
   extra.replans = replans(w)
   const c = counts(w, MODES.length)
@@ -171,13 +193,19 @@ const frame = () => {
   // Road routing is slow, so it runs in the spare time of each frame, but at least 4 ms of it: on a slow
   // device (iPhone) the simulation alone can fill the 12 ms, and the routing then never started.
   const paths: Batch[] = []
-  const until = Math.max(t + 12, performance.now() + 4)
-  while (pending && performance.now() < until) {
-    const b = pending.next()
-    if (b.done) { pending = undefined; break }
-    paths.push(b.value); routed += b.value.ks.length
+  // While the run waits for the road paths (the clock stands), the routing takes most of each callback.
+  const until = routing && !clock.perMs ? t + 28 : Math.max(t + 12, performance.now() + 4)
+  // The dots and the road load take turns.
+  while ((pending || warming) && performance.now() < until) {
+    const r = warming?.next()
+    if (r?.done) warming = undefined
+    else if (r) roads = r.value
+    const b = pending?.next()
+    if (!b) continue
+    if (b.done) pending = undefined
+    else if (b.value) paths.push(b.value)
   }
-  const msg: FromWorker = { ...extra, paths, routed, minute: w.minute, day: w.day, counts: c.nodes, road: c.road, away: c.away, ms, events: newEvents, clock: clock.minute, at: performance.timeOrigin + t, since }
+  const msg: FromWorker = { ...extra, paths, routing, roads, minute: w.minute, day: w.day, counts: c.nodes, road: c.road, away: c.away, ms, events: newEvents, clock: clock.minute, at: performance.timeOrigin + t, since }
   newEvents = []
   owed = false
   postMessage(msg)
@@ -188,25 +216,29 @@ setInterval(frame, 1000 / FPS)
 let drawn = 0 // the latest draw; a routes file that arrives after a newer draw is not applied to the old one
 let coords: [number, number][] = []
 // Same sampled agents every day with fixed home, work and day-off place, so paths are built once per draw.
-// The simulation does not wait for the routes file (megabytes); the paths start when it is there.
+// The simulation does not wait for the routes file (about 1 MB); the paths start when it is there.
 const draw = (world: World, graphs: Awaited<typeof net>) => {
   const trips = sample(world), thisDraw = ++drawn
   pending = undefined
-  routed = 0
   routes.then(known => { if (thisDraw === drawn) pending = bothPaths(trips, coords, graphs, known) }, () => {})
   return trips
 }
 // Every road traveller of the run, on the paths of the routes file. Without the file there is no traffic.
 const traffic = (world: World, graphs: Awaited<typeof net>, roadJson: GraphJson, village: boolean, roadNames: RoadNames) => {
-  use = undefined; jam = new Uint8Array(0); lastCells = new Uint8Array(0); stepWithTraffic = stepper(JAM_MINUTES, takeTrafficNow)
+  use = undefined; warming = undefined; routing = true; roads = 0; jam = new Uint8Array(0); lastCells = new Uint8Array(0); stepWithTraffic = stepper(JAM_MINUTES, takeTrafficNow)
   routes.then(known => {
-    if (!known || world !== w) return
+    if (world !== w) return
+    if (!known) { doneRouting(); return }
+    known.clear() // the paths of an earlier run
     const node = new Map<number, number>(), at = (v: number) => node.get(v) ?? node.set(v, roadNode(graphs, coords, v)).get(v)!
     const metres = Float32Array.from(roadJson.edges, e => e[2])
     load = new Float32Array(metres.length); grid = gridOf(roadJson, roadNames.edge); live = liveOf(roadJson, grid); extra.cellKeys = grid.keys
     const workAt = workNodes(graphs, coords, village)
-    use = roadUse(world, known, (i, leg) => [at(world.home[i]), leg ? at(world.play[i]) : workAt(i, world.work[i])], live.time)
-  }, () => {})
+    const found = roadUse(world, known, (i, leg) => [at(world.home[i]), leg ? at(world.play[i]) : workAt(i, world.work[i])], live.time)
+    warming = (function* () {
+      try { yield* found.filling; if (world === w) use = found.use } finally { if (world === w) doneRouting() }
+    })()
+  }, () => { if (world === w) doneRouting() })
 }
 onmessage = async (e: MessageEvent<ToWorker>) => {
   const m = e.data

@@ -102,7 +102,6 @@ export function App() {
   const [dot, setDot] = useStored('dot', 50, oneOf(EVERY.map(e => e * PER_AGENT)))
   const every = dot / PER_AGENT
   const [rateWindow, setRateWindow] = useStored('window', 30, oneOf(WINDOWS))
-  const [routed, setRouted] = useState(0)
   const unplaced = useRef<Batch[]>([])
   const [dots, setDots] = useStored('dots', true, bool, fromBool)
   const [byMode, setByMode] = useStored('mode', false, bool, fromBool)
@@ -175,7 +174,6 @@ export function App() {
       if (t && r) r.k.forEach((k, j) => { t.dest[k] = r.dest[j]; t.dep[k] = r.dep[j]; t.dur1[k] = r.dur1[j]; t.ret[k] = r.ret[j]; t.dur2[k] = r.dur2[j] })
       // The worker sends each batch once; keep the ones that arrive before the map projection exists.
       if (dots && m.paths?.length) proj.current ? addBatches(dots.tracks.current, m.paths, proj.current) : unplaced.current.push(...m.paths)
-      if (m.routed !== undefined) setRouted(m.routed)
       // A clock from before the latest change of speed would take the clock of the page back.
       const l = last.current, model = m.day * 1440 + m.minute
       if (m.since === l.since) { l.minute = m.clock; l.at = m.at - performance.timeOrigin }
@@ -264,17 +262,19 @@ export function App() {
   }, [revealed])
   // After the render that shows new trips (a new run or a new dot density), the older ones go.
   useEffect(() => { for (const id of dotRuns.current.keys()) if (id < tripsId) dotRuns.current.delete(id) }, [tripsId])
-  // The new run starts when the map of its first frame is on the screen, or at the deadline. The effect depends on
-  // whether the map is ready, not on each frame.
-  const drawn = !!ready && shown.current === waiting
+  // The new run starts when the map of its first frame is on the screen, or at the deadline, and in both cases only
+  // when a frame of the run says that the worker has found the road paths: a run that started before would depend on
+  // the speed of the device. Until its first frame comes, the run counts as routing. The effect depends on whether the
+  // map is ready, not on each frame.
+  const routing = shown.current !== waiting || !!s?.routing, drawn = !!ready && !routing
   useEffect(() => {
-    if (waiting === undefined) return
+    if (waiting === undefined || routing) return
     const go = () => { waitRef.current = undefined; setWaiting(undefined); resume() }
     // Two animation frames: the browser paints the new run before the first one ends, and the clock starts after it.
     if (drawn) { let raf = requestAnimationFrame(() => { raf = requestAnimationFrame(go) }); return () => cancelAnimationFrame(raf) }
     const timer = setTimeout(go, Math.max(0, deadline.current - performance.now()))
     return () => clearTimeout(timer)
-  }, [waiting, drawn])
+  }, [waiting, drawn, routing])
   const [size, setSize] = useState({ w: innerWidth, h: innerHeight })
   useEffect(() => { const on = () => setSize({ w: innerWidth, h: innerHeight }); addEventListener('resize', on); return () => removeEventListener('resize', on) }, [])
   const taipei = useMemo(() => projection && taipeiIn(towns, projection), [projection])
@@ -320,7 +320,7 @@ export function App() {
     <p>台北市 {people(inTaipei)} 人，新北市 {people(n => !inTaipei(n))} 人，路上 {padded(road.reduce((a, b) => a + b, 0) * PER_AGENT, 6)} 人，外地 {padded((s?.away ?? 0) * PER_AGENT, 6)} 人</p>
     <p style={{ fontSize: 13 }}>{MODES.map((m, k) => <span key={m} style={{ marginRight: 10, whiteSpace: 'nowrap', display: 'inline-block' }}>
       <span style={{ color: MODE_COLOURS[k] }}>●</span> {m} {padded((road[k] ?? 0) * PER_AGENT, 6)}</span>)}</p>
-    {dotTrips && <p>追蹤 {padded(dotTrips.home.length, 6)} 個移動單位{routed < 2 * dotTrips.home.length ? `，路網計算中 ${padded(Math.floor(50 * routed / dotTrips.home.length), 2)}%` : ''}</p>}
+    {dotTrips && <p>追蹤 {padded(dotTrips.home.length, 6)} 個移動單位</p>}
     {/* The note under the text of the checkbox, not under the box. */}
     <p><label style={{ display: 'flex', alignItems: 'baseline' }}><input type="checkbox" checked={metrics} onChange={() => setMetrics(on => !on)} />
       <span>效能指標<span style={NOTE}>在右上角：模擬每幀的毫秒數、畫面 fps，以及最慢、最快 1% 幀的 fps。</span></span></label></p>
@@ -368,7 +368,11 @@ export function App() {
       {/* In the bottom right of the map, left of the panels on a desktop. It shows from the first paint until the
           run of the selected level and day is on the screen and started, also in the paint right after a click. */}
       <div role="status" style={{ position: 'absolute', right: box.w - fit.x - fit.w + 16, bottom: 16, color: '#fff', pointerEvents: 'none' }}>
-        {(waiting !== undefined || onScreen?.level !== level || onScreen.runStart !== runStart) && !runError && !loadError && <><SpinnerIcon /><span style={HIDDEN}>準備中</span></>}
+        {(waiting !== undefined || onScreen?.level !== level || onScreen.runStart !== runStart) && !runError && !loadError && <>
+          {/* The share of the road paths found; the run starts at 100%. Not read out: it changes every frame. Left of the
+              spinner, with digits of one width, so the spinner on the right edge stays still as the share grows. */}
+          {routing && s && shown.current === waiting && <span aria-hidden style={{ marginRight: 6, fontSize: 12, fontVariantNumeric: 'tabular-nums' }}>路網 {Math.floor(100 * s.roads)}%</span>}
+          <SpinnerIcon /><span style={HIDDEN}>準備中</span></>}
       </div>
       {/* index.html (.top-row) places the title, the clock and the metrics. */}
       <div className="top" style={{ position: 'absolute', top: 16, left: fit.x + 16, width: fit.w - 32 }}>
