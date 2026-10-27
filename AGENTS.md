@@ -68,6 +68,7 @@ The large items are GitHub issues; each one links to its issue.
   - `layoutFor` picks the layout from the window shape. A desktop gets the full-page map left of the event and policy panels (zoom 0.8). A portrait window gets the map in a 4:3 box on top. A landscape window that is too narrow for the desktop map gets the map in a 3:4 box on the left. A phone layout zooms to 台北市.
   - The info and gear icons open a panel. On a desktop it opens over the map. On a phone the icons sit on the map, and the panel opens below it or beside it. On a phone the events fill that area, and a third icon opens the policies.
   - Display settings are in local storage (`useStored`), and policy settings are in the query string (`useQuery`). `README.md` lists the keys.
+  - The model runs at village level only (`cityFrom` in `web/src/sim/city.ts`). The setting `level` is a view: at `district`, the page adds the villages of each district up (`byDistrict` in `web/src/App.tsx`, from the districts that the worker sends with the first frame of a run). Since 2026-10-27 (#26).
 
 ## References
 

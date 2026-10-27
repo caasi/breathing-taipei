@@ -58,7 +58,7 @@ Display settings:
 |---|---|---|
 | `speed` | `1`, `2`, `4`, `8`: 1 is half a simulated hour per second, 8 is 4 hours. The play and pause button is apart from it, and a pause is not kept | `1` |
 | `metrics` | `1` shows at the top of the map the time of the model in each frame of the worker, the frame rate, and the frame rate of the slowest and the fastest 1% of the frames of the last 10 s. `0` hides it | `0` |
-| `level` | `village`, `district`. A switch starts a new run at 00:00 of the day on the clock | `village` |
+| `level` | `village`, `district`. The run is always at village level; `district` shows the sum of the villages of each district, and a switch keeps the run and its clock | `village` |
 | `color` | `rate`, `density` | `rate` |
 | `window` | `15`, `30`, `60`, `120` simulated minutes for the change rate | `30` |
 | `dot` | `20`, `50`, `100`, `200`, `500` people for each dot. A switch draws other agents as dots, and the run goes on | `50` |
@@ -87,12 +87,12 @@ Example: `?flex=20&headway=3&bus-lane=1`
 - Inside a district, a trip starts in a village in proportion to its residents. A trip ends in a village by half its MRT arrivals and half its residents.
 - The MRT data does not include people who use a bus, a scooter, a car, or who walk. The model adds these commuters so that the daytime population of each district comes near a target.
 - The target is the registered residents of the district multiplied by its day/night ratio in the telecom signal statistics (November 2023). It is not the telecom daytime count itself.
-- Each commuter gets a mode. MRT commuters use the MRT. The other commuters get a mode from the 2024 mode share of Taipei residents. Walking is possible only for trips of 2.5 km or less between the two villages (between the district centers in a district-level run), and cycling only for 6 km or less.
+- Each commuter gets a mode. MRT commuters use the MRT. The other commuters get a mode from the 2024 mode share of Taipei residents. Walking is possible only for trips of 2.5 km or less between the two villages, and cycling only for 6 km or less.
 - Short trips are added for people who walk or ride a bicycle (for example YouBike) to another village of their own district. Their number comes from two public figures:
   - Walking trips per MRT trip, from the 2024 mode share of Taipei residents (20.8% walk, 16.0% MRT).
   - YouBike rentals in Taipei, 234,000 a day in the first half of 2026. One person rents twice, there and back.
 - The two rates are per resident, and they are the same in every village.
-- A short trip goes to another village of the same district. The model weights each village by its residents plus its daily MRT arrivals, and less when it is farther away. A district-level run has no short trips, because it cannot show a move inside a district.
+- A short trip goes to another village of the same district. The model weights each village by its residents plus its daily MRT arrivals, and less when it is farther away.
 - A short trip leaves and comes back at the hours of all MRT trips in the city, because many districts have no MRT trips inside them.
 - Night-time workers and visitors are added from the businesses in each village (national business tax registry, 2026-10-23). The model has four shifts and two kinds of visitors:
   - Early shift: breakfast shops. Leave home at 04:00 to 05:59, leave work at 11:00 to 11:59.
@@ -126,11 +126,10 @@ The model uses real open data, but some parts are estimates. The list below show
 - A business address without a village, with a village that the 2021 village map does not have, or with a village name that the map writes with a different character, counts for its district. The model reads 羣, 峯 and 臺 as 群, 峰 and 台, but some addresses use private-use characters (for example in 樹林區 and 萬華區). The model spreads these businesses over the villages of the district (24% of the businesses).
 - Each commuter makes one trip to work and one trip home. The model has no school, shopping, or care trips yet.
 - On a day off, 5% of the commuters (Saturday) or 8% (Sunday or holiday) are away from Taipei and New Taipei for the day. These shares are guesses.
-- Each commuter has one fixed day-off place. Non-MRT trips on a day off keep the workday ratio to MRT trips. The night-time groups do the same on every day. These are guesses.
+- Each commuter has one fixed day-off place. Non-MRT trips on a day off keep the workday ratio to MRT trips. The night-time groups and the short trips keep the hours of a workday on every day. These are guesses.
 - The days off after 2027 and the solar terms after 2028 are guesses by rule (DATA.md, "Figures in the code").
 - The bus hours and the MRT hours are those of a workday.
 - The bus hours come from the first and last buses in the route files of both cities: most first buses leave at 05:00 or later, and most last buses leave before 24:00. A few routes run until 00:30. The MRT hours come from the MRT data: on a workday 43 trips start in hour 05 and 36,483 in hour 06. Hour 00 still has 10,471 trips (the last trains), but the model counts hour 00 as closed.
-- A district-level run drops a night-time trip that stays in the home district, because the district is the node. With seed 42 it has 36,210 dinner visitors against 80,560 at village level.
 - Cars, buses and scooters use the streets of the bus routes (with the one-way rules of OSM) and the 國道 and 快速道路, not the full road network. A scooter takes the streets only.
 
 ## Tests
