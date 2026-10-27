@@ -4,7 +4,7 @@ import { HeatMap, Land, Outline, SEA, projectionFor, taipeiIn, type Transit } fr
 import { Travellers, MODE_COLOURS, addBatches, type CellTraffic, type Track } from './ui/Travellers.tsx'
 import type { RoadLines } from './ui/Traffic.tsx'
 import { MODES } from './sim/city.ts'
-import type { FromWorker, WorkerError, ToWorker, Level, Trips } from './sim/worker.ts'
+import type { FromWorker, WorkerError, ToWorker, Trips } from './sim/worker.ts'
 import { getJson } from './load.ts'
 import type { Batch } from './sim/paths.ts'
 import { useStored, oneOf, setOf, bool, fromBool } from './query.ts'
@@ -33,7 +33,9 @@ const KEEP_EVENTS = 3 * MAX_EVENTS
 const SUBTITLE_SCALE = 0.46
 const WINDOWS = [15, 30, 60, KEEP] // simulated minutes the change rate can look back; history keeps the longest
 // A node is a village code (台北市 is county 63000) or a district name.
-const inTaipei = (node: string) => node.startsWith('63000') || node.startsWith('台北市')
+// The district level is a view of the village run (byDistrict below); the run itself is always at village level.
+type Level = 'district' | 'village'
+const inTaipei = (node: string) => node.startsWith('63000') // the village code of 台北市
 const ALERT = { position: 'absolute', top: 72, left: 16, margin: 0, color: '#ff8b6b' } as const
 // The note of a setting, in grey on the line below it.
 const NOTE = { display: 'block', marginTop: 4, fontSize: 12, color: '#aaa' } as const
@@ -76,16 +78,15 @@ export function App() {
   const [cal, setCal] = useState<Calendar>()
   // Day 0 of the run is the day the page opens, in Taiwan.
   const startDay = useMemo(() => cal && indexOf(cal, todayInTaipei()), [cal])
-  // A switch of level starts a new model, on the day that the clock shows, so the date goes on.
-  const [dayOffset, setDayOffset] = useState(0)
-  const runStart = startDay === undefined ? undefined : startDay + dayOffset
-  // The run whose frames are on the screen. After a switch of level the old picture stays (frozen) until the first
-  // frame of the new run comes, so the map does not go black while the new run loads.
-  const [onScreen, setOnScreen] = useState<{ level: Level; runStart: number }>()
+  const runStart = startDay
+  // The start of the run whose frames are on the screen. When a new run starts, the old picture stays (frozen) until
+  // the first frame of the new run comes, so the map does not go black while the new run loads.
+  const [onScreen, setOnScreen] = useState<number>()
   const [pop, setPop] = useState<Map<string, number>>()
   // The run that loads; the frozen dots (the dots of one run, at one minute).
-  const next = useRef<{ level: Level; runStart: number }>(), frozen = useRef<{ run: number; minute: number }>()
+  const next = useRef<number>(), frozen = useRef<{ run: number; minute: number }>()
   const [nodes, setNodes] = useState<string[]>([])
+  const [districtOf, setDistrictOf] = useState<string[]>([]) // the district of each node (village), as 台北市大安區
   // The dot trips by id, each with the tracks of its dots. Replans and routes write into them in place, so they are a
   // ref; a new id asks for a render. Render reads the entry of the committed id, so it never pairs trips with the
   // tracks of other trips, also when a click renders before the update of a new id.
@@ -154,6 +155,7 @@ export function App() {
       if (m.start !== undefined) { if (m.start !== started.current) return; shown.current = m.start; setOnScreen(next.current) }
       else if (shown.current !== started.current) return
       if (m.nodes) setNodes(m.nodes)
+      if (m.districts) setDistrictOf(m.districts)
       // The first frame of a run (it has coords) starts the history and the events again. The updaters keep only
       // these values, not the message.
       const fresh = m.coords !== undefined, events = m.events, entry = { t: m.day * 1440 + m.minute, counts: m.counts }
@@ -203,10 +205,10 @@ export function App() {
     if (on && frozen.current?.run !== on.run) frozen.current = { run: on.run, minute: l.model }
     respeed(l, 0, 0, now, 0); l.model = 0; l.since = since
     waitRef.current = ++started.current; deadline.current = now + READY_MS
-    next.current = { level, runStart }
+    next.current = runStart
     setRunError(undefined); setWaiting(started.current)
-    post({ type: 'init', perAgent: PER_AGENT, seed: 42, level, startDay: runStart, start: started.current, at: since })
-  }, [level, runStart])
+    post({ type: 'init', perAgent: PER_AGENT, seed: 42, startDay: runStart, start: started.current, at: since })
+  }, [runStart])
   // The page clock goes on at the speed from now, and the worker clock follows it from the same time.
   const startClock = (hours: number) => {
     const l = last.current, now = performance.now(), since = performance.timeOrigin + now
@@ -235,18 +237,31 @@ export function App() {
   // The worker posts up to 30 times a second while the clock runs; between posts the dots move on the extrapolated clock.
   // Dots of a frozen run stand at its minute; the dots of the next run, once shown, follow the clock.
   const clock = () => { const f = frozen.current; return f && dotRun?.run === f.run ? f.minute : clockAt(last.current, performance.now()) }
-  // Change per hour over the last rateWindow minutes, as a share of the node's residents. Before two frames of the run,
-  // no change: an undefined rate colours by density, and the map then faded from density to the rate colours.
-  const rate = useMemo(() => {
-    const h = history
-    if (colourBy !== 'rate') return undefined
-    if (!h.length) return new Float32Array(nodes.length)
-    const last = h[h.length - 1], first = since(h, rateWindow), out = new Float32Array(last.counts.length)
-    if (last.t === first.t) return out
-    const perHour = 60 / (last.t - first.t)
-    for (let i = 0; i < out.length; i++) out[i] = (last.counts[i] - first.counts[i]) * perHour / Math.max(1, homes[i])
+  // At district level the map shows the districts, and each figure of a district is the sum of its villages.
+  const byDistrict = useMemo(() => {
+    if (level !== 'district' || !districtOf.length) return undefined
+    const names = [...new Set(districtOf)], index = new Map(names.map((n, d) => [n, d]))
+    return { names, of: Int32Array.from(districtOf, n => index.get(n)!) }
+  }, [level, districtOf])
+  const asShown = <T extends Uint32Array>(a: T): T | Uint32Array => {
+    if (!byDistrict) return a
+    const out = new Uint32Array(byDistrict.names.length)
+    for (let i = 0; i < a.length; i++) out[byDistrict.of[i]] += a[i]
     return out
-  }, [history, homes, colourBy, rateWindow, nodes])
+  }
+  const shownCounts = useMemo(() => s && asShown(s.counts), [s, byDistrict])
+  // Change per hour over the last rateWindow minutes, as a share of the residents of the node shown. Before two frames
+  // of the run, no change: an undefined rate colours by density, and the map then faded from density to the rate colours.
+  const rate = useMemo(() => {
+    const h = history, size = byDistrict ? byDistrict.names.length : nodes.length
+    if (colourBy !== 'rate') return undefined
+    if (!h.length) return new Float32Array(size)
+    const last = h[h.length - 1], first = since(h, rateWindow), out = new Float32Array(size)
+    if (last.t === first.t) return out
+    const perHour = 60 / (last.t - first.t), now = asShown(last.counts), then = asShown(first.counts), residents = asShown(homes)
+    for (let i = 0; i < out.length; i++) out[i] = (now[i] - then[i]) * perHour / Math.max(1, residents[i])
+    return out
+  }, [history, homes, colourBy, rateWindow, nodes, byDistrict])
   const ready = projection && villages && s && nodes.length === s.counts.length
   // The map fades in from the blurred outline at its first frame; one animation frame later, so the start state paints.
   const [revealed, setRevealed] = useState(false), [faded, setFaded] = useState(false)
@@ -283,7 +298,7 @@ export function App() {
   const { kind, box, fit, view } = useMemo(() => layoutFor(size.w, size.h, taipei), [size, taipei]), phone = kind !== 'desktop', titleSize = phone ? 20 : 28
   const road = s ? Array.from(s.road) : []
   // Before the first frame no run is on the screen, and its day is 0 of the selected start.
-  const shownStart = onScreen?.runStart ?? runStart
+  const shownStart = onScreen ?? runStart
   const date = cal && shownStart !== undefined ? dateText(cal, shownStart + (s?.day ?? 0)) : undefined
   const dayLabel = useMemo(() => (day: number) => (cal && shownStart !== undefined ? dateText(cal, shownStart + day).roc : ''), [cal, shownStart])
   const dotRun = dotRuns.current.get(tripsId), dotTrips = dotRun?.trips
@@ -295,9 +310,12 @@ export function App() {
   const placeOf = useMemo(() => {
     const byCode = new Map<string, { town: string; village: string }>()
     for (const g of villages?.objects.villages.geometries ?? []) byCode.set(g.properties.VILLCODE, { town: g.properties.TOWNNAME, village: g.properties.VILLNAME })
-    // At district level a node is named 台北市大安區; at village level it is a code, shown blank until the villages load.
-    return (node: number) => byCode.get(nodes[node]) ?? { town: /^(台北|新北)市/.test(nodes[node] ?? '') ? nodes[node].slice(3) : '', village: '' }
-  }, [villages, nodes])
+    // A node is a village code, shown blank until the villages load. At district level the events name the district only.
+    return (node: number) => {
+      const place = byCode.get(nodes[node]) ?? { town: '', village: '' }
+      return level === 'district' ? { town: place.town, village: '' } : place
+    }
+  }, [villages, nodes, level])
   // A desktop always shows the policies and has no icon to close them, so a phone's open policy panel closes when the window turns into a desktop.
   useEffect(() => { if (!phone && open === 'policies') setOpen(undefined) }, [phone])
   const people = (pick: (node: string) => boolean) => padded(s ? nodes.reduce((sum, n, i) => pick(n) ? sum + s.counts[i] : sum, 0) * PER_AGENT : 0, 7)
@@ -306,9 +324,9 @@ export function App() {
     <p><button onClick={() => setPaused(p => !p)} aria-label={paused ? '繼續' : '暫停'} title={paused ? '繼續' : '暫停'}
       style={{ marginRight: 8, width: 28 }}><PlayPause paused={paused} /></button>
       {SPEEDS.map(v => <button key={v} onClick={() => setSpeed(v)} style={{ marginRight: 4, fontWeight: v === speed ? 'bold' : 'normal' }}>{v}x</button>)}
-      <span style={{ marginLeft: 12 }}>{(['district', 'village'] as Level[]).map(l => <button key={l} onClick={() => { if (l !== level) { if (onScreen && startDay !== undefined) setDayOffset(onScreen.runStart - startDay + (s?.day ?? 0)); setLevel(l) } }}
+      <span style={{ marginLeft: 12 }}>{(['district', 'village'] as Level[]).map(l => <button key={l} onClick={() => setLevel(l)}
         style={{ marginRight: 4, fontWeight: l === level ? 'bold' : 'normal' }}>{l === 'district' ? '區' : '里'}</button>)}</span>
-      <span style={NOTE}>1x 是每秒半小時。切換區、里會從當天 00:00 重新模擬。</span></p>
+      <span style={NOTE}>1x 是每秒半小時。</span></p>
     <p><label><input type="checkbox" checked={dots} onChange={() => setDots(!dots)} />路上的人</label>，1 點 = {every * PER_AGENT} 人：
       {EVERY.map(v => <button key={v} onClick={() => setDot(v * PER_AGENT)} style={{ marginLeft: 4, fontWeight: v === every ? 'bold' : 'normal' }}>{v * PER_AGENT}</button>)}
       <label style={{ marginLeft: 8 }}><input type="checkbox" checked={byMode} onChange={() => setByMode(!byMode)} />依交通方式上色</label></p>
@@ -362,7 +380,7 @@ export function App() {
       {!faded && towns && projection && <Outline towns={towns} proj={projection} view={view} pop={pop} />}
       <div className="reveal" style={{ position: 'absolute', inset: 0, opacity: revealed ? 1 : 0, filter: revealed ? 'none' : 'blur(8px)' }}>
       {ready && <>
-        <HeatMap towns={towns} villages={villages} level={onScreen?.level ?? level} nodes={nodes} counts={s.counts} perAgent={PER_AGENT} proj={projection} transit={transit} show={layers} rate={rate} roads={roads} traffic={traffic} speed={paused ? 0 : speed * HOURS_AT_1X} view={view} />
+        <HeatMap towns={towns} villages={villages} level={byDistrict ? 'district' : 'village'} nodes={byDistrict?.names ?? nodes} counts={shownCounts!} perAgent={PER_AGENT} proj={projection} transit={transit} show={layers} rate={rate} roads={roads} traffic={traffic} speed={paused ? 0 : speed * HOURS_AT_1X} view={view} />
         {dots && dotTrips && <Travellers tracks={dotRun!.tracks} trips={dotTrips} clock={clock} byMode={byMode} traffic={cellTraffic} view={view} />}
       </>}
       </div>
@@ -370,7 +388,7 @@ export function App() {
       {/* In the bottom right of the map, left of the panels on a desktop. It shows from the first paint until the
           run of the selected level and day is on the screen and started, also in the paint right after a click. */}
       <div role="status" style={{ position: 'absolute', right: box.w - fit.x - fit.w + 16, bottom: 16, color: '#fff', pointerEvents: 'none' }}>
-        {(waiting !== undefined || onScreen?.level !== level || onScreen.runStart !== runStart) && !runError && !loadError && <>
+        {(waiting !== undefined || onScreen !== runStart) && !runError && !loadError && <>
           {/* The share of the road paths found; the run starts at 100%. Not read out: it changes every frame. Left of the
               spinner, with digits of one width, so the spinner on the right edge stays still as the share grows. */}
           {routing && s && shown.current === waiting && <span aria-hidden style={{ marginRight: 6, fontSize: 12, fontVariantNumeric: 'tabular-nums' }}>路網 {Math.floor(100 * s.roads)}%</span>}

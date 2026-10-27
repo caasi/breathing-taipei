@@ -5,17 +5,16 @@ import { drawNames, nameOf, type People } from './people.ts'
 import { evenPick, type Mood, type SimEvent } from './events.ts'
 import { mulberry32 } from './rng.ts'
 import { FPS, clockAt, respeed, stepsTo, type Clock } from './pace.ts'
-import { cityFrom, MODES, SCOOTER } from './city.ts'
+import { cityFrom, MODES, SCOOTER, type Village } from './city.ts'
 import { networks, readRoutes, ROAD_MODES, roadNode, tripPaths, wayBack, type Batch, type Routes } from './paths.ts'
 import type { GraphJson } from './route.ts'
 import { workNodes } from './jobs.ts'
 import { cellMax, gridOf, levels, liveOf, roadUse, stepper, take as takeTraffic, type Grid, type Live, type RoadUse } from './traffic.ts'
 
-export type Level = 'district' | 'village'
 export type ToWorker =
   // startDay: index into calendar.json of day 0. start: an id that the first frame of the run gives back.
   // at: as in speed. The clock of the new run stands at minute 0 from that time until the page sends a speed.
-  | { type: 'init'; perAgent: number; seed: number; level: Level; startDay: number; start: number; at: number }
+  | { type: 'init'; perAgent: number; seed: number; startDay: number; start: number; at: number }
   // minute: the clock of the page at at (performance.timeOrigin + performance.now() of the change), so both clocks agree.
   | { type: 'speed'; hoursPerSec: number; minute: number; at: number }
   | { type: 'sample'; every: number } // the run goes on; only the agents drawn as dots change
@@ -31,7 +30,7 @@ export type Replans = { k: Uint32Array; dest: Uint8Array; dep: Int32Array; dur1:
 /** A failure while starting (load, city build, sampling) ends the worker's work; the page shows it instead of waiting. */
 export type WorkerError = { error: string; start: number } // start: the id of the init that failed
 export type FromWorker = {
-  start?: number; nodes?: string[]; homes?: Uint32Array; coords?: [number, number][]; trips?: Trips; replans?: Replans; paths?: Batch[]
+  start?: number; nodes?: string[]; districts?: string[]; homes?: Uint32Array; coords?: [number, number][]; trips?: Trips; replans?: Replans; paths?: Batch[]
   minute: number; day: number; counts: Uint32Array; road: Uint32Array; away: number; ms: number
   events?: SimEvent[] // personal events of plans made since the last message
   traffic?: Uint8Array // per road edge: 0 no traveller, 1 (free) to 255 (slowest) (traffic.ts levels); sent when it changes
@@ -53,7 +52,7 @@ let every = 20
 let hoursPerSec = 0, lastHours = 0 // lastHours: the last speed that was not a pause
 const clock: Clock = { minute: 0, at: performance.now(), perMs: 0 }
 let since = 0, owed = false // owed: the page has no frame yet with the clock of the latest change of speed
-let extra: Pick<FromWorker, 'start' | 'nodes' | 'homes' | 'coords' | 'trips' | 'replans' | 'traffic' | 'cells' | 'cellKeys'> = {}
+let extra: Pick<FromWorker, 'start' | 'nodes' | 'districts' | 'homes' | 'coords' | 'trips' | 'replans' | 'traffic' | 'cells' | 'cellKeys'> = {}
 let pending: Generator<Batch | void> | undefined
 // Finds the paths of the road load (traffic.ts roadUse) in the time that the paths of the dots leave.
 let warming: Generator<number> | undefined, roads = 0 // roads: the share of the road paths found
@@ -262,9 +261,10 @@ onmessage = async (e: MessageEvent<ToWorker>) => {
   try {
     const [[od2, villages, signal, roadJson, , night, cal, people, roadNames], graphs] = await Promise.all([data, net])
     onJam = undefined; onLate = undefined; jamRng = mulberry32(m.seed + 3)
-    const c = cityFrom({ ...od2, villages, signal, night }, m.perAgent, m.level, day => kindAt(cal as Calendar, m.startDay + day))
+    // The run is always at village level; the page adds the villages up into districts for the district level.
+    const c = cityFrom({ ...od2, villages, signal, night }, m.perAgent, 'village', day => kindAt(cal as Calendar, m.startDay + day))
     w = init(c.city, m.seed)
-    const world = w, districtOf = Array.from(w.home, h => (m.level === 'village' ? villages[h].town : c.nodes[h]))
+    const world = w, districtOf = Array.from(w.home, h => villages[h].town)
     const ids = drawNames(people as People, districtOf, m.seed + 1), pickRng = mulberry32(m.seed + 2)
     // ponytail: EVENTS_PER_DAY is the base rate before the SHOWN weights (each agent makes about one plan a day); DATA.md,
     // "Figures in the code", gives the measured rate. Tune it when the stream feels too fast or too slow.
@@ -326,8 +326,8 @@ onmessage = async (e: MessageEvent<ToWorker>) => {
     // The plans under way at day 0 were made during init, which calls no onPlan: pass them through the same filter.
     for (const i of w.movers) w.onPlan(i)
     coords = c.coords
-    traffic(w, graphs, roadJson, m.level === 'village', roadNames as RoadNames)
-    extra = { start: m.start, nodes: c.nodes, homes: Uint32Array.from(c.city.homes), coords: c.coords, trips: draw(w, graphs) }
+    traffic(w, graphs, roadJson, true, roadNames as RoadNames)
+    extra = { start: m.start, nodes: c.nodes, districts: (villages as Village[]).map(v => v.town), homes: Uint32Array.from(c.city.homes), coords: c.coords, trips: draw(w, graphs) }
   } catch (err) {
     w = undefined
     postMessage({ error: String(err), start: m.start } satisfies WorkerError)
