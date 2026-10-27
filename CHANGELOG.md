@@ -6,6 +6,7 @@ This file lists the changes that a user of the site can see, for each version. T
 
 ### Added
 
+- The setting `metrics` shows at the top right of the map the time of the model in each frame, the frame rate, and the frame rate of the slowest and the fastest 1% of the frames (`SIM 3.9ms | FPS 60 ↓48↑61`). It is off by default, and replaces the line of figures in the settings panel.
 - The map shows the other counties around Taipei and New Taipei, and the sea in a darker colour.
 - Traffic: the roads of the two cities, with the 國道 and 快速道路, in thin lines on the map. A slow road turns orange, red, then dark red, and glows; dashes move along the roads in use, slower where the traffic is slow. The setting `traffic` shows or hides the layer; the simulation takes the traffic in both cases.
 - Jams make trips longer. The bus, scooter and car dots take the colour of the slowest road of their place.

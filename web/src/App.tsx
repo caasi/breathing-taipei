@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { Metrics } from './ui/Metrics.tsx'
 import { HeatMap, Land, Outline, SEA, projectionFor, taipeiIn, type Transit } from './ui/HeatMap.tsx'
 import { Travellers, MODE_COLOURS, addBatches, type CellTraffic, type Track } from './ui/Travellers.tsx'
 import type { RoadLines } from './ui/Traffic.tsx'
@@ -100,22 +101,11 @@ export function App() {
   const unplaced = useRef<Batch[]>([])
   const [dots, setDots] = useStored('dots', true, bool, fromBool)
   const [byMode, setByMode] = useStored('mode', false, bool, fromBool)
+  const [metrics, setMetrics] = useStored('metrics', false, bool, fromBool)
   const [colourBy, setColourBy] = useStored<'density' | 'rate'>('color', 'rate', oneOf(['density', 'rate'] as const))
   const [history, setHistory] = useState<Entry[]>([])
   const [personal, setPersonal] = useState<SimEvent[]>([]) // the personal events from the worker; the newest KEEP_EVENTS stay
   const [homes, setHomes] = useState(new Uint32Array(0))
-  const [fps, setFps] = useState(0)
-  // The rate of animation frames, counted here and not in a layer, so it goes on when the dots are hidden.
-  useEffect(() => {
-    let raf = 0, frames = 0, since = performance.now()
-    const tick = (now: number) => {
-      frames++
-      if (now - since > 1000) { setFps(frames * 1000 / (now - since)); frames = 0; since = now }
-      raf = requestAnimationFrame(tick)
-    }
-    raf = requestAnimationFrame(tick)
-    return () => cancelAnimationFrame(raf)
-  }, [])
   // A file the page loads once stays failed until reload; a run error belongs to the current run.
   const [loadError, setLoadError] = useState<string>()
   const [open, setOpen] = useState<'info' | 'settings' | 'policies'>()
@@ -324,7 +314,7 @@ export function App() {
     <p style={{ fontSize: 13 }}>{MODES.map((m, k) => <span key={m} style={{ marginRight: 10, whiteSpace: 'nowrap', display: 'inline-block' }}>
       <span style={{ color: MODE_COLOURS[k] }}>●</span> {m} {padded((road[k] ?? 0) * PER_AGENT, 6)}</span>)}</p>
     {dotTrips && <p>{padded(dotTrips.home.length, 6)} 點{routed < 2 * dotTrips.home.length ? `，路網計算中 ${padded(Math.floor(50 * routed / dotTrips.home.length), 2)}%` : ''}</p>}
-    <p>模擬每幀 {padded(s?.ms ?? 0, 2, 1)} ms，畫面 {padded(fps, 3)} fps</p>
+    <p><label><input type="checkbox" checked={metrics} onChange={() => setMetrics(on => !on)} />效能指標（右上角：模擬每幀的毫秒數、畫面 fps，與最慢、最快 1% 的幀）</label></p>
     </div>
   </>
   const info = <>
@@ -371,6 +361,8 @@ export function App() {
       <div role="status" style={{ position: 'absolute', right: box.w - fit.x - fit.w + 16, bottom: 16, color: '#fff', pointerEvents: 'none' }}>
         {(waiting !== undefined || onScreen?.level !== level || onScreen.runStart !== runStart) && !runError && !loadError && <><SpinnerIcon /><span style={HIDDEN}>準備中</span></>}
       </div>
+      {/* Right of the map, as the turning icon, and below the clock, which can be as wide as the map. */}
+      {metrics && <Metrics ms={s?.ms ?? 0} style={{ right: box.w - fit.x - fit.w + 16, top: phone ? 60 : 76 }} />}
       <header style={{ position: 'absolute', top: 16, left: 16, pointerEvents: 'none' }}>
         <h1 style={{ margin: 0, fontSize: titleSize, fontWeight: 'bold', color: '#fff' }}>台北鼓動</h1>
         {/* Centred on the Chinese title alone: a flex row with no width of its own overflows evenly to both sides. */}
