@@ -14,15 +14,17 @@
 <meta name="twitter:card" content="summary_large_image"><link rel="icon" href="data:,">
 <style>@keyframes spin { to { transform: rotate(1turn) } } .spin { animation: spin 1s linear infinite } .reveal { transition: opacity 600ms, filter 600ms }
 /* The title, the clock and the metrics over the map. The two outer columns grow alike, so the clock stays in the middle.
-   The metrics go on a line below, and stand right of the clock only when the row has room for them.
+   The metrics stand on the right: right of the clock when the row has room for them, else on a line below.
    ponytail: 820 px is the clock (about 360 px, 2026-10-27) and the metrics (about 212 px) on each side, with the gaps; a
    longer day name (a holiday) can still meet the metrics, then measure the clock or raise this. */
 .top { container-type: inline-size; pointer-events: none }
 .top-row { display: grid; grid-template-columns: 1fr auto 1fr; align-items: start; column-gap: 16px; row-gap: 4px }
 .top-row.phone { grid-template-columns: auto 1fr }
 .top-row .metrics { grid-column: 1 / -1; justify-self: end }
-.top-row.phone .metrics { justify-self: start }
 /* margin-top: the top of the glyphs of the title, 28 px bold, measured in a screenshot. */
 @container (min-width: 820px) { .top-row:not(.phone) .metrics { grid-column: 3; grid-row: 1; margin-top: 6px } }
+
+/* One height for the buttons of the settings: a button with Chinese text was taller, as its font has a taller line. */
+.settings button { box-sizing: border-box; height: 24px; padding: 0 6px; line-height: 1; vertical-align: middle; display: inline-flex; align-items: center; justify-content: center }
  @media (prefers-reduced-motion: reduce) { .spin { animation: none } .reveal { transition: none } }</style></head>
 <body style="margin:0;font-family:system-ui;background:#111;color:#eee"><div id="root"></div><script type="module" src="/src/main.tsx"></script></body></html>

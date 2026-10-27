@@ -42,7 +42,7 @@ const SIDE_PANEL = { position: 'absolute', top: 16, bottom: 16, overflowY: 'auto
 const SpinnerIcon = () => <span className="spin" style={{ display: 'inline-block', width: 24, height: 24 }}>
   <svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true" style={{ display: 'block' }}>
     <circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeDasharray={`${Math.PI * 9 * 1.5} ${Math.PI * 9 * 0.5}`} /></svg></span>
-// The play and pause marks of a video player, as tall as the text of the speed buttons.
+// The play and pause marks of a video player.
 const PlayPause = ({ paused }: { paused: boolean }) => <svg viewBox="0 0 10 10" width="10" height="10" aria-hidden="true" style={{ display: 'block' }}>
   {paused ? <path d="M1 0 L9 5 L1 10 Z" fill="currentColor" /> : <path d="M1 0 H4 V10 H1 Z M6 0 H9 V10 H6 Z" fill="currentColor" />}</svg>
 const HIDDEN = { position: 'absolute', width: 1, height: 1, overflow: 'hidden', clipPath: 'inset(50%)', whiteSpace: 'nowrap' } as const
@@ -300,11 +300,11 @@ export function App() {
   // A desktop always shows the policies and has no icon to close them, so a phone's open policy panel closes when the window turns into a desktop.
   useEffect(() => { if (!phone && open === 'policies') setOpen(undefined) }, [phone])
   const people = (pick: (node: string) => boolean) => padded(s ? nodes.reduce((sum, n, i) => pick(n) ? sum + s.counts[i] : sum, 0) * PER_AGENT : 0, 7)
-  const settings = <>
+  const settings = <div className="settings">
     <h2 style={H2}>顯示</h2>
     <p><button onClick={() => setPaused(p => !p)} aria-label={paused ? '繼續' : '暫停'} title={paused ? '繼續' : '暫停'}
-      style={{ marginRight: 8, verticalAlign: 'middle', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 26, height: 21 }}><PlayPause paused={paused} /></button>
-      {SPEEDS.map(v => <button key={v} onClick={() => setSpeed(v)} style={{ marginRight: 4, verticalAlign: 'middle', fontWeight: v === speed ? 'bold' : 'normal' }}>{v}x</button>)}
+      style={{ marginRight: 8, width: 28 }}><PlayPause paused={paused} /></button>
+      {SPEEDS.map(v => <button key={v} onClick={() => setSpeed(v)} style={{ marginRight: 4, fontWeight: v === speed ? 'bold' : 'normal' }}>{v}x</button>)}
       <span style={{ marginLeft: 12 }}>{(['district', 'village'] as Level[]).map(l => <button key={l} onClick={() => { if (l !== level) { if (onScreen && startDay !== undefined) setDayOffset(onScreen.runStart - startDay + (s?.day ?? 0)); setLevel(l) } }}
         style={{ marginRight: 4, fontWeight: l === level ? 'bold' : 'normal' }}>{l === 'district' ? '區' : '里'}</button>)}</span>
       <span style={NOTE}>1x 是每秒半小時。切換區、里會從當天 00:00 重新模擬。</span></p>
@@ -326,7 +326,7 @@ export function App() {
     <p><label style={{ display: 'flex', alignItems: 'baseline' }}><input type="checkbox" checked={metrics} onChange={() => setMetrics(on => !on)} />
       <span>效能指標<span style={NOTE}>在右上角：模擬每幀的毫秒數、畫面 fps，以及最慢、最快 1% 幀的 fps。</span></span></label></p>
     </div>
-  </>
+  </div>
   const info = <>
     <p>台北鼓動模擬台北市與新北市的日子，從你打開頁面的這一天起：平日早上人們湧入各里、傍晚離開，假日則出門走走或離開雙北。這是個人的業餘專案，起於 2026-10-24 的市政 debug 松，但沒有報名參賽。</p>
     <p style={{ fontSize: 12, color: '#aaa' }}>人口密度：現在每平方公里的人數（對數，300 到 100,000）。人口變化率：最近 {rateWindow} 分鐘、每小時的人數變化除以居民數，橘色是流入，藍綠色是流出，滿格是 ±30%。區名下是現在的人數。新北調淡。點：路上的人。捷運沿捷運線，公車、機車、汽車沿公車路線，步行和自行車走直線。1x = 每秒半小時。</p>
