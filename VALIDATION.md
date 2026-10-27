@@ -64,7 +64,7 @@ These roads jam at the peaks in the news of 2026. The table gives the slowness o
 | 艋舺大道 | 聯合報, 2026-01-20 | 1.00 (323) | 1.00 (322) |
 | 台北橋 | 自由時報, 2026-10-15 | Not found | Not found |
 
-- The 國道, 舊宗路 and 木柵路 jam in the model. 承德路 and 環東大道 are slow at part of the peak only, so their median over the whole peak is low. 堤頂大道 is only a little slow since a bucket counts at least 0.1 km: its slowest bucket was a short one.
+- The 國道, 舊宗路 and 木柵路 jam in the model. 承德路 and 環東大道 are slow at part of the peak only, so their median over the whole peak is low. 堤頂大道 is only a little slow at the median: its slowest bucket, of 0.55 km (the most that a named bucket counts, `ACROSS`), is 1.53 at the median of the morning and 1.92 at its slowest take.
 - The bridges from 新北 to the west (重陽橋, 台北橋, 華翠大橋) are almost free; so is 艋舺大道. Their traffic comes from 三重, 蘆洲, 新莊 and 板橋, and from other counties, and the model has no commuters from other counties ([#21](https://github.com/caasi/breathing-taipei/issues/21)).
 - 中正路 and 至善路, near the works of the MRT 環狀線, are almost free: the model has no road works.
 - 瑞光路 is only a little slow. A trip is placed along its whole path, so nothing waits at the end of the trip; that needs a queue model ([#25](https://github.com/caasi/breathing-taipei/issues/25)).
