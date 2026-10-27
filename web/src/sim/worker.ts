@@ -31,7 +31,7 @@ export type Replans = { k: Uint32Array; dest: Uint8Array; dep: Int32Array; dur1:
 /** A failure while starting (load, city build, sampling) ends the worker's work; the page shows it instead of waiting. */
 export type WorkerError = { error: string; start: number } // start: the id of the init that failed
 export type FromWorker = {
-  start?: number; nodes?: string[]; homes?: Uint32Array; coords?: [number, number][]; trips?: Trips; replans?: Replans; paths?: Batch[]; routed?: number
+  start?: number; nodes?: string[]; homes?: Uint32Array; coords?: [number, number][]; trips?: Trips; replans?: Replans; paths?: Batch[]
   minute: number; day: number; counts: Uint32Array; road: Uint32Array; away: number; ms: number
   events?: SimEvent[] // personal events of plans made since the last message
   traffic?: Uint8Array // per road edge: 0 no traveller, 1 (free) to 255 (slowest) (traffic.ts levels); sent when it changes
@@ -64,7 +64,6 @@ let routing = false
 const doneRouting = () => { routing = false; owed = true }
 let newEvents: SimEvent[] = []
 let eventId = 0
-let routed = 0
 let idx = new Uint32Array(0) // agent of each sampled trip
 // The plan last sent for each sampled trip: a new plan always changes the departure, and a jam (traffic.ts) a leg.
 let sentDep = new Int32Array(0), sentDur1 = new Uint16Array(0), sentDur2 = new Uint16Array(0)
@@ -204,9 +203,9 @@ const frame = () => {
     const b = pending?.next()
     if (!b) continue
     if (b.done) pending = undefined
-    else if (b.value) { paths.push(b.value); routed += b.value.ks.length }
+    else if (b.value) paths.push(b.value)
   }
-  const msg: FromWorker = { ...extra, paths, routed, routing, roads, minute: w.minute, day: w.day, counts: c.nodes, road: c.road, away: c.away, ms, events: newEvents, clock: clock.minute, at: performance.timeOrigin + t, since }
+  const msg: FromWorker = { ...extra, paths, routing, roads, minute: w.minute, day: w.day, counts: c.nodes, road: c.road, away: c.away, ms, events: newEvents, clock: clock.minute, at: performance.timeOrigin + t, since }
   newEvents = []
   owed = false
   postMessage(msg)
@@ -221,7 +220,6 @@ let coords: [number, number][] = []
 const draw = (world: World, graphs: Awaited<typeof net>) => {
   const trips = sample(world), thisDraw = ++drawn
   pending = undefined
-  routed = 0
   routes.then(known => { if (thisDraw === drawn) pending = bothPaths(trips, coords, graphs, known) }, () => {})
   return trips
 }
