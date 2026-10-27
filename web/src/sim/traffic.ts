@@ -13,9 +13,10 @@ const ALPHA = 0.15, BETA = 1
 // TomTom congestion level (scripts/traffic.ts, DATA.md "Figures in the code"). Real roads differ in lanes.
 export const CAPACITY = 15.7
 // ponytail: the road load is taken over cells of CELL degrees (about 500 m) and the PCU per km of road in a cell stand
-// in for the flow of BPR. Every trip takes one shortest path, so per edge only a few edges carried any load, with a
-// travel time up to 25 times the free time; a cell spreads it over the roads nearby. Use flows per hour on each edge
-// when trips get more than one path and edges get capacities of their own.
+// in for the flow of BPR. Per edge (measured on 2026-10-26, when every trip took one shortest path) only a few edges
+// carried any load, with a travel time up to 25 times the free time; a cell spreads it over the roads nearby. The
+// variants of a trip (paths.ts VARIANTS) spread the load a little, not over every road. Use flows per hour on each edge
+// when edges get capacities of their own.
 const CELL = 0.005, ACROSS = 0.55
 // ponytail: the least km that a bucket counts. A road that crosses only a corner of a cell gives a bucket of a few tens
 // of metres, which one car agent (about 7 PCU) jammed. A guess; the length of one edge of a block, about.
