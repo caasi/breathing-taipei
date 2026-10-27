@@ -40,6 +40,7 @@ export type FromWorker = {
   clock: number; at: number // the clock (pace.ts) shows minute `clock` at `at` (performance.timeOrigin + performance.now())
   since: number // the `at` of the change of speed that the clock uses; the page takes the clock only from its latest change
   routing: boolean // the road paths of the run are not all found yet, so the run must not start (traffic.ts roadUse)
+  roads: number // the share of the road paths found, 0 to 1, while routing
 }
 
 const EVENTS_PER_DAY = 48
@@ -55,7 +56,7 @@ let since = 0, owed = false // owed: the page has no frame yet with the clock of
 let extra: Pick<FromWorker, 'start' | 'nodes' | 'homes' | 'coords' | 'trips' | 'replans' | 'traffic' | 'cells' | 'cellKeys'> = {}
 let pending: Generator<Batch | void> | undefined
 // Finds the paths of the road load (traffic.ts roadUse) in the time that the paths of the dots leave.
-let warming: Generator<void> | undefined
+let warming: Generator<number> | undefined, roads = 0 // roads: the share of the road paths found
 // The run has a routes file whose road paths are not all found yet; the page holds the clock until they are.
 let routing = false
 // Also when the fill fails: the page waits for routing to end, with no deadline. A frame must carry the change, as a
@@ -143,8 +144,8 @@ function* bothPaths(trips: Trips, coords: [number, number][], graphs: Awaited<ty
     for (let k = 0; k < n; k++) [[trips.work[k], trips.mode[k]], [trips.play[k], trips.playMode[k]]].forEach(([to, mode]) => {
       if (ROAD_MODES.has(mode)) pairs[mode === SCOOTER ? 1 : 0].push([road(trips.home[k]), road(to)], [road(to), road(trips.home[k])])
     })
-    yield* known.fill(pairs[0], [0])
-    yield* known.fill(pairs[1], [0, 1])
+    for (const _ of known.fill(pairs[0], [0])) yield
+    for (const _ of known.fill(pairs[1], [0, 1])) yield
   }
   for (let a = a0.done ? a0 : work.next(), b = b0.done ? b0 : play.next(); !a.done || !b.done; a = a.done ? a : work.next(), b = b.done ? b : play.next()) {
     if (!a.done) yield a.value
@@ -197,13 +198,15 @@ const frame = () => {
   const until = routing && !clock.perMs ? t + 28 : Math.max(t + 12, performance.now() + 4)
   // The dots and the road load take turns.
   while ((pending || warming) && performance.now() < until) {
-    if (warming && warming.next().done) warming = undefined
+    const r = warming?.next()
+    if (r?.done) warming = undefined
+    else if (r) roads = r.value
     const b = pending?.next()
     if (!b) continue
     if (b.done) pending = undefined
     else if (b.value) { paths.push(b.value); routed += b.value.ks.length }
   }
-  const msg: FromWorker = { ...extra, paths, routed, routing, minute: w.minute, day: w.day, counts: c.nodes, road: c.road, away: c.away, ms, events: newEvents, clock: clock.minute, at: performance.timeOrigin + t, since }
+  const msg: FromWorker = { ...extra, paths, routed, routing, roads, minute: w.minute, day: w.day, counts: c.nodes, road: c.road, away: c.away, ms, events: newEvents, clock: clock.minute, at: performance.timeOrigin + t, since }
   newEvents = []
   owed = false
   postMessage(msg)
@@ -224,7 +227,7 @@ const draw = (world: World, graphs: Awaited<typeof net>) => {
 }
 // Every road traveller of the run, on the paths of the routes file. Without the file there is no traffic.
 const traffic = (world: World, graphs: Awaited<typeof net>, roadJson: GraphJson, village: boolean, roadNames: RoadNames) => {
-  use = undefined; warming = undefined; routing = true; jam = new Uint8Array(0); lastCells = new Uint8Array(0); stepWithTraffic = stepper(JAM_MINUTES, takeTrafficNow)
+  use = undefined; warming = undefined; routing = true; roads = 0; jam = new Uint8Array(0); lastCells = new Uint8Array(0); stepWithTraffic = stepper(JAM_MINUTES, takeTrafficNow)
   routes.then(known => {
     if (world !== w) return
     if (!known) { doneRouting(); return }

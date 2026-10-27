@@ -62,15 +62,16 @@ export const roadUse = (w: World, routes: Routes, ends: (agent: number, leg: num
   const cum = new Map<Uint16Array, Float32Array>(), n = w.movers.length, paths: (Uint16Array | undefined)[] = new Array(4 * n * VARIANTS)
   const use: RoadUse = { paths, cum, pick: new Int8Array(n), since: new Int32Array(n).fill(-(2 ** 31)), free: new Float32Array(n), path: new Int32Array(n), at: new Int32Array(n), left: new Float32Array(n), on: [] }
   const add = (es: Uint16Array) => { if (!cum.has(es)) { const c = new Float32Array(es.length); let s = 0; es.forEach((e, j) => (c[j] = s += time[e])); cum.set(es, c) } }
-  function* filling() {
+  // Yields the share done: the legs 5%, the paths 85%, putting them in 10%.
+  function* filling(): Generator<number> {
     const legs: [number, number, number, number][] = [] // mover index, leg, from, to
     for (let j = 0; j < n; j++) {
       const i = w.movers[j]
       if (ROAD_MODES.has(w.mode[i])) legs.push([j, 0, ...ends(i, 0)])
       if (ROAD_MODES.has(w.playMode[i])) legs.push([j, 1, ...ends(i, 1)])
-      if (j % 20000 === 19999) yield
+      if (j % 20000 === 19999) yield 0.05 * j / n
     }
-    yield* routes.fill(legs.flatMap(([, , a, b]) => [[a, b], [b, a]] as [number, number][]))
+    for (const done of routes.fill(legs.flatMap(([, , a, b]) => [[a, b], [b, a]] as [number, number][]))) yield 0.05 + 0.85 * done
     for (let k = 0; k < legs.length; k++) {
       const [j, leg, a, b] = legs[k]
       // A variant with no path (a pair that the streets alone do not connect) drives the variant before it.
@@ -80,7 +81,7 @@ export const roadUse = (w: World, routes: Routes, ends: (agent: number, leg: num
           if (es) { add(es); paths[((2 * j + leg) * 2 + back) * VARIANTS + v] = es; last = es }
         }
       })
-      if (k % 500 === 499) yield
+      if (k % 500 === 499) yield 0.9 + 0.1 * k / legs.length
     }
   }
   return { use, filling: filling() }

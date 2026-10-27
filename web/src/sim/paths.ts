@@ -38,7 +38,7 @@ export const routeKey = (from: number, to: number, variant = 0) => (variant * 65
  */
 export type Routes = {
   path: (a: number, b: number, v: number) => Uint16Array | undefined
-  fill: (pairs: Iterable<[number, number]>, variants?: number[]) => Generator<void>
+  fill: (pairs: Iterable<[number, number]>, variants?: number[]) => Generator<number> // yields the share done, 0 to 1
   clear: () => void
 }
 
@@ -109,10 +109,13 @@ const routesOf = (hs: Hierarchy[]): Routes => {
   function* fill(pairs: Iterable<[number, number]>, variants = hs.map((_, v) => v)) {
     const bySource = new Map<number, Set<number>>(), mine = dense(n)
     for (const [a, b] of pairs) if (a !== b) (bySource.get(a) ?? bySource.set(a, new Set()).get(a)!).add(b)
+    let sources = 0
+    const share = () => sources / (variants.length * bySource.size)
     for (const v of variants) {
       const back = new Map<number, Space>()
       let k = 0
       for (const [a, bs] of bySource) {
+        sources++
         const todo = [...bs].filter(b => !found.has(routeKey(a, b, v)))
         if (!todo.length) continue
         const f = search[v](a, true)
@@ -121,10 +124,10 @@ const routesOf = (hs: Hierarchy[]): Routes => {
           let s = back.get(b)
           if (!s) back.set(b, (s = search[v](b, false)))
           keep(a, b, v, join(hs[v], f, mine, s))
-          if (++k % 200 === 0) yield
+          if (++k % 200 === 0) yield share()
         }
         mine.clear(f)
-        yield
+        yield share()
       }
     }
   }

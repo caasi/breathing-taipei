@@ -370,7 +370,9 @@ export function App() {
       {/* In the bottom right of the map, left of the panels on a desktop. It shows from the first paint until the
           run of the selected level and day is on the screen and started, also in the paint right after a click. */}
       <div role="status" style={{ position: 'absolute', right: box.w - fit.x - fit.w + 16, bottom: 16, color: '#fff', pointerEvents: 'none' }}>
-        {(waiting !== undefined || onScreen?.level !== level || onScreen.runStart !== runStart) && !runError && !loadError && <><SpinnerIcon /><span style={HIDDEN}>準備中</span></>}
+        {(waiting !== undefined || onScreen?.level !== level || onScreen.runStart !== runStart) && !runError && !loadError && <><SpinnerIcon /><span style={HIDDEN}>準備中</span>
+          {/* The share of the road paths found; the run starts at 100%. Not read out: it changes every frame. */}
+          {routing && s && shown.current === waiting && <span aria-hidden style={{ marginLeft: 6, fontSize: 12 }}>路網 {Math.floor(100 * s.roads)}%</span>}</>}
       </div>
       {/* index.html (.top-row) places the title, the clock and the metrics. */}
       <div className="top" style={{ position: 'absolute', top: 16, left: fit.x + 16, width: fit.w - 32 }}>
