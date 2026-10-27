@@ -1,5 +1,6 @@
 import { GONE, PLAY, STAY } from './core.ts'
 import { isoAt, kindAt, type Calendar } from './calendar.ts'
+import { BUS, SCOOTER } from './city.ts'
 
 /**
  * One event: t in minutes since 00:00 of day 0. A personal event follows one agent (a character: 10 people at the
@@ -7,9 +8,15 @@ import { isoAt, kindAt, type Calendar } from './calendar.ts'
  * the key of a list row.
  */
 export type SimEvent =
-  // back: the way home of the same plan, at the minute the character leaves work or the day-off place.
-  | { id: string; t: number; kind: 'personal'; name: string; home: number; to: number; dest: number; mode: number; group: string; back?: boolean }
+  // back: the way home of the same plan, at the minute the character leaves work or the day-off place. late: the
+  // minutes that a jam on the way there moved it, with how the character takes it (angry or blank).
+  | { id: string; t: number; kind: 'personal'; name: string; home: number; to: number; dest: number; mode: number; group: string; back?: boolean; late?: number; mood?: Mood }
   | { id: string; t: number; kind: 'public'; text: string }
+  // A character stuck on a slow road: the road by name, or else the node nearest to it; how it takes the jam.
+  | { id: string; t: number; kind: 'jam'; name: string; home: number; mode: number; road?: string; near: number; mood: Mood }
+
+/** How a character takes a jam: angry, stuck and waiting, blank (music, the window), working by phone, or an hour of leave. */
+export type Mood = 'angry' | 'stuck' | 'blank' | 'work' | 'leave'
 
 /** What a place is called: the district, and the village at village level. */
 export type PlaceOf = (node: number) => { town: string; village: string }
@@ -26,12 +33,29 @@ const PURPOSE: Record<string, string> = {
 export const actionOf = (e: Extract<SimEvent, { kind: 'personal' }>, placeOf: PlaceOf) => {
   const by = BY[e.mode], there = placeOf(e.to), here = placeOf(e.home)
   const place = there.town === here.town ? (there.village || there.town) : there.town
+  if (e.back && e.late) {
+    const home = e.dest === PLAY ? `從${place}回家` : e.group ? '回家' : '下班回家'
+    return e.mood === 'angry' ? `路上塞車晚到，晚了${e.late}分鐘才${by}${home}，一肚子火` : `路上塞車晚到，晚了${e.late}分鐘才${by}${home}，算了，明天早點出門`
+  }
   if (e.back) return e.dest === PLAY ? `${by}從${place}回家` : e.group ? `${by}回家` : `${by}下班回家`
   if (e.dest === STAY) return '今天在家休息'
   if (e.dest === GONE) return '今天出遠門，離開雙北'
   if (e.dest === PLAY) return `${by}去${place}走走`
   if (e.group) return `${by}${PURPOSE[e.group] ?? '出門'}`
   return `${by}到${place}上班`
+}
+
+/** The sentence after the name for a jam (kind 'jam'). */
+export const jamOf = (e: Extract<SimEvent, { kind: 'jam' }>, placeOf: PlaceOf) => {
+  const near = placeOf(e.near), at = e.road ?? `${near.village || near.town}附近`, bus = e.mode === BUS
+  const by = bus ? '坐的公車' : e.mode === SCOOTER ? '騎機車' : '開車'
+  switch (e.mood) {
+    case 'angry': return bus ? `坐的公車卡在${at}，越等越火大` : `${by}塞在${at}，半天沒前進，氣到想罵人`
+    case 'stuck': return bus ? `坐的公車卡在${at}，車上的人都在看錶` : `${by}卡在${at}，走走停停，只能等`
+    case 'blank': return bus ? `坐的公車塞在${at}，乾脆放空看窗外` : `${by}塞在${at}，乾脆放空聽音樂`
+    case 'work': return `${bus ? '坐公車' : by}塞在${at}，打開電話會議，先開始辦公`
+    case 'leave': return `${bus ? '坐公車' : by}塞在${at}，打電話請一小時的假，晚點再進公司`
+  }
 }
 
 // The 2026 local election (中選會, 115年11月28日) and the day the new mayors take office (12月25日 in 2018 and 2022;

@@ -1,6 +1,7 @@
 import type { City, DaysOff, Kind } from './core.ts'
 
-export type Village = { code: string; town: string; pop: number; arrivals: number; lon: number; lat: number }
+// jobs: known employees in the village (scripts/villages.py: 內湖科技園區 only), 0 elsewhere.
+export type Village = { code: string; town: string; pop: number; arrivals: number; jobs?: number; lon: number; lat: number }
 export type Signal = Record<string, { day: number; night: number }> // weekday 07-13 activity, weekday night stay
 /** Businesses per village (villages2.json order) for each name in kinds; built by scripts/night.py. */
 export type Night = { date: string; kinds: string[]; counts: number[][] }
@@ -9,11 +10,14 @@ export type Data = { od: number[][][]; saturday?: number[][][]; holiday?: number
 
 export const MODES = ['捷運', '公車', '機車', '汽車', '步行', '自行車'] as const
 export const MRT = 0
-export const WALK = 4, BIKE = 5
+export const BUS = 1, SCOOTER = 2, WALK = 4, BIKE = 5
 // Mode share of Taipei residents, 2024 (DATA.md, "Figures in the code"). New Taipei uses the same split until its own figures are found.
 const OTHER = [0, 13.7, 16.3, 20.1, 20.8, 3.8], MRT_SHARE = 16.0
 // ponytail: assumed door-to-door speeds (km/h) and access minutes; calibrate with TDX travel times later.
-const SPEED = [30, 14, 26, 22, 4.5, 12], PEAK_SPEED = [30, 11, 20, 15, 4.5, 12], ACCESS = [12, 12, 3, 6, 0, 2]
+// The free speeds: the traffic model (traffic.ts) makes a road trip slower in a jam, so there is no peak speed here.
+const SPEED = [30, 14, 26, 22, 4.5, 12]
+// The minutes of a trip off the road: walking, waiting, parking; traffic.ts retime does not slow them.
+export const ACCESS = [12, 12, 3, 6, 0, 2]
 export const MAX_KM = [Infinity, Infinity, Infinity, Infinity, 2.5, 6] // walk and bike only within these distances
 // Short-trip rates from the mode share and the YouBike rentals (DATA.md, "Figures in the code"); one person rents
 // twice (there and back). New Taipei uses Taipei's rates until its own figures are found.
@@ -22,7 +26,6 @@ const WALK_PER_MRT = 20.8 / 16.0, YOUBIKE_RENTALS = 234_000
 const DECAY_KM: Record<number, number> = { [WALK]: 0.8, [BIKE]: 2 }
 // arrivals in villages2.json are summed over 30 days (DATA.md, "Processing").
 const ARRIVAL_DAYS = 30
-const PEAK = new Set([7, 8, 9, 17, 18, 19])
 const MORNING = [5, 6, 7, 8, 9, 10, 11], EVENING = [12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23]
 // ponytail: guessed on 2026-10-24 (the user: many people go abroad or to another county on a day off); the share
 // of commuters away from Taipei and New Taipei for the day, on a Saturday off and on a Sunday or holiday.
@@ -138,12 +141,19 @@ export const cityFrom = ({ od: mrt, saturday, holiday, districts, villages, sign
     return ws.length - 1
   }
 
-  // ponytail: a village's share of a district's arrivals is half MRT arrivals, half residents (no jobs data yet).
-  const arrD = new Array(districts.length).fill(0)
-  villages.forEach((v, i) => (arrD[g[i]] += v.arrivals))
-  const to = villages.map((v, i) => 0.5 * (arrD[g[i]] ? v.arrivals / arrD[g[i]] : 0) + 0.5 * v.pop / popD[g[i]])
+  // ponytail: a village's share of a district's arrivals is half MRT arrivals, half residents, where no jobs are known.
+  // Where they are (內科), the known jobs take their share of the morning arrivals of the district, at most all of them.
+  const arrD = new Array(districts.length).fill(0), jobsD = new Array(districts.length).fill(0)
+  villages.forEach((v, i) => { arrD[g[i]] += v.arrivals; jobsD[g[i]] += v.jobs ?? 0 })
+  const workersD = districts.map((_, d) => sum(MORNING.map(h => sum(od[h].map(row => row[d])))))
+  const known = jobsD.map((j, d) => (workersD[d] ? Math.min(1, j / workersD[d]) : 0))
+  const spread = villages.map((v, i) => 0.5 * (arrD[g[i]] ? v.arrivals / arrD[g[i]] : 0) + 0.5 * v.pop / popD[g[i]])
+  const to = villages.map((v, i) => {
+    const d = g[i]
+    return known[d] * (jobsD[d] ? (v.jobs ?? 0) / jobsD[d] : 0) + (1 - known[d]) * spread[i]
+  })
   const minutes = (a: number, b: number, mode: number, hour: number) =>
-    ACCESS[mode] + 60 * 1.3 * km(coords[a], coords[b]) / (PEAK.has(hour) ? PEAK_SPEED : SPEED)[mode]
+    ACCESS[mode] + 60 * 1.3 * km(coords[a], coords[b]) / SPEED[mode]
 
   const homes = village ? villages.map(v => Math.round(v.pop / perAgent)) : residents
   // Short trips stay inside the home district: the cross-district flows are already calibrated to the
@@ -153,7 +163,7 @@ export const cityFrom = ({ od: mrt, saturday, holiday, districts, villages, sign
   const kinds = [...(local ? [local] : []), ...nightKinds]
   const off = kindOf && saturday && holiday ? daysOff(mrt, [saturday, holiday], od, kindOf) : undefined
   const city: City = village
-    ? { od, group: g, homes, to, perAgent, modeOf, minutes, kinds, off }
+    ? { od, group: g, homes, to, toPlay: spread, perAgent, modeOf, minutes, kinds, off }
     : { od, group: groupOf, homes, to: districts.map(() => 1), perAgent, modeOf, minutes, kinds, off }
   return { city, nodes: village ? villages.map(v => v.code) : districts, coords, target }
 }

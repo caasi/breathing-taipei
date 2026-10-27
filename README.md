@@ -17,7 +17,7 @@ The author did not register for the event, so this is not an entry.
   - Dark: no change.
 - **The dots.** Each dot is a sample of the commuters who travel at that time.
   - MRT riders move on the MRT lines.
-  - Bus, scooter, and car commuters move on the bus routes.
+  - Bus, scooter, and car commuters move on the road network: the shapes of the bus routes, and the 國道 and 快速道路 of OpenStreetMap (OSM). A scooter does not take a 國道 or a 快速道路, unless no path on streets only exists (rare, DATA.md).
   - People who walk or ride a bicycle move in a straight line.
 - **The clock.** It shows the 民國 date and the time, then the lunar date, the solar term, a holiday (orange) and the days that are commemorated but not off (blue).
 - **The event panel.** It shows the newest 100 events: a few of the characters' plans, and the public events of each day. On a phone it is below or beside the map.
@@ -63,7 +63,8 @@ Display settings:
 | `dot` | `20`, `50`, `100`, `200`, `500` people for each dot. A switch draws other agents as dots, and the run goes on | `50` |
 | `dots` | `1` shows the dots, `0` hides them | `1` |
 | `mode` | `1` colors the dots by mode | `0` |
-| `layers` | Comma list of `mrt`, `lrt`, `tra`, `hsr`, `airport`, `highway`. Unknown names are ignored, and a list with no known name goes back to the default. An empty list hides all layers | All except `highway` |
+| `layers` | Comma list of `mrt`, `lrt`, `tra`, `hsr`, `airport`. Unknown names are ignored (`highway` too: the 國道 and 快速道路 are now in `traffic`), and a list with no known name goes back to the default. An empty list hides all layers | All |
+| `traffic` | `1` shows the road network with the slow roads in colour, and colours the bus, scooter and car dots on slow roads. `0` hides it. The simulation takes the traffic in both cases, so the jams, their events and the slower trips go on while it is hidden | `1` |
 
 Policy settings (placeholders):
 
@@ -108,7 +109,7 @@ Example: `?flex=20&headway=3&bus-lane=1`
 The model uses real open data, but some parts are estimates. The list below shows the estimates.
 
 - Travel speeds and access times for each mode are assumptions.
-- Travel time uses the straight-line distance multiplied by 1.3. It does not use the length of the route.
+- Travel time uses the straight-line distance multiplied by 1.3. It does not use the length of the route. On the road, a jam makes it longer (DATA.md, "Figures in the code").
 - New Taipei uses the mode share of Taipei, because the model has no New Taipei figures yet.
 - The work village inside a district is an estimate (half MRT arrivals, half residents).
 - The added (non-MRT) commuters always work in another district. Their destination districts depend only on how many people each district is short, not on distance.
@@ -129,7 +130,7 @@ The model uses real open data, but some parts are estimates. The list below show
 - The bus hours and the MRT hours are those of a workday.
 - The bus hours come from the first and last buses in the route files of both cities: most first buses leave at 05:00 or later, and most last buses leave before 24:00. A few routes run until 00:30. The MRT hours come from the MRT data: on a workday 43 trips start in hour 05 and 36,483 in hour 06. Hour 00 still has 10,471 trips (the last trains), but the model counts hour 00 as closed.
 - A district-level run drops a night-time trip that stays in the home district, because the district is the node. With seed 42 it has 36,210 dinner visitors against 80,560 at village level.
-- Scooters and cars use the bus routes, not the full road network.
+- Cars, buses and scooters use the streets of the bus routes (with the one-way rules of OSM) and the 國道 and 快速道路, not the full road network. A scooter takes the streets only.
 
 ## Tests
 
@@ -162,8 +163,8 @@ The tests with real data:
 
 ## Known gaps
 
-- `web/public/` holds the data that the app uses. These build steps are scripts: `scripts/graphs.py` builds the road and MRT graphs, `scripts/night.py` builds `night.json`, `scripts/od.py` builds `od2.json`, `scripts/days.py` builds `calendar.json`, `scripts/people.py` builds `people.json`, `scripts/atlas.py` builds `towns.json` and `villages2-topo.json`, `scripts/villages.py` builds `villages2.json`, `scripts/telecom.py` builds `signal.json`, `scripts/transit.py` builds `transit.json` (their docstrings give the inputs), and `scripts/routes.ts` builds `road-routes.bin`. `pnpm data` runs all of them except `routes.ts`, in the order of their dependencies (DATA.md, "Dependencies"). `pnpm dev` and `pnpm build` run `pnpm routes` first. Without the file, the page routes every road trip itself, which took about 30 s at 20 people per dot in Chromium against 2.5 to 3.6 s with it.
-- The events narrate the plans of the model and the calendar. No event changes a plan yet, and the policy settings are placeholders.
+- `web/public/` holds the data that the app uses. These build steps are scripts: `scripts/graphs.py` builds the road and MRT graphs and the shapes of the roads (`road-lines.json`), `scripts/names.py` builds `road-names.json`, `scripts/night.py` builds `night.json`, `scripts/od.py` builds `od2.json`, `scripts/days.py` builds `calendar.json`, `scripts/people.py` builds `people.json`, `scripts/atlas.py` builds `towns.json` and `villages2-topo.json`, `scripts/villages.py` builds `villages2.json`, `scripts/telecom.py` builds `signal.json`, `scripts/transit.py` builds `transit.json` (their docstrings give the inputs), and `scripts/routes.ts` builds `road-routes.bin`. `pnpm data` runs all of them except `routes.ts`, in the order of their dependencies (DATA.md, "Dependencies"). `pnpm dev` and `pnpm build` run `pnpm routes` first. Without the file, the page routes every road trip itself, which took about 30 s at 20 people per dot in Chromium against 2.5 to 3.6 s with it (measured with the file of 6.2 MB, before the traffic layer; the file is now 54.6 MB, and the time with it is not measured again).
+- The events narrate the plans of the model and the calendar. A jam changes a plan: the trip takes longer, and the character can leave work later. The policy settings are placeholders.
 
 ## License
 

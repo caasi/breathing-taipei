@@ -1,12 +1,15 @@
 import { getJson, getOptional } from '../load.ts'
-import { init, advance, counts, PLAY, STAY, WORK, type World } from './core.ts'
+import { init, advance, counts, now, PLAY, STAY, WORK, type World } from './core.ts'
 import { kindAt, WORKDAY, type Calendar } from './calendar.ts'
 import { drawNames, nameOf, type People } from './people.ts'
-import { evenPick, type SimEvent } from './events.ts'
+import { evenPick, type Mood, type SimEvent } from './events.ts'
 import { mulberry32 } from './rng.ts'
 import { FPS, clockAt, respeed, stepsTo, type Clock } from './pace.ts'
-import { cityFrom, MODES } from './city.ts'
-import { networks, readRoutes, tripPaths, type Batch, type Routes } from './paths.ts'
+import { cityFrom, MODES, SCOOTER } from './city.ts'
+import { networks, readRoutes, roadNode, tripPaths, wayBack, type Batch, type Routes } from './paths.ts'
+import type { GraphJson } from './route.ts'
+import { workNodes } from './jobs.ts'
+import { cellMax, gridOf, levels, liveOf, roadUse, stepper, take as takeTraffic, type Grid, type Live, type RoadUse } from './traffic.ts'
 
 export type Level = 'district' | 'village'
 export type ToWorker =
@@ -16,9 +19,11 @@ export type ToWorker =
   // minute: the clock of the page at at (performance.timeOrigin + performance.now() of the change), so both clocks agree.
   | { type: 'speed'; hoursPerSec: number; minute: number; at: number }
   | { type: 'sample'; every: number } // the run goes on; only the agents drawn as dots change
+  | { type: 'traffic'; on: boolean } // the traffic layer is shown; the worker sends the levels only then
 /**
  * Sampled agents' current plans (minutes since 00:00 of day 0), for the renderer to interpolate.
- * dest is WORK, PLAY, GONE or STAY (core.ts); the path of trip k to work is path k, to its day-off place path n + k.
+ * dest is WORK, PLAY, GONE or STAY (core.ts); the path of trip k to work is path k, to its day-off place path n + k,
+ * and its own ways home, where they differ from the way there reversed, paths 2n + k and 3n + k (bothPaths).
  */
 export type Trips = { home: Uint16Array; work: Uint16Array; mode: Uint8Array; play: Uint16Array; playMode: Uint8Array; dest: Uint8Array; dep: Int32Array; dur1: Uint16Array; ret: Int32Array; dur2: Uint16Array }
 /** New plans of sampled agents since the last message; k indexes Trips. */
@@ -29,6 +34,9 @@ export type FromWorker = {
   start?: number; nodes?: string[]; homes?: Uint32Array; coords?: [number, number][]; trips?: Trips; replans?: Replans; paths?: Batch[]; routed?: number
   minute: number; day: number; counts: Uint32Array; road: Uint32Array; away: number; ms: number
   events?: SimEvent[] // personal events of plans made since the last message
+  traffic?: Uint8Array // per road edge: 0 no traveller, 1 (free) to 255 (slowest) (traffic.ts levels); sent when it changes
+  cells?: Uint8Array // per cell of the traffic, the level of its slowest bucket, in the order of cellKeys, sent with traffic
+  cellKeys?: Int32Array // the key of each cell of the traffic (traffic.ts gridOf keys), sent once a run
   clock: number; at: number // the clock (pace.ts) shows minute `clock` at `at` (performance.timeOrigin + performance.now())
   since: number // the `at` of the change of speed that the clock uses; the page takes the clock only from its latest change
 }
@@ -43,14 +51,30 @@ let every = 20
 let hoursPerSec = 0, lastHours = 0 // lastHours: the last speed that was not a pause
 const clock: Clock = { minute: 0, at: performance.now(), perMs: 0 }
 let since = 0, owed = false // owed: the page has no frame yet with the clock of the latest change of speed
-let extra: Pick<FromWorker, 'start' | 'nodes' | 'homes' | 'coords' | 'trips' | 'replans'> = {}
+let extra: Pick<FromWorker, 'start' | 'nodes' | 'homes' | 'coords' | 'trips' | 'replans' | 'traffic' | 'cells' | 'cellKeys'> = {}
 let pending: Generator<Batch> | undefined
 let newEvents: SimEvent[] = []
 let eventId = 0
 let routed = 0
 let idx = new Uint32Array(0) // agent of each sampled trip
-let sentDep = new Int32Array(0) // departure last sent for each sampled trip; a new plan always changes it
-const data = Promise.all(['od2.json', 'villages2.json', 'signal.json', 'road-graph.json', 'mrt-graph.json', 'night.json', 'calendar.json', 'people.json'].map(getJson))
+// The plan last sent for each sampled trip: a new plan always changes the departure, and a jam (traffic.ts) a leg.
+let sentDep = new Int32Array(0), sentDur1 = new Uint16Array(0), sentDur2 = new Uint16Array(0)
+let use: RoadUse | undefined, grid: Grid | undefined, live: Live | undefined, load = new Float32Array(0), jam = new Uint8Array(0)
+let trafficOn = false, lastCells = new Uint8Array(0), jamRng = mulberry32(0)
+// ponytail: the traffic is taken at each boundary of 15 simulated minutes (a guess; scripts/traffic.ts fits with the
+// same step), whatever the speed, so a seed gives the same run at any speed, from the take after the routes file has loaded. One take costs 7 to 26 ms at the morning peak in Node on an i7-7700 (2026-10-27), so at 8x (32 takes a second) it is the main cost.
+const JAM_MINUTES = 15
+// A jam event comes from a road traveller on an edge at least this slow (traffic.ts levels: 1 + 254 x the colour level
+// of levelsOf; red from 0.43, 2 times the free time; angry from 0.75, 2.75 times). ponytail: at most one jam event a take, and one a day for each character; by eye.
+// The temper of a character, 0 to 1, fixed by its index.
+const temperOf = (i: number) => Math.imul(i + 1, 2654435761) / 2 ** 32 + 0.5
+const JAM_FROM = 1 + Math.round(0.43 * 254), ANGRY_FROM = 1 + Math.round(0.75 * 254)
+let onJam: ((agent: number, edge: number, level: number) => void) | undefined
+// After each take: moves the shown way home of a character that a jam made late to work.
+let onLate: (() => void) | undefined
+const data = Promise.all(['od2.json', 'villages2.json', 'signal.json', 'road-graph.json', 'mrt-graph.json', 'night.json', 'calendar.json', 'people.json', 'road-names.json'].map(getJson))
+/** The name of each road edge, from scripts/names.py: edge[e] indexes names, or is -1. */
+type RoadNames = { names: string[]; edge: number[] }
 const net = data.then(([, , , road, mrt]) => networks(road, mrt))
 // Made by `pnpm routes` before dev and build; without it (or for another road graph) the worker routes every road trip itself.
 const routes = Promise.all([net, getOptional('road-routes.bin').catch(() => undefined)])
@@ -58,6 +82,13 @@ const routes = Promise.all([net, getOptional('road-routes.bin').catch(() => unde
 // The start handler awaits data and net and reports their failure; routes only feeds the paths. Mark all three
 // handled, so a failure that settles before the first start does not also log an unhandled rejection.
 data.catch(() => {}); net.catch(() => {}); routes.catch(() => {})
+
+/** The node (village, or district centre) nearest to a point; a linear search, as it runs about once a take. */
+const nearestOf = (coords: [number, number][], lon: number, lat: number) => {
+  let best = 0, bd = Infinity
+  coords.forEach(([x, y], v) => { const d = (x - lon) ** 2 + (y - lat) ** 2; if (d < bd) { bd = d; best = v } })
+  return best
+}
 
 const take = <T extends Uint32Array | Int32Array | Uint16Array | Uint8Array>(a: T, at: ArrayLike<number>, ctor: new (n: number) => T) => {
   const out = new ctor(at.length); for (let k = 0; k < at.length; k++) out[k] = a[at[k]]; return out
@@ -67,7 +98,7 @@ const sample = (w: World): Trips => {
   const picked: number[] = []
   for (let i = 0; i < w.home.length; i += every) if (w.home[i] !== w.work[i] || w.home[i] !== w.play[i]) picked.push(i)
   idx = Uint32Array.from(picked)
-  sentDep = take(w.dep, idx, Int32Array)
+  sentDep = take(w.dep, idx, Int32Array); sentDur1 = take(w.dur1, idx, Uint16Array); sentDur2 = take(w.dur2, idx, Uint16Array)
   return { home: take(w.home, idx, Uint16Array), work: take(w.work, idx, Uint16Array), mode: take(w.mode, idx, Uint8Array),
     play: take(w.play, idx, Uint16Array), playMode: take(w.playMode, idx, Uint8Array), dest: take(w.dest, idx, Uint8Array),
     dep: take(w.dep, idx, Int32Array), dur1: take(w.dur1, idx, Uint16Array), ret: take(w.ret, idx, Int32Array), dur2: take(w.dur2, idx, Uint16Array) }
@@ -75,13 +106,19 @@ const sample = (w: World): Trips => {
 
 const replans = (w: World): Replans | undefined => {
   const ks: number[] = []
-  for (let k = 0; k < idx.length; k++) if (w.dep[idx[k]] !== sentDep[k]) { ks.push(k); sentDep[k] = w.dep[idx[k]] }
+  for (let k = 0; k < idx.length; k++) {
+    const i = idx[k]
+    if (w.dep[i] !== sentDep[k] || w.dur1[i] !== sentDur1[k] || w.dur2[i] !== sentDur2[k]) { ks.push(k); sentDep[k] = w.dep[i]; sentDur1[k] = w.dur1[i]; sentDur2[k] = w.dur2[i] }
+  }
   if (!ks.length) return undefined
   const at = ks.map(k => idx[k])
   return { k: Uint32Array.from(ks), dest: take(w.dest, at, Uint8Array), dep: take(w.dep, at, Int32Array), dur1: take(w.dur1, at, Uint16Array), ret: take(w.ret, at, Int32Array), dur2: take(w.dur2, at, Uint16Array) }
 }
 
-/** The paths to work as paths 0..n-1, then the paths to the day-off places as paths n..2n-1. */
+/**
+ * The paths to work as paths 0..n-1, the paths to the day-off places as paths n..2n-1, then the paths home from them
+ * that differ from the way there reversed as paths 2n..3n-1 and 3n..4n-1 (Travellers.tsx).
+ */
 // The two take turns, so the dots of a day off do not wait for every road path to work.
 function* bothPaths(trips: Trips, coords: [number, number][], graphs: Awaited<typeof net>, known?: Routes): Generator<Batch> {
   const n = trips.home.length
@@ -91,6 +128,26 @@ function* bothPaths(trips: Trips, coords: [number, number][], graphs: Awaited<ty
     if (!a.done) yield a.value
     if (!b.done) yield { ...b.value, ks: b.value.ks.map(k => k + n) }
   }
+  if (!known) return
+  for (const batch of wayBack(trips, coords, graphs, known)) yield { ...batch, ks: batch.ks.map(k => k + 2 * n) }
+  for (const batch of wayBack({ home: trips.home, work: trips.play, mode: trips.playMode }, coords, graphs, known)) yield { ...batch, ks: batch.ks.map(k => k + 3 * n) }
+}
+
+/** Advances the model by `minutes`, and takes the traffic at each boundary of JAM_MINUTES that it reaches. */
+let stepWithTraffic = stepper(JAM_MINUTES, world => takeTrafficNow(world))
+
+const takeTrafficNow = (world: World) => {
+  if (!use || !grid || !live) return
+  const onRoad: number[] = []
+  const buckets = takeTraffic(world, use, load, live, (i, e) => onRoad.push(i, e)), next = levels(load, grid, buckets, new Uint8Array(load.length))
+  // The jam events need the traffic with the layer off too; the page gets the levels only while it shows them.
+  const changed = next.some((v, e) => v !== jam[e])
+  jam = next; lastCells = cellMax(grid, buckets)
+  if (trafficOn && changed) { extra.traffic = next; extra.cells = lastCells }
+  const stuck: number[] = []
+  for (let k = 0; k < onRoad.length; k += 2) if (next[onRoad[k + 1]] >= JAM_FROM) stuck.push(k)
+  onLate?.()
+  if (stuck.length && onJam) { const k = stuck[Math.floor(jamRng() * stuck.length)]; onJam(onRoad[k], onRoad[k + 1], next[onRoad[k + 1]]) }
 }
 
 const frame = () => {
@@ -107,7 +164,7 @@ const frame = () => {
   // paused page costs almost nothing. After a change of speed one frame goes out anyway: the page takes the worker
   // clock only from a frame of its latest change, and a frame from before it can have moved the model past its clock.
   if (n === 0 && !owed && !pending && !newEvents.length && !Object.keys(extra).length) return
-  for (let k = n; k > 0; k--) advance(w, step)
+  for (let k = n; k > 0; k--) stepWithTraffic(w, step)
   extra.replans = replans(w)
   const c = counts(w, MODES.length)
   const ms = performance.now() - t
@@ -139,6 +196,18 @@ const draw = (world: World, graphs: Awaited<typeof net>) => {
   routes.then(known => { if (thisDraw === drawn) pending = bothPaths(trips, coords, graphs, known) }, () => {})
   return trips
 }
+// Every road traveller of the run, on the paths of the routes file. Without the file there is no traffic.
+const traffic = (world: World, graphs: Awaited<typeof net>, roadJson: GraphJson, village: boolean, roadNames: RoadNames) => {
+  use = undefined; jam = new Uint8Array(0); lastCells = new Uint8Array(0); stepWithTraffic = stepper(JAM_MINUTES, takeTrafficNow)
+  routes.then(known => {
+    if (!known || world !== w) return
+    const node = new Map<number, number>(), at = (v: number) => node.get(v) ?? node.set(v, roadNode(graphs, coords, v)).get(v)!
+    const metres = Float32Array.from(roadJson.edges, e => e[2])
+    load = new Float32Array(metres.length); grid = gridOf(roadJson, roadNames.edge); live = liveOf(roadJson, grid); extra.cellKeys = grid.keys
+    const workAt = workNodes(graphs, coords, village)
+    use = roadUse(world, known, (i, leg) => [at(world.home[i]), leg ? at(world.play[i]) : workAt(i, world.work[i])], live.time)
+  }, () => {})
+}
 onmessage = async (e: MessageEvent<ToWorker>) => {
   const m = e.data
   if (m.type === 'speed') {
@@ -148,6 +217,8 @@ onmessage = async (e: MessageEvent<ToWorker>) => {
     since = m.at; owed = true
     return
   }
+  // Showing the layer sends the traffic of the last take; it never adds a take, so the run does not depend on the toggle.
+  if (m.type === 'traffic') { trafficOn = m.on; if (trafficOn && jam.length) { extra.traffic = jam; extra.cells = lastCells }; return }
   if (m.type === 'sample') { every = m.every; if (w) net.then(g => { if (w) extra = { ...extra, trips: draw(w, g) } }); return }
   // The old world stops now. The clock of the new run stands at minute 0 until the page is ready for it and sends a
   // speed, as the clock of the page does.
@@ -157,7 +228,8 @@ onmessage = async (e: MessageEvent<ToWorker>) => {
   // Any failure while starting (loading, building the city, sampling) goes to the page.
   // The async handler would otherwise reject without a message, and onerror does not see a rejection.
   try {
-    const [[od2, villages, signal, , , night, cal, people], graphs] = await Promise.all([data, net])
+    const [[od2, villages, signal, roadJson, , night, cal, people, roadNames], graphs] = await Promise.all([data, net])
+    onJam = undefined; onLate = undefined; jamRng = mulberry32(m.seed + 3)
     const c = cityFrom({ ...od2, villages, signal, night }, m.perAgent, m.level, day => kindAt(cal as Calendar, m.startDay + day))
     w = init(c.city, m.seed)
     const world = w, districtOf = Array.from(w.home, h => (m.level === 'village' ? villages[h].town : c.nodes[h]))
@@ -169,6 +241,7 @@ onmessage = async (e: MessageEvent<ToWorker>) => {
     eventId = 0
     const pick = evenPick(SHOWN.map(s => keep * s), pickRng)
     w.onPlan = i => {
+      backs.delete(i)
       const dest = world.dest[i]
       // A STAY on a workday is a commuter who works in its home node (at district level: its own district), not a day of rest.
       if (dest === STAY && kindAt(cal as Calendar, m.startDay + Math.floor(world.dep[i] / 1440) - 1) === WORKDAY) return
@@ -181,11 +254,47 @@ onmessage = async (e: MessageEvent<ToWorker>) => {
         dest, mode: play ? world.playMode[i] : world.mode[i], group }
       newEvents.push({ ...e, id: `a${++eventId}` })
       // A shown trip also shows its way home, so the stream follows one character through the day.
-      if (dest === WORK || play) newEvents.push({ ...e, id: `a${++eventId}`, t: world.ret[i], back: true })
+      if (dest === WORK || play) { const b = { ...e, id: `a${++eventId}`, t: world.ret[i], back: true }; newEvents.push(b); backs.set(i, b); planned.set(i, b.t) }
+    }
+    // A jam on the way can make a character reach work after its usual leaving time, so it leaves later (core.ts
+    // stretch). The way home is sent again with the same id, the new time, how late, and the temper of the character.
+    // planned: the leaving time of the plan with no jam, which can already be past the drawn time (core.ts trip).
+    const backs = new Map<number, Extract<SimEvent, { kind: 'personal' }>>(), planned = new Map<number, number>()
+    onLate = () => backs.forEach((b, i) => {
+      // Once the character has left, a jam on the way home moves its start (core.ts stretch), not the leaving time.
+      if (now(world) >= world.ret[i]) { backs.delete(i); return }
+      if (world.ret[i] === b.t) return
+      // How late the jam made it; back to the plain way home when the jam eases in time. ponytail: the temper splits the
+      // late at 0.55 into angry and blank, as the jam events do; by eye.
+      const minutes = world.ret[i] - planned.get(i)!
+      const next = minutes > 0 ? { ...b, t: world.ret[i], late: minutes, mood: temperOf(i) < 0.55 ? 'angry' as const : 'blank' as const }
+        : { ...b, t: world.ret[i], late: undefined, mood: undefined }
+      newEvents.push(next); backs.set(i, next)
+    })
+    // ponytail: a character's temper is fixed by its index; about 55% take a jam by how slow it is (angry on the slowest
+    // roads, else stuck), the rest go blank, work by phone or ask for an hour of leave to come late (only on the way to
+    // work; leave only before noon). The shares are by eye. The character goes on to work, so the plan does not change.
+    const { names, edge: edgeName } = roadNames as RoadNames, jammed = new Map<number, number>()
+    onJam = (i, e, level) => {
+      const t = world.day * 1440 + Math.floor(world.minute), today = Math.floor(t / 1440)
+      if (jammed.get(i) === today) return
+      jammed.set(i, today)
+      const temper = temperOf(i), toWork = world.dest[i] === WORK && t < world.dep[i] + world.dur1[i]
+      const mode = world.dest[i] === PLAY ? world.playMode[i] : world.mode[i]
+      // A scooter rider cannot start work by phone in the saddle; one who would waits instead.
+      const working: Mood = mode === SCOOTER ? 'stuck' : 'work'
+      const mood: Mood = temper < 0.55 ? (level >= ANGRY_FROM ? 'angry' : 'stuck') : temper < 0.75 || !toWork ? 'blank'
+        : temper < 0.92 || t % 1440 >= 12 * 60 ? working : 'leave'
+      // A road with no name is told by the village nearest the middle of the edge: an edge can be longer than a cell.
+      const [a, b] = roadJson.edges[e], road = edgeName[e] >= 0 ? names[edgeName[e]] : undefined
+      const near = road ? 0 : nearestOf(c.coords, (roadJson.lon[a] + roadJson.lon[b]) / 2, (roadJson.lat[a] + roadJson.lat[b]) / 2)
+      newEvents.push({ id: `j${++eventId}`, t, kind: 'jam', name: nameOf(ids, i), home: world.home[i],
+        mode, road, near, mood })
     }
     // The plans under way at day 0 were made during init, which calls no onPlan: pass them through the same filter.
     for (const i of w.movers) w.onPlan(i)
     coords = c.coords
+    traffic(w, graphs, roadJson, m.level === 'village', roadNames as RoadNames)
     extra = { start: m.start, nodes: c.nodes, homes: Uint32Array.from(c.city.homes), coords: c.coords, trips: draw(w, graphs) }
   } catch (err) {
     w = undefined

@@ -3,7 +3,11 @@ import { geoArea, geoMercator, geoPath, type GeoProjection } from 'd3-geo'
 import { feature, mesh } from 'topojson-client'
 import type { FeatureCollection, Geometry } from 'geojson'
 import { Fills } from './Fills.tsx'
+import { Traffic, type RoadLines } from './Traffic.tsx'
+import { PLACE } from './Dashboard.tsx'
 import { MAP_SIZE, svgTransform, type Rect, type View } from './view.ts'
+
+const NO_TRAFFIC = new Uint8Array(0)
 
 export type Transit = {
   lines: { kind: string; name: string; colour: string; coords: [number, number][] }[]
@@ -38,7 +42,7 @@ const LAND = `rgb(${BACKGROUND.join(', ')})`
 const NEW_TAIPEI_OPACITY = 0.45
 
 // Lines and stations are for orientation; kept faint so the eye follows the area colours.
-const LINE_OPACITY = { rail: 0.35, highway: 0.3 }
+const LINE_OPACITY = 0.35
 const STATION_OPACITY = 0.6
 const SVG = { position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none' } as const
 
@@ -65,10 +69,11 @@ type Props = {
   proj: GeoProjection; transit?: Transit; show: Set<string>
   rate?: Float32Array // when given, colour by change per hour / residents instead of density
   speed: number // simulated hours per second
+  roads?: RoadLines; traffic?: Uint8Array // the road network and its slow edges, over the lines and under the labels
   view: View
 }
 
-export function HeatMap({ towns, villages, level, nodes, counts, perAgent, proj, transit, show, rate, speed, view }: Props) {
+export function HeatMap({ towns, villages, level, nodes, counts, perAgent, proj, transit, show, rate, speed, view, roads, traffic }: Props) {
   // The fade runs in real time; scale it so it always spans about 30 simulated minutes, or it shows a past hour.
   const fadeSeconds = 0.5 / Math.max(1, speed)
   // Geometry is fixed per level; only the fills and the label counts change each frame.
@@ -99,13 +104,15 @@ export function HeatMap({ towns, villages, level, nodes, counts, perAgent, proj,
     return { cells, borders, labels, lines, points }
   }, [cells, towns, proj, transit])
 
+  // The borders take the blue of the place names in the events (Dashboard.tsx), and village edges are dashed, so they
+  // stay apart from the roads (white to red, Traffic.tsx).
   // Cell edges, borders, lines and stations never change during a run, so they are one SVG whose paths are built once.
   const fixed = useMemo(() => <>
-      {geo.cells.map((c, k) => <path key={'c' + k} d={c.d} fill="none" stroke="#fff" strokeOpacity={0.1} strokeWidth={0.4} />)}
-      {geo.borders.map((b, k) => <path key={'b' + k} d={b.d} fill="none" stroke="#fff" strokeOpacity={0.2} strokeWidth={b.taipei ? 1.8 : 1} />)}
+      {geo.cells.map((c, k) => <path key={'c' + k} d={c.d} fill="none" stroke={PLACE.village} strokeOpacity={0.15} strokeWidth={0.4} strokeDasharray="1.2 1" />)}
+      {geo.borders.map((b, k) => <path key={'b' + k} d={b.d} fill="none" stroke={PLACE.town} strokeOpacity={0.3} strokeWidth={b.taipei ? 1.8 : 1} />)}
       {geo.lines.filter(l => show.has(l.kind)).map((l, k) =>
-        <path key={'l' + k} d={l.d} fill="none" stroke={l.colour} strokeWidth={l.kind === 'mrt' ? 1.8 : l.kind === 'highway' ? 1 : 1.5}
-          strokeDasharray={l.kind === 'tra' ? '6 3' : undefined} opacity={l.kind === 'highway' ? LINE_OPACITY.highway : LINE_OPACITY.rail} />)}
+        <path key={'l' + k} d={l.d} fill="none" stroke={l.colour} strokeWidth={l.kind === 'mrt' ? 1.8 : 1.5}
+          strokeDasharray={l.kind === 'tra' ? '6 3' : undefined} opacity={LINE_OPACITY} />)}
       {geo.points.filter(p => p.kinds.some(k => show.has(k))).map(p => {
         const has = (k: string) => p.kinds.includes(k) && show.has(k)
         return <g key={p.kinds.join() + p.name} opacity={STATION_OPACITY}>
@@ -127,6 +134,9 @@ export function HeatMap({ towns, villages, level, nodes, counts, perAgent, proj,
       <Fills cells={geo.cells} proj={proj} colours={colours} fadeSeconds={fadeSeconds} view={view} />
       {/* The view is outside the memo, so a zoom or pan step changes one attribute and leaves the paths alone. */}
       <svg style={SVG}><g transform={svgTransform(view)}>{fixed}</g></svg>
+      {/* Mounted once and then hidden, not unmounted: a WebGL canvas must not be mounted again (AGENTS.md). Until the
+          first take of a run, it draws the network with no traffic. */}
+      {roads && <Traffic lines={roads} proj={proj} levels={traffic ?? NO_TRAFFIC} fadeSeconds={fadeSeconds} view={view} running={speed > 0} shown={show.has('traffic')} />}
       <svg style={SVG}><g transform={svgTransform(view)}>
         {geo.labels.map(l => <text key={l.town} x={l.xy[0]} y={l.xy[1]} textAnchor="middle" fontSize={12} fill="#fff" stroke="#211d1d" strokeWidth={3} paintOrder="stroke">
           {l.name}<tspan x={l.xy[0]} dy={14}>{((byTown.get(l.town) ?? 0) * perAgent).toLocaleString()}</tspan></text>)}

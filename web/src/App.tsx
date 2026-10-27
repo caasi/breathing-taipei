@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { HeatMap, Land, Outline, SEA, projectionFor, taipeiIn, type Transit } from './ui/HeatMap.tsx'
-import { Travellers, MODE_COLOURS, addBatches, type Track } from './ui/Travellers.tsx'
+import { Travellers, MODE_COLOURS, addBatches, type CellTraffic, type Track } from './ui/Travellers.tsx'
+import type { RoadLines } from './ui/Traffic.tsx'
 import { MODES } from './sim/city.ts'
 import type { FromWorker, WorkerError, ToWorker, Level, Trips } from './sim/worker.ts'
 import { getJson } from './load.ts'
@@ -16,7 +17,11 @@ import { hhmm, H2 } from './ui/format.ts'
 
 const SPEEDS = [0, 1, 2, 4, 8]
 const EVERY = [2, 5, 10, 20, 50]
-const LAYERS: [string, string][] = [['mrt', '捷運'], ['lrt', '輕軌'], ['tra', '台鐵'], ['hsr', '高鐵'], ['airport', '機場'], ['highway', '國道與快速道路']]
+// 國道 and 快速道路 are part of the traffic layer, which draws them with the streets.
+const LAYERS: [string, string][] = [['mrt', '捷運'], ['lrt', '輕軌'], ['tra', '台鐵'], ['hsr', '高鐵'], ['airport', '機場']]
+// The traffic has a key of its own, not a place in `layers`: a browser that stored the layers before it existed would
+// keep it off.
+const LAYER_BOXES: [string, string][] = [...LAYERS, ['traffic', '路況']]
 const PER_AGENT = 10
 // Plans are made ahead of their departure, so the newest events are not all shown yet: keep more than the list shows.
 const KEEP_EVENTS = 3 * MAX_EVENTS
@@ -57,6 +62,10 @@ export function App() {
   const [towns, setTowns] = useState<any>()
   const [villages, setVillages] = useState<any>()
   const [transit, setTransit] = useState<Transit>()
+  const [roads, setRoads] = useState<RoadLines>()
+  const [traffic, setTraffic] = useState<Uint8Array>()
+  // The dots read the slowness of each cell every frame, so it is a ref and not state.
+  const cellTraffic = useRef<CellTraffic>(), cellIndex = useRef(new Map<number, number>())
   const [cal, setCal] = useState<Calendar>()
   // Day 0 of the run is the day the page opens, in Taiwan.
   const startDay = useMemo(() => cal && indexOf(cal, todayInTaipei()), [cal])
@@ -94,13 +103,28 @@ export function App() {
   const [personal, setPersonal] = useState<SimEvent[]>([]) // the personal events from the worker; the newest KEEP_EVENTS stay
   const [homes, setHomes] = useState(new Uint32Array(0))
   const [fps, setFps] = useState(0)
+  // The rate of animation frames, counted here and not in a layer, so it goes on when the dots are hidden.
+  useEffect(() => {
+    let raf = 0, frames = 0, since = performance.now()
+    const tick = (now: number) => {
+      frames++
+      if (now - since > 1000) { setFps(frames * 1000 / (now - since)); frames = 0; since = now }
+      raf = requestAnimationFrame(tick)
+    }
+    raf = requestAnimationFrame(tick)
+    return () => cancelAnimationFrame(raf)
+  }, [])
   // A file the page loads once stays failed until reload; a run error belongs to the current run.
   const [loadError, setLoadError] = useState<string>()
   const [open, setOpen] = useState<'info' | 'settings' | 'policies'>()
   const [runError, setRunError] = useState<string>()
-  // Highways are for orientation only and compete with the area colours, so they start hidden.
-  const [show, setShow] = useStored('layers', new Set(LAYERS.map(l => l[0]).filter(k => k !== 'highway')),
+  const [show, setShow] = useStored('layers', new Set(LAYERS.map(l => l[0])),
     setOf(LAYERS.map(l => l[0])), v => [...v].join(','))
+  const [trafficOn, setTrafficOn] = useStored('traffic', true, bool, fromBool)
+  // The worker can post a frame with levels after the layer is turned off; the handler of its messages reads this.
+  const trafficOnRef = useRef(trafficOn)
+  trafficOnRef.current = trafficOn
+  const layers = useMemo(() => (trafficOn ? new Set([...show, 'traffic']) : show), [show, trafficOn])
   const worker = useRef<Worker>()
   const started = useRef(0), shown = useRef(0) // the latest start posted, and the start of the frames on the page
   // The start of a new run whose clock stands until the page is ready: state for the icon, a ref for the logic, so a
@@ -117,6 +141,8 @@ export function App() {
     getJson('calendar.json').then(setCal).catch(err => setLoadError(String(err)))
     getJson('villages2-topo.json').then(setVillages).catch(err => setLoadError(String(err)))
     getJson('transit.json').then(setTransit).catch(err => setLoadError(String(err)))
+    // The real shapes of the roads, for drawing only. Without the file, only the traffic is missing.
+    getJson('road-lines.json').then(setRoads).catch(() => {})
     // Residents by town for the labels of the outline; the worker loads the same file, so it is usually in the cache.
     getJson('villages2.json').then((vs: { town: string; pop: number }[]) => {
       const m = new Map<string, number>()
@@ -136,8 +162,15 @@ export function App() {
       // these values, not the message.
       const fresh = m.coords !== undefined, events = m.events, entry = { t: m.day * 1440 + m.minute, counts: m.counts }
       if (m.homes) setHomes(m.homes)
+      if (fresh || m.traffic) setTraffic(m.traffic)
+      if (m.cellKeys) cellIndex.current = new Map(Array.from(m.cellKeys, (key, c) => [key, c] as const))
+      if (fresh || m.cells) cellTraffic.current = m.cells && trafficOnRef.current ? { index: cellIndex.current, level: m.cells } : undefined
       if (m.trips) { dotRuns.current.set(++lastDots.current, { trips: m.trips, tracks: { current: [] }, run: shown.current }); setTripsId(lastDots.current); unplaced.current = [] }
-      if (fresh || events?.length) setPersonal(p => [...(fresh ? [] : p), ...(events ?? [])].slice(-KEEP_EVENTS))
+      if (fresh || events?.length) setPersonal(p => {
+        // A way home sent again (a jam made it late) replaces the one with its id; one message can carry it more than once.
+        const latest = [...new Map((events ?? []).map(e => [e.id, e] as const)).values()], again = new Set(latest.map(e => e.id))
+        return [...(fresh ? [] : p.filter(e => !again.has(e.id))), ...latest].slice(-KEEP_EVENTS)
+      })
       setHistory(h => record(fresh ? [] : h, entry, KEEP))
       // The dots read the arrays every frame, so new plans are written into them in place.
       // New plans and routes are for the newest trips, also before a render shows them.
@@ -159,6 +192,10 @@ export function App() {
   }, [])
   // Declared before the start, so the first start draws with the stored density.
   useEffect(() => post({ type: 'sample', every }), [every])
+  useEffect(() => {
+    if (!trafficOn) cellTraffic.current = undefined
+    post({ type: 'traffic', on: trafficOn })
+  }, [trafficOn])
   useEffect(() => {
     if (runStart === undefined) return
     // The new world starts at minute 0, and both clocks stand there until the page has drawn the first frame. The page
@@ -278,7 +315,7 @@ export function App() {
       style={{ marginRight: 4, fontWeight: c === colourBy ? 'bold' : 'normal' }}>{c === 'density' ? '人口密度' : '人口變化率'}</button>)}
       {colourBy === 'rate' && <span style={{ marginLeft: 8 }}>變化區間：{WINDOWS.map(v => <button key={v} onClick={() => setRateWindow(v)}
         style={{ marginRight: 4, fontWeight: v === rateWindow ? 'bold' : 'normal' }}>{v} 分</button>)}</span>}</p>
-    <p>{LAYERS.map(([k, label]) => <label key={k} style={{ marginRight: 12 }}><input type="checkbox" checked={show.has(k)} onChange={() => toggle(k)} />{label}</label>)}</p>
+    <p>{LAYER_BOXES.map(([k, label]) => <label key={k} style={{ marginRight: 12 }}><input type="checkbox" checked={layers.has(k)} onChange={() => (k === 'traffic' ? setTrafficOn(on => !on) : toggle(k))} />{label}</label>)}</p>
     <h2 style={H2}>模擬</h2>
     <div style={{ fontVariantNumeric: 'tabular-nums' }}>
     <p>台北市 {people(inTaipei)} 人，新北市 {people(n => !inTaipei(n))} 人，路上 {padded(road.reduce((a, b) => a + b, 0) * PER_AGENT, 6)} 人，外地 {padded((s?.away ?? 0) * PER_AGENT, 6)} 人</p>
@@ -322,8 +359,8 @@ export function App() {
       {!faded && towns && projection && <Outline towns={towns} proj={projection} view={view} pop={pop} />}
       <div className="reveal" style={{ position: 'absolute', inset: 0, opacity: revealed ? 1 : 0, filter: revealed ? 'none' : 'blur(8px)' }}>
       {ready && <>
-        <HeatMap towns={towns} villages={villages} level={onScreen?.level ?? level} nodes={nodes} counts={s.counts} perAgent={PER_AGENT} proj={projection} transit={transit} show={show} rate={rate} speed={speed} view={view} />
-        {dots && dotTrips && <Travellers tracks={dotRun!.tracks} trips={dotTrips} clock={clock} onFps={setFps} byMode={byMode} view={view} />}
+        <HeatMap towns={towns} villages={villages} level={onScreen?.level ?? level} nodes={nodes} counts={s.counts} perAgent={PER_AGENT} proj={projection} transit={transit} show={layers} rate={rate} roads={roads} traffic={traffic} speed={speed} view={view} />
+        {dots && dotTrips && <Travellers tracks={dotRun!.tracks} trips={dotTrips} clock={clock} byMode={byMode} traffic={cellTraffic} view={view} />}
       </>}
       </div>
       {/* Always there, so a screen reader reads the change. */}

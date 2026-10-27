@@ -1,5 +1,5 @@
 import { graphFrom, graphHash, nearest, tree, pathTo, pathAlong, type GraphJson, type Graph } from './route.ts'
-import { MRT } from './city.ts'
+import { MRT, SCOOTER } from './city.ts'
 
 /** Paths for trips ks: trip ks[i]'s points (lon, lat, ...) are pts[off[i] .. off[i + 1]), from home to work. */
 export type Batch = { ks: Uint32Array; pts: Float32Array; off: Uint32Array }
@@ -10,7 +10,7 @@ export const ROAD_MODES = new Set([1, 2, 3]) // bus, scooter, car follow bus rou
 export const KNOWN_BATCH = 2000
 
 export const networks = (road: GraphJson, mrt: GraphJson) => {
-  const r = graphFrom(road), m = graphFrom(mrt)
+  const r = graphFrom(road, true), m = graphFrom(mrt)
   // Stations a passenger can actually reach (one station is not joined to any OSM line).
   const any = Object.values(mrt.stations!)[0], reach = tree(m, any).dist
   const stations = new Set(Object.values(mrt.stations!).filter(s => Number.isFinite(reach[s])))
@@ -18,8 +18,9 @@ export const networks = (road: GraphJson, mrt: GraphJson) => {
 }
 
 /**
- * Road paths made ahead of time by scripts/routes.ts: (from road node, to road node) -> edge ids.
- * File layout, all Uint16: graph hash (low, high), then per path to the end of the file: from, to, length, edge ids.
+ * Road paths made ahead of time by scripts/routes.ts: (from road node, to road node, variant) -> edge ids.
+ * File layout, all Uint16: graph hash (low, high), layout (2), then per path to the end of the file: from, to, variant,
+ * length, edge ids.
  * The hash ties the file to its road graph; a file for another graph, or one cut inside a record, is ignored.
  * A file cut at a record boundary reads as a smaller set of paths; the worker routes the trips it lacks.
  * Limits: fewer than 65,536 road nodes and edges, and paths shorter than 65,536 edges (writeRoutes throws
@@ -27,27 +28,41 @@ export const networks = (road: GraphJson, mrt: GraphJson) => {
  * the routing code: after a change to tree() or its costs, run `pnpm routes` again (dev and build do).
  */
 export type Routes = Map<number, Uint16Array>
-export const routeKey = (from: number, to: number) => from * 65536 + to
+/**
+ * The variants of a road path: 0 the fastest (route.ts FASTER), 1 on streets only (a scooter cannot take a 國道 or a
+ * 快速道路), 2 the shortest in metres. A file holds a variant only when it differs from the variant before it (pathIn),
+ * and a way back (b to a) only when it is not the way there reversed (traffic.ts roadUse).
+ */
+export const VARIANTS = 3
+export const routeKey = (from: number, to: number, variant = 0) => (variant * 65536 + from) * 65536 + to
+/** Variant v of the path from a to b: a variant that the file leaves out is the one before it. */
+export const pathIn = <P>(routes: Map<number, P>, a: number, b: number, v: number): P | undefined =>
+  routes.get(routeKey(a, b, v)) ?? (v ? pathIn(routes, a, b, v - 1) : undefined)
+// The third word of the file, so that a file of the older layout (no variant) is not read as this one.
+const LAYOUT = 2
 export const readRoutes = (data: Uint16Array, g: Graph): Routes | undefined => {
-  if (data.length < 2 || (data[0] | (data[1] << 16)) >>> 0 !== graphHash(g)) return undefined
+  if (data.length < 3 || (data[0] | (data[1] << 16)) >>> 0 !== graphHash(g) || data[2] !== LAYOUT) return undefined
   const routes: Routes = new Map()
-  for (let i = 2; i < data.length;) {
-    if (i + 3 > data.length || i + 3 + data[i + 2] > data.length) return undefined
-    routes.set(routeKey(data[i], data[i + 1]), data.subarray(i + 3, i + 3 + data[i + 2]))
-    i += 3 + data[i + 2]
+  for (let i = 3; i < data.length;) {
+    if (i + 4 > data.length || i + 4 + data[i + 3] > data.length) return undefined
+    routes.set(routeKey(data[i], data[i + 1], data[i + 2]), data.subarray(i + 4, i + 4 + data[i + 3]))
+    i += 4 + data[i + 3]
   }
   return routes
 }
 export const writeRoutes = (g: Graph, paths: Map<number, number[]>) => {
   if (g.lon.length > 65535 || g.geom.length > 65535) throw new Error('road nodes or edges do not fit Uint16')
-  const hash = graphHash(g), out = [hash & 0xffff, hash >>> 16]
-  for (const [key, edges] of paths) out.push(Math.floor(key / 65536), key % 65536, edges.length, ...edges)
+  const hash = graphHash(g), out = [hash & 0xffff, hash >>> 16, LAYOUT]
+  for (const [key, edges] of paths) {
+    const variant = Math.floor(key / 2 ** 32), rest = key % 2 ** 32
+    out.push(Math.floor(rest / 65536), rest % 65536, variant, edges.length, ...edges)
+  }
   if (out.some(v => v > 65535)) throw new Error('a value does not fit Uint16')
   return Uint16Array.from(out)
 }
 /** The road node a village (or district center) starts and ends its road trips at; the script and the worker share it. */
 export const roadNode = (net: ReturnType<typeof networks>, coords: [number, number][], v: number) =>
-  nearest(net.road, coords[v][0], coords[v][1])
+  nearest(net.road, coords[v][0], coords[v][1], u => net.road.street[u] === 1)
 
 const pack = (ks: number[], parts: number[][]): Batch => {
   const off = new Uint32Array(ks.length + 1)
@@ -80,7 +95,8 @@ export function* tripPaths(legs: Leg, coords: [number, number][], net: ReturnTyp
     const into = (map: Map<number, number[]>, a: number) => (map.get(a) ?? map.set(a, []).get(a)!).push(k)
     if (m === MRT && station(h) !== station(w)) into(mrtFrom, station(h))
     else if (ROAD_MODES.has(m) && road(h) !== road(w)) {
-      const a = road(h), edges = routes?.get(routeKey(a, road(w)))
+      // A scooter dot takes the streets-only variant, as its road load does (traffic.ts); the others the fastest one.
+      const a = road(h), edges = (m === SCOOTER ? routes?.get(routeKey(a, road(w), 1)) : undefined) ?? routes?.get(routeKey(a, road(w)))
       if (edges) { known.push(k); knownFrom.push(a); knownEdges.push(edges) }
       else into(roadFrom, a)
     }
@@ -100,4 +116,22 @@ export function* tripPaths(legs: Leg, coords: [number, number][], net: ReturnTyp
     const { via } = tree(net.road, a)
     yield pack(ks, ks.map(k => full(k, pathTo(net.road, via, road(legs.work[k])))))
   }
+}
+
+/**
+ * Yields the paths home of the road trips whose way back `routes` holds (a one-way road made it differ from the way
+ * there), as points from the far end to home, in batches. Any other trip goes home along its way there reversed, as its
+ * road load does (traffic.ts roadUse).
+ */
+export function* wayBack(legs: Leg, coords: [number, number][], net: ReturnType<typeof networks>, routes: Routes): Generator<Batch> {
+  const at = new Map<number, number>(), road = (v: number) => at.get(v) ?? at.set(v, roadNode(net, coords, v)).get(v)!
+  const ks: number[] = [], parts: number[][] = []
+  for (let k = 0; k < legs.home.length; k++) {
+    const m = legs.mode[k], a = road(legs.work[k]), b = road(legs.home[k])
+    if (!ROAD_MODES.has(m) || a === b || !routes.has(routeKey(a, b))) continue
+    const edges = pathIn(routes, a, b, m === SCOOTER ? 1 : 0)!
+    ks.push(k); parts.push([...coords[legs.work[k]], ...pathAlong(net.road, a, edges), ...coords[legs.home[k]]])
+    if (ks.length === KNOWN_BATCH) { yield pack(ks.splice(0), parts.splice(0)) }
+  }
+  if (ks.length) yield pack(ks, parts)
 }

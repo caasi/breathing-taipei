@@ -1,7 +1,7 @@
-"""The lines and points that the map draws: MRT, light rail, railway, high speed rail, motorways, trunk roads, stations and the airport.
+"""The lines and points that the map draws: MRT, light rail, railway, high speed rail, stations and the airport.
 
 Usage:
-  python3 scripts/transit.py OSM_RAIL OSM_STATIONS OSM_AIRPORT OSM_ROADS OUT_JSON
+  python3 scripts/transit.py OSM_RAIL OSM_STATIONS OSM_AIRPORT OUT_JSON
 
   Each input is the JSON of one Overpass API query (https://overpass-api.de/api/interpreter), made on 2026-10-24:
   OSM_RAIL      [out:json][timeout:120];(way["railway"~"^(subway|rail|light_rail|monorail)$"](24.90,121.25,25.20,121.70););out tags geom;
@@ -9,15 +9,14 @@ Usage:
                 node["public_transport"="station"](area.tp);node["aeroway"="aerodrome"](area.tp);way["aeroway"="aerodrome"](area.tp);
                 node["highway"="motorway_junction"](area.tp););out center tags;
   OSM_AIRPORT   [out:json][timeout:60];(nwr["aeroway"="aerodrome"]["iata"="TSA"];);out center tags;
-  OSM_ROADS     [out:json][timeout:120];way["highway"~"^(motorway|trunk)$"](24.85,121.30,25.25,121.75);out tags geom;
   OUT_JSON      writes transit.json: {"lines": [{kind, name, colour, coords}], "points": [{kind, name, lon, lat}]}
 
-The roads come first in "lines", so that the map draws the rail lines on top of them. From OSM_STATIONS, only the
+The 國道 and 快速道路 are not here: the traffic layer draws them (road-lines.json). From OSM_STATIONS, only the
 nodes with station=train go into "points", so the map shows the railway stations of Taipei City only. The query
 stays as it was made, so that the output is the same as the file in git."""
 import json, sys
 
-if __name__ == "__main__" and len(sys.argv) != 6:
+if __name__ == "__main__" and len(sys.argv) != 5:
     sys.exit(__doc__)
 
 MRT = {"文湖": "#c48c31", "淡水信義": "#e3002c", "松山新店": "#008659", "小碧潭": "#008659", "中和新蘆": "#f8b61c",
@@ -45,8 +44,8 @@ def rail(way):
         return "lrt", "#7ec8a5"
     return None
 
-def main(osm_rail, osm_stations, osm_airport, osm_roads, out):
-    lines = [{"kind": "highway", "name": x["tags"].get("name", ""), "colour": "#8a817c", "coords": coords(x)} for x in elements(osm_roads)]
+def main(osm_rail, osm_stations, osm_airport, out):
+    lines = []
     for x in elements(osm_rail):
         if k := rail(x):
             lines.append({"kind": k[0], "name": x["tags"].get("name", ""), "colour": k[1], "coords": coords(x)})

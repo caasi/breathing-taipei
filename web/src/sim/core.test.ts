@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'vitest'
 import fc from 'fast-check'
 import { readFileSync } from 'node:fs'
-import { init, advance, counts, where, ROAD, AWAY, PLAY, GONE, MINUTES_PER_DAY, type City, type World } from './core.ts'
+import { init, advance, counts, where, stretch, now, ROAD, AWAY, PLAY, GONE, MINUTES_PER_DAY, type City, type World } from './core.ts'
 import { cityFrom, km, MODES, MAX_KM, WALK, BIKE } from './city.ts'
 
 // 1-5 groups with 1-4 nodes each, sparse non-negative OD, any destination weights,
@@ -85,6 +85,50 @@ describe('core properties', () => {
       }
       expect(bad).toEqual([])
     }), { numRuns: 30 })
+  })
+
+  test('a jam that moves the start of an outing into the day before gives no second outing that day', () => {
+    // Every day is off and every outing leaves from 05:00 and takes 150 minutes. A jam near the end of the leg asks for
+    // 60 more minutes: at MAX_LEG the start moves before 00:00 (core.ts stretch).
+    const od = Array.from({ length: 24 }, (_, h) => [[0, h >= 5 && h < 20 ? 10 : 0], [0, 0]])
+    const city: City = { od, group: [0, 1], homes: [5, 0], to: [0, 1], perAgent: 10, modeOf: () => 0, minutes: () => 150,
+      off: { kindOf: () => 1, od: [od, od], out: [[1, 1], [1, 1]], away: [0, 0] } }
+    const bad: string[] = []
+    for (let seed = 0; seed < 200; seed++) {
+      const w = init(city, seed), left = new Map<string, number>()
+      for (let t = 0; t <= 2 * MINUTES_PER_DAY; t++, advance(w, 1)) for (const i of w.movers) {
+        const on = t >= w.dep[i] && t < w.dep[i] + w.dur1[i]
+        if (on && w.dep[i] >= 0 && (t - w.dep[i]) / w.dur1[i] > 0.85) stretch(w, i, t + 60)
+        if (!w.dur1[i] || w.dep[i] !== t) continue
+        const key = `${i} ${Math.floor(t / MINUTES_PER_DAY)}`
+        left.set(key, (left.get(key) ?? 0) + 1)
+        if (left.get(key)! > 1) bad.push(`seed ${seed} twice ${key}`)
+      }
+    }
+    expect(bad).toEqual([])
+  })
+
+  test('an outing that a jam makes arrive after 00:00 still leaves an outing for the next day', () => {
+    // Every day is off and the agents go out at 07:00 or 16:00 (the morning trips make them commuters), for 150
+    // minutes. A jam one minute after the start asks for 600 more minutes, so an agent that left at 16:00 arrives at
+    // its place after 00:00 and is home on the next day, before 16:00.
+    const od = Array.from({ length: 24 }, (_, h) => [[0, h === 7 || h === 16 ? 10 : 0], [0, 0]])
+    const city: City = { od, group: [0, 1], homes: [200, 0], to: [0, 1], perAgent: 10, modeOf: () => 0, minutes: () => 150,
+      off: { kindOf: () => 1, od: [od, od], out: [[1, 1], [1, 1]], away: [0, 0] } }
+    const late = new Set<string>(), bad: string[] = []
+    for (let seed = 0; seed < 20; seed++) {
+      const w = init(city, seed), left = new Set<number>()
+      for (let t = 0; t < 2 * MINUTES_PER_DAY; t++, advance(w, 1)) for (const i of w.movers) {
+        if (t < MINUTES_PER_DAY && t === w.dep[i] + 1 && w.dur1[i]) {
+          stretch(w, i, t + 600)
+          if (w.dep[i] + w.dur1[i] >= MINUTES_PER_DAY) late.add(`${seed} ${i}`)
+        }
+        if (t >= MINUTES_PER_DAY && w.dur1[i] && w.dep[i] === t) left.add(i)
+      }
+      for (const k of late) if (k.startsWith(`${seed} `) && !left.has(+k.split(' ')[1])) bad.push(`seed ${k}`)
+    }
+    expect(late.size).toBeGreaterThan(0)
+    expect(bad).toEqual([])
   })
 
   test('the share of commuters out on a day off does not grow over a run of days off', () => {
@@ -178,6 +222,41 @@ describe('core properties', () => {
       expect(w.dur2[i]).toBe(minutes(1, 0, 0, hour))
       expect(w.ret[i] + w.dur2[i]).toBeLessThanOrEqual((day + 1) * 1440)
     }
+  })
+
+  test('a jam moves the end of the leg under way, the agent stays where it is, and in exactly the bucket of its new minute home', () => {
+    fc.assert(fc.property(cityArb, fc.nat(1000), fc.integer({ min: 1, max: 3 * 1440 }), fc.double({ min: 0, max: 900, noNaN: true }), (city, seed, minutes, later) => {
+      const w = run(city, seed, minutes), t = now(w)
+      // Per agent on the road: which leg, the share of it done, and the end asked for.
+      const share = (i: number) => (t < w.dep[i] + w.dur1[i] ? [0, (t - w.dep[i]) / w.dur1[i]] : [1, (t - w.ret[i]) / w.dur2[i]])
+      const asked = new Map<number, number[]>()
+      for (const i of w.movers) if (where(w, i) === ROAD) { const arrive = t + later; asked.set(i, [...share(i), Math.max(Math.floor(t) + 1, Math.round(arrive))]); stretch(w, i, arrive) }
+      const seen = new Map<number, number>()
+      w.due.forEach((agents, slot) => agents.forEach(i => { expect(seen.has(i)).toBe(false); seen.set(i, slot) }))
+      for (const i of w.movers) {
+        const end = w.ret[i] + w.dur2[i]
+        expect(seen.get(i)).toBe(end % w.due.length)
+        expect(end).toBeGreaterThan(t)
+        // On the way home the start can move before the arrival at work (core.ts stretch); the way there keeps the order.
+        if (!asked.get(i)?.[0]) expect(w.ret[i]).toBeGreaterThanOrEqual(w.dep[i] + w.dur1[i])
+        const a = asked.get(i)
+        if (!a) continue
+        expect(where(w, i, t)).toBe(ROAD)
+        const [back, p, to] = a, [back2, p2] = share(i), d = back ? w.dur2[i] : w.dur1[i]
+        expect(back2).toBe(back)
+        // On the way to work the agent leaves at its planned time, or on arrival when that is later, also after an earlier end.
+        if (!back) expect(w.ret[i]).toBe(Math.max(w.leave[i], w.dep[i] + w.dur1[i]))
+        // The leg ends where asked, or earlier at MAX_LEG (600 minutes).
+        if (d < 600) expect((back ? w.ret[i] : w.dep[i]) + d).toBe(to)
+        else expect((back ? w.ret[i] : w.dep[i]) + d).toBeLessThanOrEqual(to)
+        // The share done moves forward by less than a minute of the new leg (whole minutes), never back.
+        expect(p2 - p).toBeGreaterThanOrEqual(-1e-9)
+        expect(p2 - p).toBeLessThanOrEqual(1 / d + 1e-9)
+      }
+      advance(w, 1440)
+      const c = counts(w, MODES.length)
+      expect(sumOf(c)).toBe(total(city))
+    }), { numRuns: 60 })
   })
 
   test('same seed gives the same run', () => {

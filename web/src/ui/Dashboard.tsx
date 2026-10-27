@@ -2,10 +2,13 @@ import { memo } from 'react'
 import { useQuery, bool, fromBool, onSteps } from '../query.ts'
 import { hhmm, H2 } from './format.ts'
 
-import { actionOf, type PlaceOf, type SimEvent } from '../sim/events.ts'
+import { actionOf, jamOf, type PlaceOf, type SimEvent } from '../sim/events.ts'
 
 // The kind of an event shows by the colour of its text, not by a label; a bad event (an accident) gets its own colour when it comes.
-const COLOUR = { personal: '#eee', public: '#c9a7ff' } as const
+const COLOUR = { personal: '#eee', public: '#c9a7ff', jam: '#ff8a65' } as const
+// Where a character lives: two tones of one cool hue, apart from the warm names and from the data colours of the map
+// (no official colour per district was found). ponytail: chosen by eye.
+export const PLACE = { town: '#8ecae6', village: '#b9dcee' } as const
 
 type Policy = { id: string; label: string } & ({ type: 'toggle' } | { type: 'range'; min: number; max: number; step: number; unit: string; start: number })
 // ponytail: placeholder policies for the layout only; nothing here reaches the simulation yet.
@@ -54,7 +57,7 @@ export const Events = memo(function Events({ events, now, dayLabel, placeOf }: E
         {(i === 0 || dayOf(happened[i - 1]) !== dayOf(e)) && <p style={{ margin: '0 0 6px', fontSize: 12, color: '#888' }}>{dayLabel(dayOf(e))}</p>}
         <div style={{ display: 'flex', gap: 8 }}>
           <span style={{ fontVariantNumeric: 'tabular-nums', color: '#aaa' }}>{hhmm(e.t % 1440)}</span>
-          <span style={{ color: COLOUR[e.kind] }}>{e.kind === 'public' ? e.text : <><span style={{ color: '#aaa' }}>{placeOf(e.home).town}{placeOf(e.home).village}</span>的<span style={{ color: '#ffd9a0' }}>{e.name}</span>{actionOf(e, placeOf)}</>}</span></div></li>)}
+          <span style={{ color: COLOUR[e.kind] }}>{e.kind === 'public' ? e.text : <><span style={{ color: PLACE.town }}>{placeOf(e.home).town}</span><span style={{ color: PLACE.village }}>{placeOf(e.home).village}</span>的<span style={{ color: '#ffd9a0' }}>{e.name}</span>{e.kind === 'jam' ? jamOf(e, placeOf) : actionOf(e, placeOf)}</>}</span></div></li>)}
     </ol> : <p style={{ fontSize: 14, color: '#aaa' }}>還沒有事件。</p>}
   </>
 })

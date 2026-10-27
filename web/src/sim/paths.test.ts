@@ -2,7 +2,7 @@ import { expect, test } from 'vitest'
 import { existsSync, readFileSync } from 'node:fs'
 import { init } from './core.ts'
 import { cityFrom } from './city.ts'
-import { KNOWN_BATCH, networks, readRoutes, ROAD_MODES, roadNode, routeKey, tripPaths, writeRoutes, type Batch } from './paths.ts'
+import { KNOWN_BATCH, networks, pathIn, readRoutes, ROAD_MODES, roadNode, routeKey, tripPaths, wayBack, writeRoutes, type Batch } from './paths.ts'
 import { edgesTo, tree } from './route.ts'
 
 const pub = (f: string) => JSON.parse(readFileSync(new URL(`../../public/${f}`, import.meta.url), 'utf8'))
@@ -64,4 +64,47 @@ test.skipIf(!existsSync(bin))('the routes file in web/public matches the road gr
       && Number.isFinite(tree(net.road, at(w.home[i])).dist[at(to[i])])).length
     expect({ level, work: missing(w.work, w.mode), play: missing(w.play, w.playMode) }).toEqual({ level, work: 0, play: 0 })
   }
+}, 60_000)
+
+test.skipIf(!existsSync(bin))('every path of the routes file, and every way back that the worker reverses, drives a one-way edge only its own way (real data)', () => {
+  const road = pub('road-graph.json'), net = networks(road, pub('mrt-graph.json')), b = readFileSync(bin), g = net.road
+  const routes = readRoutes(new Uint16Array(b.buffer, b.byteOffset, b.byteLength / 2), g)!
+  // From node a along es: the edges driven against their one-way direction.
+  const against = (a: number, es: ArrayLike<number>) => {
+    let p = a, bad = 0
+    for (let k = 0; k < es.length; k++) {
+      const e = es[k], forward = g.from[e] === p
+      if (!forward && road.edges[e][5]) bad++
+      p = forward ? g.end[e] : g.from[e]
+    }
+    return bad
+  }
+  let bad = 0, flipped = 0
+  for (const [key, es] of routes) {
+    const v = Math.floor(key / 2 ** 32), a = Math.floor(key % 2 ** 32 / 65536), z = key % 65536
+    bad += against(a, es)
+    // traffic.ts roadUse: with no path back in the file, the way back is the way there reversed.
+    if (!routes.has(routeKey(z, a))) { flipped++; bad += against(z, pathIn(routes, a, z, v)!.slice().reverse()) }
+  }
+  expect(flipped).toBeGreaterThan(0)
+  expect(bad).toBe(0)
+}, 60_000)
+
+test.skipIf(!existsSync(bin))('a dot goes home on its own path when the routes file holds one, from the far end to home (real data)', () => {
+  const net = networks(pub('road-graph.json'), pub('mrt-graph.json')), b = readFileSync(bin)
+  const routes = readRoutes(new Uint16Array(b.buffer, b.byteOffset, b.byteLength / 2), net.road)!
+  const c = cityFrom({ ...pub('od2.json'), villages: pub('villages2.json'), signal: pub('signal.json'), night: pub('night.json') }, 10, 'village')
+  const w = init(c.city, 42), ks = Array.from(w.movers).filter(i => ROAD_MODES.has(w.mode[i])).slice(0, 2000)
+  const legs = { home: ks.map(i => w.home[i]), work: ks.map(i => w.work[i]), mode: ks.map(i => w.mode[i]) }
+  const at = (v: number) => roadNode(net, c.coords, v)
+  const own = legs.home.map((h, k) => at(legs.work[k]) !== at(h) && routes.has(routeKey(at(legs.work[k]), at(h))))
+  const seen = new Set<number>()
+  for (const batch of wayBack(legs, c.coords, net, routes)) batch.ks.forEach((k, j) => {
+    seen.add(k)
+    const pts = batch.pts.subarray(batch.off[j], batch.off[j + 1])
+    expect([pts[0], pts[1]]).toEqual(Array.from(Float32Array.from(c.coords[legs.work[k]])))
+    expect([pts[pts.length - 2], pts[pts.length - 1]]).toEqual(Array.from(Float32Array.from(c.coords[legs.home[k]])))
+  })
+  expect(seen.size).toBeGreaterThan(0)
+  own.forEach((o, k) => expect(seen.has(k)).toBe(o))
 }, 60_000)

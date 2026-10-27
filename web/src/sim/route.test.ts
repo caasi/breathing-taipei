@@ -1,6 +1,6 @@
 import { expect, test } from 'vitest'
 import fc from 'fast-check'
-import { graphFrom, graphHash, tree, pathTo, type GraphJson } from './route.ts'
+import { freeTime, graphFrom, graphHash, tree, pathTo, SIGNAL, type GraphJson } from './route.ts'
 
 // Random connected-or-not graphs of 2-12 nodes; some edges carry in-between points.
 const graphArb = fc.integer({ min: 2, max: 12 }).chain(n => fc.record({
@@ -14,9 +14,12 @@ test('Dijkstra distances equal brute-force shortest paths', () => {
   fc.assert(fc.property(graphArb, fc.nat(), (j, s) => {
     const n = j.lon.length, src = s % n, g = graphFrom(j)
     const d = Array.from({ length: n }, (_, i) => Array.from({ length: n }, (_, k) => (i === k ? 0 : Infinity)))
-    for (const [a, b, w] of j.edges) { d[a][b] = Math.min(d[a][b], w); d[b][a] = Math.min(d[b][a], w) }
+    // Routing weighs an edge by its free time (length, speed of its class, traffic lights), not by its length alone.
+    const time = freeTime(j)
+    j.edges.forEach(([a, b], e) => { d[a][b] = Math.min(d[a][b], time[e]); d[b][a] = Math.min(d[b][a], time[e]) })
     for (let k = 0; k < n; k++) for (let i = 0; i < n; i++) for (let m = 0; m < n; m++) d[i][m] = Math.min(d[i][m], d[i][k] + d[k][m])
-    expect(Array.from(tree(g, src).dist)).toEqual(d[src])
+    // The free times are not whole numbers, so the order of the sums can change the last bit.
+    Array.from(tree(g, src).dist).forEach((x, k) => (Number.isFinite(x) ? expect(x).toBeCloseTo(d[src][k], 9) : expect(d[src][k]).toBe(Infinity)))
   }))
 })
 
@@ -62,4 +65,11 @@ test('the graph hash changes when one coordinate, edge end, geometry point or we
   expect(graphHash(graphFrom({ ...j, edges: [[0, 1, 1, []], [1, 2, 1, [121.515, 25.016]]] }))).not.toBe(h)
   expect(graphHash(graphFrom({ ...j, edges: [[0, 1, 2, []], [1, 2, 1, [121.515, 25.015]]] }))).not.toBe(h)
   expect(graphHash(graphFrom(j))).toBe(h)
+})
+
+test('traffic lights add half a wait at each end where 3 or more streets meet, and only with lights', () => {
+  // A star: node 0 meets 1, 2 and 3; edge 3-4 is a 國道 (class 1), which never has lights.
+  const j: GraphJson = { lon: [0, 0, 0, 0, 0], lat: [0, 0, 0, 0, 0], edges: [[0, 1, 100, []], [0, 2, 100, []], [0, 3, 100, []], [3, 4, 320, [], 1]] }
+  expect(Array.from(freeTime(j))).toEqual([100, 100, 100, 100])
+  expect(Array.from(freeTime(j, true))).toEqual([100 + SIGNAL / 2, 100 + SIGNAL / 2, 100 + SIGNAL / 2, 100])
 })
