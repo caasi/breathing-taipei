@@ -6,7 +6,7 @@ import { evenPick, type Mood, type SimEvent } from './events.ts'
 import { mulberry32 } from './rng.ts'
 import { FPS, clockAt, respeed, stepsTo, type Clock } from './pace.ts'
 import { cityFrom, MODES, SCOOTER } from './city.ts'
-import { networks, readRoutes, roadNode, tripPaths, wayBack, type Batch, type Routes } from './paths.ts'
+import { networks, readRoutes, ROAD_MODES, roadNode, tripPaths, wayBack, type Batch, type Routes } from './paths.ts'
 import type { GraphJson } from './route.ts'
 import { workNodes } from './jobs.ts'
 import { cellMax, gridOf, levels, liveOf, roadUse, stepper, take as takeTraffic, type Grid, type Live, type RoadUse } from './traffic.ts'
@@ -122,19 +122,25 @@ const replans = (w: World): Replans | undefined => {
  * The paths to work as paths 0..n-1, the paths to the day-off places as paths n..2n-1, then the paths home from them
  * that differ from the way there reversed as paths 2n..3n-1 and 3n..4n-1 (Travellers.tsx).
  */
-// The two take turns, so the dots of a day off do not wait for every road path to work. First it finds every road path
-// of the dots in a batch (routes.fill), which is much faster than one at a time.
+// The two take turns, so the dots of a day off do not wait for every road path to work. The first batch of each needs
+// no road path; then the road paths of the dots are found in a batch (routes.fill), much faster than one at a time.
 function* bothPaths(trips: Trips, coords: [number, number][], graphs: Awaited<typeof net>, known?: Routes): Generator<Batch | void> {
   const n = trips.home.length
-  if (known) {
-    const at = new Map<number, number>(), road = (v: number) => at.get(v) ?? at.set(v, roadNode(graphs, coords, v)).get(v)!
-    const pairs: [number, number][] = []
-    for (let k = 0; k < n; k++) for (const to of [trips.work[k], trips.play[k]]) pairs.push([road(trips.home[k]), road(to)], [road(to), road(trips.home[k])])
-    yield* known.fill(pairs, [0, 1]) // a dot drives variant 0, or 1 on a scooter
-  }
   const work = tripPaths(trips, coords, graphs, known)
   const play = tripPaths({ home: trips.home, work: trips.play, mode: trips.playMode }, coords, graphs, known)
-  for (let a = work.next(), b = play.next(); !a.done || !b.done; a = a.done ? a : work.next(), b = b.done ? b : play.next()) {
+  const a0 = work.next(), b0 = play.next()
+  if (!a0.done) yield a0.value
+  if (!b0.done) yield { ...b0.value, ks: b0.value.ks.map(k => k + n) }
+  if (known) {
+    const at = new Map<number, number>(), road = (v: number) => at.get(v) ?? at.set(v, roadNode(graphs, coords, v)).get(v)!
+    const pairs = [[] as [number, number][], [] as [number, number][]] // by the variant a dot drives: 1 for a scooter
+    for (let k = 0; k < n; k++) [[trips.work[k], trips.mode[k]], [trips.play[k], trips.playMode[k]]].forEach(([to, mode]) => {
+      if (ROAD_MODES.has(mode)) pairs[mode === SCOOTER ? 1 : 0].push([road(trips.home[k]), road(to)], [road(to), road(trips.home[k])])
+    })
+    yield* known.fill(pairs[0], [0])
+    yield* known.fill(pairs[1], [0, 1])
+  }
+  for (let a = a0.done ? a0 : work.next(), b = b0.done ? b0 : play.next(); !a.done || !b.done; a = a.done ? a : work.next(), b = b.done ? b : play.next()) {
     if (!a.done) yield a.value
     if (!b.done) yield { ...b.value, ks: b.value.ks.map(k => k + n) }
   }
