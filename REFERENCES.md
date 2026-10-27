@@ -41,7 +41,7 @@ Collected on 2026-10-27 by an agent search, when the routes file had to hold the
 Used: contraction hierarchies (`web/src/sim/ch.ts`, built by `scripts/routes.ts`).
 
 - Robert Geisberger, Peter Sanders, Dominik Schultes, Daniel Delling, "Contraction Hierarchies: Faster and Simpler Hierarchical Routing in Road Networks", WEA 2008 (https://ae.iti.kit.edu/english/1498.php), not checked: the paper itself was not opened. Order the nodes, remove them from the least important one up, and add a shortcut for each shortest path through a removed node. A query searches up the order from both ends; each shortcut unpacks into its two arcs. The edge difference as the order, the witness search and stall-on-demand in our code follow this method, from memory of it.
-- Measured on our road graph (15,070 nodes, 2026-10-27, Node): all three variants of `paths.ts` give 120,036 shortcuts and a file of 1,050,726 bytes, against 54,592,250 bytes for the old file of precomputed paths. One query took about 0.25 ms against 3 to 4 ms for a Dijkstra search of the whole graph, and 900 random pairs gave the same cost as Dijkstra.
+- Measured on our road graph (15,070 nodes, 2026-10-27, Node): all three variants of `paths.ts` give 120,036 shortcuts and a file of 1,050,726 bytes, against 54,592,250 bytes for the old file of precomputed paths. One query took about 0.25 ms against 3 to 4 ms for a Dijkstra search of the whole graph, and `web/src/sim/paths.test.ts` makes sure that 100 random pairs of street nodes in each variant have the cost of a Dijkstra search. On 2026-10-27, one-off checks by the agents compared 900, 3,600 and 7,199 random pairs, with no difference; those scripts are not in the repository.
 
 Not used:
 
