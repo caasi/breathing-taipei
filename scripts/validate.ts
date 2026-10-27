@@ -60,7 +60,8 @@ for (let slot = 0; slot < 96; slot++) {
     peaks[k].set(b, xs)
   })
 }
-const median = (xs: number[]) => xs.slice().sort((a, b) => a - b)[xs.length >> 1]
+// As statistics.median in scripts/tdx.py: an even count gives the mean of the two middle values.
+const median = (xs: number[]) => { const a = xs.slice().sort((x, y) => x - y), m = a.length >> 1; return a.length % 2 ? a[m] : (a[m - 1] + a[m]) / 2 }
 for (const k of ['am', 'pm'] as const) {
   const bucket = new Map([...peaks[k]].filter(([b]) => used[k].has(b)).map(([b, xs]) => [b, median(xs)]))
   const rs = [...bucket.values()].sort((a, b) => a - b), q = (x: number) => rs[Math.min(rs.length - 1, Math.floor(x * rs.length))].toFixed(2)
