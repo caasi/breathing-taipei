@@ -32,8 +32,8 @@ const KEEP_EVENTS = 3 * MAX_EVENTS
 // The English subtitle at this share of the title size is a little narrower than 台北鼓動; the user chose it by eye.
 const SUBTITLE_SCALE = 0.46
 const WINDOWS = [15, 30, 60, KEEP] // simulated minutes the change rate can look back; history keeps the longest
-// A node is a village code (台北市 is county 63000) or a district name.
-// The district level is a view of the village run (byDistrict below); the run itself is always at village level.
+// The district level is a view of the village run (byDistrict below); the run itself is always at village level, and
+// a node of the run is a village code (台北市 is county 63000).
 type Level = 'district' | 'village'
 // The map at each step of its fade in (revealed): hidden, half while the run waits for the road paths, then clear.
 // ponytail: the half step (opacity 0.5, blur 4 px) is by eye.

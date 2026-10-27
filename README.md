@@ -152,7 +152,7 @@ An example test makes sure that the road-graph hash changes when one coordinate 
 
 The tests with real data:
 
-- One runs the district model to 11:00. It makes sure that the population of each district with 50,000 people or more is within 15% of its target.
+- One runs the village model to 11:00 and adds the villages up by district. It makes sure that the population of each district with 50,000 people or more is within 15% of its target.
 - One uses a village run. It computes the two targets from the public figures and makes sure that the short walking and cycling trips of Taipei residents are within 10% of them. It also makes sure that every short trip stays in its district. No walk is longer than 2.5 km, and no ride is longer than 6 km.
 - One makes sure that short trips in a district without MRT trips inside it follow the morning peak, not an even spread: more than 10 times as many leave at 08:00 as at 05:00.
 - One makes sure that, at 00:00 and at 02:00, the overnight and nightlife workers at work are within 10% of the number that their businesses give. The test computes that number from `night.json` and the guesses.

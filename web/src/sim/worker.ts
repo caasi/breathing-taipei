@@ -91,7 +91,7 @@ const routes = Promise.all([net, getOptional('road-routes.bin').catch(() => unde
 // handled, so a failure that settles before the first start does not also log an unhandled rejection.
 data.catch(() => {}); net.catch(() => {}); routes.catch(() => {})
 
-/** The node (village, or district centre) nearest to a point; a linear search, as it runs about once a take. */
+/** The village whose centre is nearest to a point; a linear search, as it runs about once a take. */
 const nearestOf = (coords: [number, number][], lon: number, lat: number) => {
   let best = 0, bd = Infinity
   coords.forEach(([x, y], v) => { const d = (x - lon) ** 2 + (y - lat) ** 2; if (d < bd) { bd = d; best = v } })
