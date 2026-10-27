@@ -58,6 +58,9 @@ let pending: Generator<Batch | void> | undefined
 let warming: Generator<void> | undefined
 // The run has a routes file whose road paths are not all found yet; the page holds the clock until they are.
 let routing = false
+// Also when the fill fails: the page waits for routing to end, with no deadline. A frame must carry the change, as a
+// standing clock with nothing to send skips the frame.
+const doneRouting = () => { routing = false; owed = true }
 let newEvents: SimEvent[] = []
 let eventId = 0
 let routed = 0
@@ -224,15 +227,17 @@ const traffic = (world: World, graphs: Awaited<typeof net>, roadJson: GraphJson,
   use = undefined; warming = undefined; routing = true; jam = new Uint8Array(0); lastCells = new Uint8Array(0); stepWithTraffic = stepper(JAM_MINUTES, takeTrafficNow)
   routes.then(known => {
     if (world !== w) return
-    if (!known) { routing = false; return }
+    if (!known) { doneRouting(); return }
     known.clear() // the paths of an earlier run
     const node = new Map<number, number>(), at = (v: number) => node.get(v) ?? node.set(v, roadNode(graphs, coords, v)).get(v)!
     const metres = Float32Array.from(roadJson.edges, e => e[2])
     load = new Float32Array(metres.length); grid = gridOf(roadJson, roadNames.edge); live = liveOf(roadJson, grid); extra.cellKeys = grid.keys
     const workAt = workNodes(graphs, coords, village)
     const found = roadUse(world, known, (i, leg) => [at(world.home[i]), leg ? at(world.play[i]) : workAt(i, world.work[i])], live.time)
-    warming = (function* () { yield* found.filling; if (world === w) { use = found.use; routing = false } })()
-  }, () => { if (world === w) routing = false })
+    warming = (function* () {
+      try { yield* found.filling; if (world === w) use = found.use } finally { if (world === w) doneRouting() }
+    })()
+  }, () => { if (world === w) doneRouting() })
 }
 onmessage = async (e: MessageEvent<ToWorker>) => {
   const m = e.data
