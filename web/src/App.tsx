@@ -8,6 +8,7 @@ import type { FromWorker, WorkerError, ToWorker, Trips } from './sim/worker.ts'
 import { getJson } from './load.ts'
 import type { Batch } from './sim/paths.ts'
 import { useStored, oneOf, setOf, bool, fromBool } from './query.ts'
+import { changeRate, groupBy, sumBy } from './districts.ts'
 import { record, since, KEEP, type Entry } from './history.ts'
 import { layoutFor, PANEL } from './ui/view.ts'
 import { dateText, indexOf, todayInTaipei, type Calendar } from './sim/calendar.ts'
@@ -243,15 +244,9 @@ export function App() {
   // At district level the map shows the districts, and each figure of a district is the sum of its villages.
   const byDistrict = useMemo(() => {
     if (level !== 'district' || !districtOf.length) return undefined
-    const names = [...new Set(districtOf)], index = new Map(names.map((n, d) => [n, d]))
-    return { names, of: Int32Array.from(districtOf, n => index.get(n)!) }
+    return groupBy(districtOf)
   }, [level, districtOf])
-  const asShown = <T extends Uint32Array>(a: T): T | Uint32Array => {
-    if (!byDistrict) return a
-    const out = new Uint32Array(byDistrict.names.length)
-    for (let i = 0; i < a.length; i++) out[byDistrict.of[i]] += a[i]
-    return out
-  }
+  const asShown = (a: Uint32Array) => (byDistrict ? sumBy(byDistrict, a) : a)
   const shownCounts = useMemo(() => s && asShown(s.counts), [s, byDistrict])
   // Change per hour over the last rateWindow minutes, as a share of the residents of the node shown. Before two frames
   // of the run, no change: an undefined rate colours by density, and the map then faded from density to the rate colours.
@@ -261,9 +256,7 @@ export function App() {
     if (!h.length) return new Float32Array(size)
     const last = h[h.length - 1], first = since(h, rateWindow), out = new Float32Array(size)
     if (last.t === first.t) return out
-    const perHour = 60 / (last.t - first.t), now = asShown(last.counts), then = asShown(first.counts), residents = asShown(homes)
-    for (let i = 0; i < out.length; i++) out[i] = (now[i] - then[i]) * perHour / Math.max(1, residents[i])
-    return out
+    return changeRate(asShown(last.counts), asShown(first.counts), asShown(homes), last.t - first.t)
   }, [history, homes, colourBy, rateWindow, nodes, byDistrict])
   const ready = projection && villages && s && nodes.length === s.counts.length
   // The map fades in from the blurred outline in two steps: half at its first frame, while the run still waits for the
