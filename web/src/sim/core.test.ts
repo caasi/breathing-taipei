@@ -302,18 +302,20 @@ const data = () => ({ ...pub('od2.json'), villages: pub('villages2.json'), signa
 
 test('daytime district population is near the telecom target after calibration (real data)', () => {
   const d = data()
-  const { city, target } = cityFrom(d, 10, 'district')
+  const { city, target } = cityFrom(d, 10)
   const w = init(city, 1)
   advance(w, 11 * 60)
-  const c = counts(w, MODES.length).nodes
+  // The run is at village level; the target is per district, so the villages are added up.
+  const c = new Array(d.districts.length).fill(0), homes = [...c]
+  counts(w, MODES.length).nodes.forEach((n, v) => { c[city.group[v]] += n; homes[city.group[v]] += city.homes[v] })
   // Small rural districts (under 50,000 people) are noisy at 1 agent = 10 people, so only larger ones are checked.
-  const off = d.districts.filter((_: string, g: number) => city.homes[g] >= 5000 && Math.abs(c[g] / target[g] - 1) > 0.15)
+  const off = d.districts.filter((_: string, g: number) => homes[g] >= 5000 && Math.abs(c[g] / target[g] - 1) > 0.15)
   expect(off).toEqual([])
 })
 
 test('short trips match the walking and YouBike targets and stay short and in the district (real data)', () => {
   const d = data()
-  const c = cityFrom(d, 10, 'village')
+  const c = cityFrom(d, 10)
   const w = init(c.city, 1)
   const short = c.city.kinds!.findIndex(k => k.name === 'short') + 1
   // Targets from the public figures, computed here and not read back from city.ts.
@@ -344,7 +346,7 @@ test('short trips match the walking and YouBike targets and stay short and in th
 
 test('short trips in a district without MRT trips inside it follow the city hours, not a flat spread (real data)', () => {
   const d = data()
-  const c = cityFrom(d, 10, 'village')
+  const c = cityFrom(d, 10)
   const w = init(c.city, 1)
   const short = c.city.kinds!.findIndex(k => k.name === 'short') + 1
   const g = d.districts.indexOf('新北市樹林區')
@@ -356,7 +358,7 @@ test('short trips in a district without MRT trips inside it follow the city hour
 
 test('night workers are at work at 00:00 and 02:00, as many as their businesses give (real data)', () => {
   const d = data()
-  const c = cityFrom(d, 10, 'village')
+  const c = cityFrom(d, 10)
   const w = init(c.city, 1)
   const night = ['overnight', 'nightlife'].map(n => c.city.kinds!.findIndex(k => k.name === n) + 1)
   // The agreed guesses, computed here from night.json and not read back from city.ts:
@@ -372,7 +374,7 @@ test('night workers are at work at 00:00 and 02:00, as many as their businesses 
 })
 
 test('night-time groups with an hour outside the MRT and bus hours use neither (real data)', () => {
-  const c = cityFrom(data(), 10, 'village')
+  const c = cityFrom(data(), 10)
   const w = init(c.city, 1)
   const closed = ['early', 'nightlife', 'night-out'].map(n => c.city.kinds!.findIndex(k => k.name === n) + 1)
   const bad = w.movers.filter(i => closed.includes(w.kind[i]) && (w.mode[i] === 0 || w.mode[i] === 1))
@@ -385,12 +387,14 @@ test('night-time groups with an hour outside the MRT and bus hours use neither (
 
 test('a day off has no morning peak, fewer people out, and some away (real data)', () => {
   const leaving = (kindOf: (day: number) => number) => {
-    const c = cityFrom(data(), 100, 'district', kindOf), w = init(c.city, 7)
+    const c = cityFrom(data(), 100, kindOf), w = init(c.city, 7)
     const perHour = new Array(24).fill(0)
     let away = 0
     for (let m = 0; m < MINUTES_PER_DAY; m += 10) {
       advance(w, 10)
-      for (const i of w.movers) if (w.dep[i] >= m && w.dep[i] < m + 10 && w.dur1[i]) perHour[Math.floor(w.dep[i] / 60) % 24]++
+      // The commuters on the OD only: the days off apply to them, and the short trips and the night-time groups keep the
+      // hours of a workday on every day (README.md).
+      for (const i of w.movers) if (!w.kind[i] && w.dep[i] >= m && w.dep[i] < m + 10 && w.dur1[i]) perHour[Math.floor(w.dep[i] / 60) % 24]++
       if (m === 12 * 60) away = counts(w, MODES.length).away
     }
     return { perHour, away, out: perHour.reduce((a, b) => a + b, 0) }
@@ -405,13 +409,14 @@ test('a day off has no morning peak, fewer people out, and some away (real data)
 })
 
 test('on a day off, a district with no MRT data still goes out and gets visitors (real data)', () => {
-  const c = cityFrom(data(), 100, 'district', () => 2), names = c.nodes, xizhi = names.indexOf('新北市汐止區')
+  const d = data(), c = cityFrom(d, 100, () => 2), xizhi = d.districts.indexOf('新北市汐止區'), group = c.city.group
   expect(c.city.off!.out[1][xizhi]).toBeGreaterThan(0.3)
   const w = init(c.city, 11)
   let out = 0, visitors = 0
   for (const i of w.movers) {
-    if (w.home[i] === xizhi && w.play[i] !== xizhi) out++
-    if (w.play[i] === xizhi && w.home[i] !== xizhi) visitors++
+    const home = group[w.home[i]], play = group[w.play[i]]
+    if (home === xizhi && play !== xizhi) out++
+    if (play === xizhi && home !== xizhi) visitors++
   }
   expect(out).toBeGreaterThan(0)
   expect(visitors).toBeGreaterThan(0)

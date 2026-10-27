@@ -69,7 +69,7 @@ test('a routes file for another road graph, cut short, with a word too many or w
 })
 
 test('every road trip of the dots takes its path from the routes file, with no routing (real data)', () => {
-  const c = cityFrom(data(), 10, 'village'), w = init(c.city, 42), { routes } = built()
+  const c = cityFrom(data(), 10), w = init(c.city, 42), { routes } = built()
   const ks = Array.from(w.movers).filter(i => ROAD_MODES.has(w.mode[i])).slice(0, 400)
   const legs = { home: ks.map(i => w.home[i]), work: ks.map(i => w.work[i]), mode: ks.map(i => w.mode[i]) }
   const at = (v: number) => roadNode(net, c.coords, v), batches = [...tripPaths(legs, c.coords, net, routes)]
@@ -80,7 +80,7 @@ test('every road trip of the dots takes its path from the routes file, with no r
 }, 120_000)
 
 test('the first batch of the dots finds no road path, so it goes out before the road paths are found (real data)', () => {
-  const c = cityFrom(data(), 10, 'village'), w = init(c.city, 42), { routes } = built()
+  const c = cityFrom(data(), 10), w = init(c.city, 42), { routes } = built()
   const ks = Array.from(w.movers).slice(0, 2000)
   const legs = { home: ks.map(i => w.home[i]), work: ks.map(i => w.work[i]), mode: ks.map(i => w.mode[i]) }
   let asked = 0
@@ -93,7 +93,7 @@ test('the first batch of the dots finds no road path, so it goes out before the 
 }, 120_000)
 
 test('a scooter dot with no streets-only path takes the fastest path from the routes file, there and home (real data)', () => {
-  const c = cityFrom(data(), 10, 'village'), w = init(c.city, 42), { routes } = built()
+  const c = cityFrom(data(), 10), w = init(c.city, 42), { routes } = built()
   const ks = Array.from(w.movers).filter(i => w.mode[i] === SCOOTER).slice(0, 500)
   const legs = { home: ks.map(i => w.home[i]), work: ks.map(i => w.work[i]), mode: ks.map(i => w.mode[i]) }
   const noStreets: Routes = { ...routes, path: (a, b, v) => (v === 1 ? undefined : routes.path(a, b, v)) }
@@ -109,7 +109,7 @@ test('a scooter dot with no streets-only path takes the fastest path from the ro
 }, 120_000)
 
 test('a dot goes home on its own path when that is not the way there reversed, from the far end to home (real data)', () => {
-  const { routes } = built(), c = cityFrom(data(), 10, 'village'), w = init(c.city, 42)
+  const { routes } = built(), c = cityFrom(data(), 10), w = init(c.city, 42)
   const ks = Array.from(w.movers).filter(i => ROAD_MODES.has(w.mode[i])).slice(0, 2000)
   const legs = { home: ks.map(i => w.home[i]), work: ks.map(i => w.work[i]), mode: ks.map(i => w.mode[i]) }
   const at = (v: number) => roadNode(net, c.coords, v)

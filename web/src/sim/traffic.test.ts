@@ -69,8 +69,8 @@ test('a level is 0 on an edge with no traveller, else 1 to 255, and the travel t
 })
 
 test('a trip to work ends at a fixed street node of its village, at most 4 per village (real data)', () => {
-  const c = cityFrom({ ...pub('od2.json'), villages: pub('villages2.json'), signal: pub('signal.json'), night: pub('night.json') }, 10, 'village')
-  const net = networks(pub('road-graph.json'), pub('mrt-graph.json')), at = workNodes(net, c.coords, true)
+  const c = cityFrom({ ...pub('od2.json'), villages: pub('villages2.json'), signal: pub('signal.json'), night: pub('night.json') }, 10)
+  const net = networks(pub('road-graph.json'), pub('mrt-graph.json')), at = workNodes(net, c.coords)
   for (const v of [0, 100, 700, 1400]) {
     const ends = new Set(Array.from({ length: 200 }, (_, i) => at(i, v)))
     expect(ends.size).toBeLessThanOrEqual(4)
@@ -98,11 +98,11 @@ test('a variant with no path drives the variant before it, so a scooter whose st
 const bin = new URL('../../public/road-routes.bin', import.meta.url)
 const appRun = () => {
   const data = { ...pub('od2.json'), villages: pub('villages2.json'), signal: pub('signal.json'), night: pub('night.json') }
-  const c = cityFrom(data, 10, 'village', () => 0), w = init(c.city, 42), road: GraphJson = pub('road-graph.json')
+  const c = cityFrom(data, 10, () => 0), w = init(c.city, 42), road: GraphJson = pub('road-graph.json')
   const net = networks(road, pub('mrt-graph.json')), b = readFileSync(bin)
   const routes = readRoutes(new Uint16Array(b.buffer, b.byteOffset, b.byteLength / 2), net.road)!
   const node = new Map<number, number>(), at = (v: number) => node.get(v) ?? node.set(v, roadNode(net, c.coords, v)).get(v)!
-  const workAt = workNodes(net, c.coords, true), grid = gridOf(road, pub('road-names.json').edge), live = liveOf(road, grid)
+  const workAt = workNodes(net, c.coords), grid = gridOf(road, pub('road-names.json').edge), live = liveOf(road, grid)
   const use = fullRoadUse(w, routes, (i, leg) => [at(w.home[i]), leg ? at(w.play[i]) : workAt(i, w.work[i])], live.time)
   return { w, use, live, load: new Float32Array(road.edges.length) }
 }

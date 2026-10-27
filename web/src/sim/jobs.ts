@@ -5,15 +5,13 @@ import { roadNode, type networks } from './paths.ts'
 const ENDS = 4
 
 /**
- * The road node where agent i ends its trip to work in node v. At village level each street node belongs to the
- * nearest village centre, and the trips to a village end at up to ENDS of its street nodes, spread over the list,
- * one fixed by the agent's index; a village with no street node of its own ends at its nearest road node. At
- * district level every trip ends at the road node of the district.
+ * The road node where agent i ends its trip to work in village v. Each street node belongs to the nearest village
+ * centre, and the trips to a village end at up to ENDS of its street nodes, spread over the list, one fixed by the
+ * agent's index; a village with no street node of its own ends at its nearest road node.
  */
-export const workNodes = (net: ReturnType<typeof networks>, coords: [number, number][], village: boolean) => {
+export const workNodes = (net: ReturnType<typeof networks>, coords: [number, number][]) => {
   const g = net.road, at = new Map<number, number>()
   const near = (v: number) => at.get(v) ?? at.set(v, roadNode(net, coords, v)).get(v)!
-  if (!village) return (_i: number, v: number) => near(v)
   const own: number[][] = coords.map(() => [])
   for (let u = 0; u < g.lon.length; u++) {
     if (!g.street[u]) continue

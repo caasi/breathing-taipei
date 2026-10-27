@@ -223,7 +223,7 @@ const draw = (world: World, graphs: Awaited<typeof net>) => {
   return trips
 }
 // Every road traveller of the run, on the paths of the routes file. Without the file there is no traffic.
-const traffic = (world: World, graphs: Awaited<typeof net>, roadJson: GraphJson, village: boolean, roadNames: RoadNames) => {
+const traffic = (world: World, graphs: Awaited<typeof net>, roadJson: GraphJson, roadNames: RoadNames) => {
   use = undefined; warming = undefined; routing = true; roads = 0; jam = new Uint8Array(0); lastCells = new Uint8Array(0); stepWithTraffic = stepper(JAM_MINUTES, takeTrafficNow)
   routes.then(known => {
     if (world !== w) return
@@ -232,7 +232,7 @@ const traffic = (world: World, graphs: Awaited<typeof net>, roadJson: GraphJson,
     const node = new Map<number, number>(), at = (v: number) => node.get(v) ?? node.set(v, roadNode(graphs, coords, v)).get(v)!
     const metres = Float32Array.from(roadJson.edges, e => e[2])
     load = new Float32Array(metres.length); grid = gridOf(roadJson, roadNames.edge); live = liveOf(roadJson, grid); extra.cellKeys = grid.keys
-    const workAt = workNodes(graphs, coords, village)
+    const workAt = workNodes(graphs, coords)
     const found = roadUse(world, known, (i, leg) => [at(world.home[i]), leg ? at(world.play[i]) : workAt(i, world.work[i])], live.time)
     warming = (function* () {
       try { yield* found.filling; if (world === w) use = found.use } finally { if (world === w) doneRouting() }
@@ -262,7 +262,7 @@ onmessage = async (e: MessageEvent<ToWorker>) => {
     const [[od2, villages, signal, roadJson, , night, cal, people, roadNames], graphs] = await Promise.all([data, net])
     onJam = undefined; onLate = undefined; jamRng = mulberry32(m.seed + 3)
     // The run is always at village level; the page adds the villages up into districts for the district level.
-    const c = cityFrom({ ...od2, villages, signal, night }, m.perAgent, 'village', day => kindAt(cal as Calendar, m.startDay + day))
+    const c = cityFrom({ ...od2, villages, signal, night }, m.perAgent, day => kindAt(cal as Calendar, m.startDay + day))
     w = init(c.city, m.seed)
     const world = w, districtOf = Array.from(w.home, h => villages[h].town)
     const ids = drawNames(people as People, districtOf, m.seed + 1), pickRng = mulberry32(m.seed + 2)
@@ -275,7 +275,7 @@ onmessage = async (e: MessageEvent<ToWorker>) => {
     w.onPlan = i => {
       backs.delete(i)
       const dest = world.dest[i]
-      // A STAY on a workday is a commuter who works in its home node (at district level: its own district), not a day of rest.
+      // A STAY on a workday is a commuter who works in its home village, not a day of rest.
       if (dest === STAY && kindAt(cal as Calendar, m.startDay + Math.floor(world.dep[i] / 1440) - 1) === WORKDAY) return
       const play = dest === PLAY, group = world.kind[i] ? c.city.kinds![world.kind[i] - 1].name : ''
       // A day at home has no departure. ponytail: it shows at 09:00 of that day, a time chosen by eye.
@@ -326,7 +326,7 @@ onmessage = async (e: MessageEvent<ToWorker>) => {
     // The plans under way at day 0 were made during init, which calls no onPlan: pass them through the same filter.
     for (const i of w.movers) w.onPlan(i)
     coords = c.coords
-    traffic(w, graphs, roadJson, true, roadNames as RoadNames)
+    traffic(w, graphs, roadJson, roadNames as RoadNames)
     extra = { start: m.start, nodes: c.nodes, districts: (villages as Village[]).map(v => v.town), homes: Uint32Array.from(c.city.homes), coords: c.coords, trips: draw(w, graphs) }
   } catch (err) {
     w = undefined
