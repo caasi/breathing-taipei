@@ -35,6 +35,9 @@ const WINDOWS = [15, 30, 60, KEEP] // simulated minutes the change rate can look
 // A node is a village code (台北市 is county 63000) or a district name.
 // The district level is a view of the village run (byDistrict below); the run itself is always at village level.
 type Level = 'district' | 'village'
+// The map at each step of its fade in (revealed): hidden, half while the run waits for the road paths, then clear.
+// ponytail: the half step (opacity 0.5, blur 4 px) is by eye.
+const REVEAL = [{ opacity: 0, filter: 'blur(8px)' }, { opacity: 0.5, filter: 'blur(4px)' }, { opacity: 1, filter: 'none' }]
 const inTaipei = (node: string) => node.startsWith('63000') // the village code of 台北市
 const ALERT = { position: 'absolute', top: 72, left: 16, margin: 0, color: '#ff8b6b' } as const
 // The note of a setting, in grey on the line below it.
@@ -263,17 +266,19 @@ export function App() {
     return out
   }, [history, homes, colourBy, rateWindow, nodes, byDistrict])
   const ready = projection && villages && s && nodes.length === s.counts.length
-  // The map fades in from the blurred outline at its first frame; one animation frame later, so the start state paints.
-  const [revealed, setRevealed] = useState(false), [faded, setFaded] = useState(false)
+  // The map fades in from the blurred outline in two steps: half at its first frame, while the run still waits for the
+  // road paths, and the rest when the run starts. Each step one animation frame later, so the state before it paints.
+  const [revealed, setRevealed] = useState(0), [faded, setFaded] = useState(false)
+  const step = !ready ? 0 : waiting === undefined ? 2 : 1
   useEffect(() => {
-    if (!ready || revealed) return
-    const raf = requestAnimationFrame(() => setRevealed(true))
+    if (step <= revealed) return
+    const raf = requestAnimationFrame(() => setRevealed(step))
     return () => cancelAnimationFrame(raf)
-  }, [!!ready, revealed])
-  // The outline goes when the fade ends: the cells of 里 do not cover every part of the towns, and the blurs would
+  }, [step, revealed])
+  // The outline goes when the last fade ends: the cells of 里 do not cover every part of the towns, and the blurs would
   // stay. The time is the transition in index.html; with reduced motion there is no fade, so it goes at once.
   useEffect(() => {
-    if (!revealed) return
+    if (revealed < 2) return
     const timer = setTimeout(() => setFaded(true), matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : 600)
     return () => clearTimeout(timer)
   }, [revealed])
@@ -376,9 +381,9 @@ export function App() {
     <div style={{ position: 'fixed', inset: 0, overflow: 'hidden', background: '#211d1d' }}>
       <div style={{ position: 'absolute', left: box.x, top: box.y, width: box.w, height: box.h, overflow: 'hidden', background: SEA }}>
       {towns && projection && <Land towns={towns} proj={projection} view={view} />}
-      {/* The blurred outline is under the map until the map has faded in, once, at the first frame. */}
+      {/* The blurred outline is under the map until the map has faded in fully, once, when the first run starts. */}
       {!faded && towns && projection && <Outline towns={towns} proj={projection} view={view} pop={pop} />}
-      <div className="reveal" style={{ position: 'absolute', inset: 0, opacity: revealed ? 1 : 0, filter: revealed ? 'none' : 'blur(8px)' }}>
+      <div className="reveal" style={{ position: 'absolute', inset: 0, ...REVEAL[revealed] }}>
       {ready && <>
         <HeatMap towns={towns} villages={villages} level={byDistrict ? 'district' : 'village'} nodes={byDistrict?.names ?? nodes} counts={shownCounts!} perAgent={PER_AGENT} proj={projection} transit={transit} show={layers} rate={rate} roads={roads} traffic={traffic} speed={paused ? 0 : speed * HOURS_AT_1X} view={view} />
         {dots && dotTrips && <Travellers tracks={dotRun!.tracks} trips={dotTrips} clock={clock} byMode={byMode} traffic={cellTraffic} view={view} />}
