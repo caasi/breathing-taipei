@@ -74,8 +74,9 @@ type Props = {
 }
 
 export function HeatMap({ towns, villages, level, nodes, counts, perAgent, proj, transit, show, rate, speed, view, roads, traffic }: Props) {
-  // The fade runs in real time; scale it so it always spans about 30 simulated minutes, or it shows a past hour.
-  const fadeSeconds = 0.5 / Math.max(1, speed)
+  // The fade runs in real time; scale it so it always spans about 30 simulated minutes, or it shows a past hour. Half an
+  // hour a second is the slowest speed (1x); a pause (0) keeps the fade of 1x.
+  const fadeSeconds = 0.5 / Math.max(0.5, speed)
   // Geometry is fixed per level; only the fills and the label counts change each frame.
   // The cells do not depend on transit, so a late transit.json does not rebuild the WebGL fills.
   const cells = useMemo(() => {

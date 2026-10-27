@@ -12,8 +12,8 @@ let t = performance.now()
 const { city } = cityFrom(data, 10, level, day => kindAt(cal, start + day))
 const w = init(city, 42)
 console.log(`${level}: ${city.homes.length} nodes, ${w.home.length} agents, init ${(performance.now() - t).toFixed(0)} ms`)
-// One frame at 8x (the fastest speed) and 30 fps: advance 16 minutes and count everyone.
+// One frame at 8x (the fastest speed, 4 simulated hours a second) and 30 fps: advance 8 minutes and count everyone.
 const FRAMES = 45 * 7
 t = performance.now()
-for (let f = 0; f < FRAMES; f++) { advance(w, 16); counts(w, MODES.length) }
-console.log(`frame ${((performance.now() - t) / FRAMES).toFixed(2)} ms (advance 16 min + counts), over ${w.day} simulated days`)
+for (let f = 0; f < FRAMES; f++) { advance(w, 8); counts(w, MODES.length) }
+console.log(`frame ${((performance.now() - t) / FRAMES).toFixed(2)} ms (advance 8 min + counts), over ${w.day} simulated days`)

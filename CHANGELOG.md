@@ -13,6 +13,7 @@ This file lists the changes that a user of the site can see, for each version. T
 
 ### Changed
 
+- The simulation runs at half the speed: 1x is half a simulated hour a second, and 8x is 4 hours. The events come more slowly, and a slow device keeps up more easily.
 - The borders of the villages and districts are in the blue of the place names of the events, so that they stay apart from the roads.
 - The `highway` layer is gone: the traffic layer draws the 國道 and 快速道路.
 

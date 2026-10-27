@@ -16,6 +16,8 @@ import { clockAt, respeed, READY_MS, type Clock } from './sim/pace.ts'
 import { hhmm, H2 } from './ui/format.ts'
 
 const SPEEDS = [0, 1, 2, 4, 8]
+// Simulated hours per second at 1x. Half an hour, so that the events do not come too fast and a slow device keeps up.
+const HOURS_AT_1X = 0.5
 const EVERY = [2, 5, 10, 20, 50]
 // 國道 and 快速道路 are part of the traffic layer, which draws them with the streets.
 const LAYERS: [string, string][] = [['mrt', '捷運'], ['lrt', '輕軌'], ['tra', '台鐵'], ['hsr', '高鐵'], ['airport', '機場']]
@@ -220,7 +222,7 @@ export function App() {
   }
   // The clock runs at the chosen speed, but stands while the tab is hidden: a hidden page draws nothing, and a run that
   // goes on would only use the battery.
-  const resume = () => startClock(document.hidden ? 0 : speedRef.current)
+  const resume = () => startClock(document.hidden ? 0 : speedRef.current * HOURS_AT_1X)
   // While a new run waits, a change of speed is kept for its start.
   useEffect(() => { speedRef.current = speed; if (waitRef.current === undefined) resume() }, [speed])
   useEffect(() => {
@@ -327,7 +329,7 @@ export function App() {
   </>
   const info = <>
     <p>台北鼓動模擬台北市與新北市的日子，從你打開頁面的這一天起：平日早上人們湧入各里、傍晚離開，假日則出門走走或離開雙北。這是個人的業餘專案，起於 2026-10-24 的市政 debug 松，但沒有報名參賽。</p>
-    <p style={{ fontSize: 12, color: '#aaa' }}>人口密度：現在每平方公里的人數（對數，300 到 100,000）。人口變化率：最近 {rateWindow} 分鐘、每小時的人數變化除以居民數，橘色是流入，藍綠色是流出，滿格是 ±30%。區名下是現在的人數。新北調淡。點：路上的人。捷運沿捷運線，公車、機車、汽車沿公車路線，步行和自行車走直線。1x = 每秒 1 小時。</p>
+    <p style={{ fontSize: 12, color: '#aaa' }}>人口密度：現在每平方公里的人數（對數，300 到 100,000）。人口變化率：最近 {rateWindow} 分鐘、每小時的人數變化除以居民數，橘色是流入，藍綠色是流出，滿格是 ±30%。區名下是現在的人數。新北調淡。點：路上的人。捷運沿捷運線，公車、機車、汽車沿公車路線，步行和自行車走直線。1x = 每秒半小時。</p>
     <p style={{ fontSize: 12, color: '#aaa' }}>
       {/* ODbL and the Open Government Data License both ask for credit where people see the map. */}
       地圖資料：© <a href="https://www.openstreetmap.org/copyright" style={{ color: '#ccc' }}>OpenStreetMap contributors</a>（ODbL）；
@@ -359,7 +361,7 @@ export function App() {
       {!faded && towns && projection && <Outline towns={towns} proj={projection} view={view} pop={pop} />}
       <div className="reveal" style={{ position: 'absolute', inset: 0, opacity: revealed ? 1 : 0, filter: revealed ? 'none' : 'blur(8px)' }}>
       {ready && <>
-        <HeatMap towns={towns} villages={villages} level={onScreen?.level ?? level} nodes={nodes} counts={s.counts} perAgent={PER_AGENT} proj={projection} transit={transit} show={layers} rate={rate} roads={roads} traffic={traffic} speed={speed} view={view} />
+        <HeatMap towns={towns} villages={villages} level={onScreen?.level ?? level} nodes={nodes} counts={s.counts} perAgent={PER_AGENT} proj={projection} transit={transit} show={layers} rate={rate} roads={roads} traffic={traffic} speed={speed * HOURS_AT_1X} view={view} />
         {dots && dotTrips && <Travellers tracks={dotRun!.tracks} trips={dotTrips} clock={clock} byMode={byMode} traffic={cellTraffic} view={view} />}
       </>}
       </div>

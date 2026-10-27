@@ -56,7 +56,7 @@ Display settings:
 
 | Key | Values | Default |
 |---|---|---|
-| `speed` | `0` (pause), `1`, `2`, `4`, `8` simulated hours per second | `1` |
+| `speed` | `0` (pause), `1`, `2`, `4`, `8`: 1 is half a simulated hour per second, 8 is 4 hours | `1` |
 | `level` | `village`, `district`. A switch starts a new run at 00:00 of the day on the clock | `village` |
 | `color` | `rate`, `density` | `rate` |
 | `window` | `15`, `30`, `60`, `120` simulated minutes for the change rate | `30` |
