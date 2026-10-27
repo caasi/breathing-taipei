@@ -152,7 +152,7 @@ export function* tripPaths(legs: Leg, coords: [number, number][], net: ReturnTyp
   const n = legs.home.length
   const roadAt = new Map<number, number>(), stationAt = new Map<number, number>()
   const road = (v: number) => roadAt.get(v) ?? roadAt.set(v, roadNode(net, coords, v)).get(v)!
-  const known: number[] = [], knownFrom: number[] = [], knownEdges: Uint16Array[] = []
+  const known: number[] = [], knownFrom: number[] = [], knownEdges: Uint16Array[] = [], onRoad: number[] = []
   const on = (g: Graph, cache: Map<number, number>, v: number, ok?: (x: number) => boolean) => {
     if (!cache.has(v)) cache.set(v, nearest(g, coords[v][0], coords[v][1], ok))
     return cache.get(v)!
@@ -165,12 +165,7 @@ export function* tripPaths(legs: Leg, coords: [number, number][], net: ReturnTyp
     const m = legs.mode[k], h = legs.home[k], w = legs.work[k]
     const into = (map: Map<number, number[]>, a: number) => (map.get(a) ?? map.set(a, []).get(a)!).push(k)
     if (m === MRT && station(h) !== station(w)) into(mrtFrom, station(h))
-    else if (ROAD_MODES.has(m) && road(h) !== road(w)) {
-      // A scooter dot takes the streets-only variant, as its road load does (traffic.ts); the others the fastest one.
-      const a = road(h), edges = routes?.path(a, road(w), m === SCOOTER ? 1 : 0)
-      if (edges) { known.push(k); knownFrom.push(a); knownEdges.push(edges) }
-      else into(roadFrom, a)
-    }
+    else if (ROAD_MODES.has(m) && road(h) !== road(w)) onRoad.push(k)
     else { first.push(k); firstParts.push(full(k, [])) }
   }
   // The MRT graph is small (about 0.1 ms per start), so MRT trips go out with the first batch.
@@ -178,7 +173,14 @@ export function* tripPaths(legs: Leg, coords: [number, number][], net: ReturnTyp
     const { via } = tree(net.mrt, a)
     for (const k of ks) { first.push(k); firstParts.push(full(k, pathTo(net.mrt, via, station(legs.work[k])))) }
   }
+  // The road paths are looked up after the first batch, so the dots that need none do not wait for them.
   yield pack(first, firstParts)
+  for (const k of onRoad) {
+    // A scooter dot takes the streets-only variant, as its road load does (traffic.ts); the others the fastest one.
+    const m = legs.mode[k], a = road(legs.home[k]), edges = routes?.path(a, road(legs.work[k]), m === SCOOTER ? 1 : 0)
+    if (edges) { known.push(k); knownFrom.push(a); knownEdges.push(edges) }
+    else (roadFrom.get(a) ?? roadFrom.set(a, []).get(a)!).push(k)
+  }
   for (let s = 0; s < known.length; s += KNOWN_BATCH) {
     const ks = known.slice(s, s + KNOWN_BATCH)
     yield pack(ks, ks.map((k, j) => full(k, pathAlong(net.road, knownFrom[s + j], knownEdges[s + j]))))

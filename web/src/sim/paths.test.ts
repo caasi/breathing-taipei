@@ -78,6 +78,19 @@ test('every road trip of the dots takes its path from the routes file, with no r
   expect(batches.reduce((n, b: Batch) => n + b.ks.length, 0)).toBe(ks.length)
 }, 120_000)
 
+test('the first batch of the dots finds no road path, so it goes out before the road paths are found (real data)', () => {
+  const c = cityFrom(data(), 10, 'village'), w = init(c.city, 42), { routes } = built()
+  const ks = Array.from(w.movers).slice(0, 2000)
+  const legs = { home: ks.map(i => w.home[i]), work: ks.map(i => w.work[i]), mode: ks.map(i => w.mode[i]) }
+  let asked = 0
+  const counting: Routes = { ...routes, path: (a, b, v) => { asked++; return routes.path(a, b, v) } }
+  const gen = tripPaths(legs, c.coords, net, counting)
+  gen.next()
+  expect(asked).toBe(0)
+  for (const _ of gen);
+  expect(asked).toBeGreaterThan(0)
+}, 120_000)
+
 test('a dot goes home on its own path when that is not the way there reversed, from the far end to home (real data)', () => {
   const { routes } = built(), c = cityFrom(data(), 10, 'village'), w = init(c.city, 42)
   const ks = Array.from(w.movers).filter(i => ROAD_MODES.has(w.mode[i])).slice(0, 2000)
