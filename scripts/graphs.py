@@ -205,11 +205,13 @@ for a in list(road.adj):
     for b in list(road.adj[a]):
         if a > b or road.cls.get((a, b)) or (a, b) in road.one or (b, a) in road.one: continue
         p, h = mid(road.xy[a], road.xy[b]), heading(road.xy[a], road.xy[b])
-        best = min(((gap(p, *oneways[k][:2]), k) for k in near(p, 1) if k in alone), default=None)
+        # The nearest segment along the step, either way: at a crossing a nearer segment across it does not count.
+        along = ((gap(p, *oneways[k][:2]), turn(h, heading(*oneways[k][:2]))) for k in near(p, 1) if k in alone)
+        best = min(((g, d) for g, d in along if d < math.pi / 6 or d > 5 * math.pi / 6), default=None)
         if not best or best[0] > NEAR_M: continue
-        d = turn(h, heading(*oneways[best[1]][:2]))
-        if d < math.pi / 6: road.one.add((a, b)); streets_one += 1
-        elif d > 5 * math.pi / 6: road.one.add((b, a)); streets_one += 1
+        if best[1] < math.pi / 6: road.one.add((a, b))
+        else: road.one.add((b, a))
+        streets_one += 1
 # The streets here are only those of the bus routes, so the small streets that give a one-way street its way back can be
 # missing. A one-way street step from a to b stays one-way only when b still reaches a by another way; else it is
 # two-way again, so that no node is cut off.
