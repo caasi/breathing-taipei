@@ -130,7 +130,7 @@ function* bothPaths(trips: Trips, coords: [number, number][], graphs: Awaited<ty
     const at = new Map<number, number>(), road = (v: number) => at.get(v) ?? at.set(v, roadNode(graphs, coords, v)).get(v)!
     const pairs: [number, number][] = []
     for (let k = 0; k < n; k++) for (const to of [trips.work[k], trips.play[k]]) pairs.push([road(trips.home[k]), road(to)], [road(to), road(trips.home[k])])
-    yield* known.fill(pairs)
+    yield* known.fill(pairs, [0, 1]) // a dot drives variant 0, or 1 on a scooter
   }
   const work = tripPaths(trips, coords, graphs, known)
   const play = tripPaths({ home: trips.home, work: trips.play, mode: trips.playMode }, coords, graphs, known)
@@ -182,12 +182,14 @@ const frame = () => {
   // device (iPhone) the simulation alone can fill the 12 ms, and the routing then never started.
   const paths: Batch[] = []
   const until = Math.max(t + 12, performance.now() + 4)
-  while (pending && performance.now() < until) {
-    const b = pending.next()
-    if (b.done) { pending = undefined; break }
-    if (b.value) { paths.push(b.value); routed += b.value.ks.length }
+  // The dots and the road load take turns.
+  while ((pending || warming) && performance.now() < until) {
+    if (warming && warming.next().done) warming = undefined
+    const b = pending?.next()
+    if (!b) continue
+    if (b.done) pending = undefined
+    else if (b.value) { paths.push(b.value); routed += b.value.ks.length }
   }
-  while (!pending && warming && performance.now() < until) if (warming.next().done) warming = undefined
   const msg: FromWorker = { ...extra, paths, routed, minute: w.minute, day: w.day, counts: c.nodes, road: c.road, away: c.away, ms, events: newEvents, clock: clock.minute, at: performance.timeOrigin + t, since }
   newEvents = []
   owed = false
@@ -216,9 +218,8 @@ const traffic = (world: World, graphs: Awaited<typeof net>, roadJson: GraphJson,
     const metres = Float32Array.from(roadJson.edges, e => e[2])
     load = new Float32Array(metres.length); grid = gridOf(roadJson, roadNames.edge); live = liveOf(roadJson, grid); extra.cellKeys = grid.keys
     const workAt = workNodes(graphs, coords, village)
-    const found = roadUse(world, known, (i, leg) => [at(world.home[i]), leg ? at(world.play[i]) : workAt(i, world.work[i])], live.time)
-    // ponytail: about 6 s of spare time in Node (2026-10-27), longer on a phone; the traffic starts at the first take after it.
-    warming = (function* () { const u = yield* found; if (world === w) use = u })()
+    // The paths come in while the run goes on, the trips that leave first first (traffic.ts roadUse).
+    ;({ use, filling: warming } = roadUse(world, known, (i, leg) => [at(world.home[i]), leg ? at(world.play[i]) : workAt(i, world.work[i])], live.time))
   }, () => {})
 }
 onmessage = async (e: MessageEvent<ToWorker>) => {

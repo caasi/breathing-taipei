@@ -3,9 +3,9 @@ import fc from 'fast-check'
 import { existsSync, readFileSync } from 'node:fs'
 import { advance, init, now, where, ROAD, type City, type World } from './core.ts'
 import { cityFrom } from './city.ts'
-import { finish, networks, readRoutes, roadNode } from './paths.ts'
+import { networks, readRoutes, roadNode } from './paths.ts'
 import { workNodes } from './jobs.ts'
-import { cellKey, cellMax, extraTime, MOST, gridOf, levels, liveOf, roadUse, slowerOn, stepper, take, type Live } from './traffic.ts'
+import { cellKey, cellMax, extraTime, MOST, gridOf, levels, liveOf, fullRoadUse, slowerOn, stepper, take, type Live } from './traffic.ts'
 import type { GraphJson } from './route.ts'
 
 const pub = (f: string) => JSON.parse(readFileSync(new URL(`../../public/${f}`, import.meta.url), 'utf8'))
@@ -94,7 +94,7 @@ const appRun = () => {
   const routes = readRoutes(new Uint16Array(b.buffer, b.byteOffset, b.byteLength / 2), net.road)!
   const node = new Map<number, number>(), at = (v: number) => node.get(v) ?? node.set(v, roadNode(net, c.coords, v)).get(v)!
   const workAt = workNodes(net, c.coords, true), grid = gridOf(road, pub('road-names.json').edge), live = liveOf(road, grid)
-  const use = finish(roadUse(w, routes, (i, leg) => [at(w.home[i]), leg ? at(w.play[i]) : workAt(i, w.work[i])], live.time))
+  const use = fullRoadUse(w, routes, (i, leg) => [at(w.home[i]), leg ? at(w.play[i]) : workAt(i, w.work[i])], live.time)
   return { w, use, live, load: new Float32Array(road.edges.length) }
 }
 const plans = (w: World) => [Int32Array.from(w.dep), Uint16Array.from(w.dur1), Int32Array.from(w.ret), Uint16Array.from(w.dur2)]

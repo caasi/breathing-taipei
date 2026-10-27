@@ -16,8 +16,8 @@ import { readFileSync } from 'node:fs'
 import { init, advance, now } from '../web/src/sim/core.ts'
 import { cityFrom } from '../web/src/sim/city.ts'
 import { kindAt, indexOf, type Calendar } from '../web/src/sim/calendar.ts'
-import { finish, networks, readRoutes, roadNode } from '../web/src/sim/paths.ts'
-import { cellLoad, gridOf, liveOf, roadUse, take } from '../web/src/sim/traffic.ts'
+import { networks, readRoutes, roadNode } from '../web/src/sim/paths.ts'
+import { cellLoad, gridOf, liveOf, fullRoadUse, take } from '../web/src/sim/traffic.ts'
 import { workNodes } from '../web/src/sim/jobs.ts'
 
 // The roads of the news of 2026 (VALIDATION.md, "Hotspots"), by a prefix of their name in road-names.json.
@@ -34,7 +34,7 @@ const routes = readRoutes(new Uint16Array(file.buffer, file.byteOffset, file.byt
 if (!routes) throw new Error('road-routes.bin is missing or for another road graph: run `pnpm routes` in web/')
 const node = new Map<number, number>(), at = (v: number) => node.get(v) ?? node.set(v, roadNode(net, c.coords, v)).get(v)!
 const workAt = workNodes(net, c.coords, true), grid = gridOf(road, names.edge), live = liveOf(road, grid)
-const use = finish(roadUse(w, routes, (i, leg) => [at(w.home[i]), leg ? at(w.play[i]) : workAt(i, w.work[i])], live.time))
+const use = fullRoadUse(w, routes, (i, leg) => [at(w.home[i]), leg ? at(w.play[i]) : workAt(i, w.work[i])], live.time)
 
 // A bucket is in 台北市 when the village nearest to the first node of its first edge is; its name is the road's.
 const villages: { town: string; lon: number; lat: number }[] = data.villages

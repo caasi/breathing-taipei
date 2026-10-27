@@ -17,8 +17,8 @@ import { readFileSync } from 'node:fs'
 import { init, advance, now, WORK } from '../web/src/sim/core.ts'
 import { ACCESS, cityFrom } from '../web/src/sim/city.ts'
 import { kindAt, indexOf, type Calendar } from '../web/src/sim/calendar.ts'
-import { finish, networks, readRoutes, ROAD_MODES, roadNode } from '../web/src/sim/paths.ts'
-import { CAPACITY, gridOf, liveOf, roadUse, take } from '../web/src/sim/traffic.ts'
+import { networks, readRoutes, ROAD_MODES, roadNode } from '../web/src/sim/paths.ts'
+import { CAPACITY, gridOf, liveOf, fullRoadUse, take } from '../web/src/sim/traffic.ts'
 import { workNodes } from '../web/src/sim/jobs.ts'
 
 // TomTom Traffic Index 2025, 台北市: morning rush hour 64.6%, evening rush hour 92%. ponytail: TomTom does not give the
@@ -43,7 +43,7 @@ const inTaipei = (v: number) => villages[v].town.startsWith('台北市')
 const run = (capacity: number) => {
   const c = cityFrom(data, PER_AGENT, 'village', day => kindAt(cal, start + day)), w = init(c.city, SEED)
   const live = liveOf(roadJson, grid)
-  const use = finish(roadUse(w, routes, (i, leg) => [at(w.home[i]), leg ? at(w.play[i]) : workAt(i, w.work[i])], live.time))
+  const use = fullRoadUse(w, routes, (i, leg) => [at(w.home[i]), leg ? at(w.play[i]) : workAt(i, w.work[i])], live.time)
   const load = new Float32Array(metres.length)
   // Per trip, seen before it leaves: [planned start, time with no jam]; per peak: [extra time, time with no jam].
   const trips = [new Map<number, number[]>(), new Map<number, number[]>()], sums = [[0, 0], [0, 0]]

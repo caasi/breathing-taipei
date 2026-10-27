@@ -32,11 +32,14 @@ export const routeKey = (from: number, to: number, variant = 0) => (variant * 65
 /**
  * Road paths from the routes file: one contraction hierarchy (ch.ts) for each variant, made by scripts/routes.ts.
  * path(a, b, v) is the edges of variant v from road node a to road node b, undefined when a = b or the road graph does
- * not connect them; one query takes about 0.25 ms (Node, 2026-10-27). fill(pairs) finds many in a batch, yielding
- * between parts so a caller can spread it over frames; a path is found once and kept, and a variant equal to the one
+ * not connect them; one query takes about 0.25 ms (Node, 2026-10-27). fill(pairs, variants) finds many in a batch
+ * (all variants by default), yielding between parts so a caller can spread it over frames; a path is found once and kept, and a variant equal to the one
  * before it is the same array.
  */
-export type Routes = { path: (a: number, b: number, v: number) => Uint16Array | undefined; fill: (pairs: Iterable<[number, number]>) => Generator<void> }
+export type Routes = {
+  path: (a: number, b: number, v: number) => Uint16Array | undefined
+  fill: (pairs: Iterable<[number, number]>, variants?: number[]) => Generator<void>
+}
 
 /**
  * File layout, all Uint16: graph hash (low, high), layout (3), then per variant: the rank of each node, the number of
@@ -74,7 +77,16 @@ export const readRoutes = (data: Uint16Array, g: Graph): Routes | undefined => {
 const same = (a: Uint16Array, b: Uint16Array) => a.length === b.length && a.every((e, k) => e === b[k])
 
 const routesOf = (hs: Hierarchy[]): Routes => {
-  const found = new Map<number, Uint16Array | null>(), search = hs.map(searcher), scratch = dense(hs[0].rank.length)
+  const n = hs[0].rank.length, found = new Map<number, Uint16Array | null>(), search = hs.map(searcher), scratch = dense(n)
+  // ponytail: every search space is kept (per variant, forward and backward), as the sources and targets repeat across
+  // calls of fill; about 107 nodes each, some 30 MB for the roads of the app's run (estimated). Drop them when memory matters.
+  const spaces = hs.map(() => [new Map<number, Space>(), new Map<number, Space>()])
+  const spaceOf = (v: number, x: number, forward: boolean) => {
+    const m = spaces[v][forward ? 0 : 1]
+    let s = m.get(x)
+    if (!s) { s = search[v](x, forward); m.set(x, s) }
+    return s
+  }
   // Keeps a path of variant v, as the array of variant v - 1 when the two are equal.
   const keep = (a: number, b: number, v: number, es: number[] | undefined) => {
     let p = es ? Uint16Array.from(es) : null
@@ -88,32 +100,29 @@ const routesOf = (hs: Hierarchy[]): Routes => {
     const known = found.get(routeKey(a, b, v))
     if (known !== undefined) return known ?? undefined
     if (v) path(a, b, v - 1)
-    const f = search[v](a, true)
+    const f = spaceOf(v, a, true)
     scratch.set(f)
-    const es = join(hs[v], f, scratch, search[v](b, false))
+    const es = join(hs[v], f, scratch, spaceOf(v, b, false))
     scratch.clear(f)
     return keep(a, b, v, es)
   }
-  // Yields after each search and each 200 joins, so that no part takes long; a yield costs far less than a search.
-  function* fill(pairs: Iterable<[number, number]>) {
-    const bySource = new Map<number, number[]>()
+  // Yields after each source and each 200 joins, so that no part takes long. Each call has its own dense arrays: two
+  // fills can take turns (the worker runs the dots' and the road load's), and a fill left unfinished is dropped.
+  function* fill(pairs: Iterable<[number, number]>, variants = hs.map((_, v) => v)) {
+    const bySource = new Map<number, number[]>(), mine = dense(n)
     for (const [a, b] of pairs) if (a !== b) (bySource.get(a) ?? bySource.set(a, []).get(a)!).push(b)
-    for (let v = 0; v < hs.length; v++) {
-      // The backward search of a target serves every source that goes to it.
-      const back = new Map<number, Space>()
+    for (const v of variants) {
       let k = 0
       for (const [a, bs] of bySource) {
         const todo = bs.filter(b => !found.has(routeKey(a, b, v)))
         if (!todo.length) continue
-        const f = search[v](a, true)
-        scratch.set(f)
+        const f = spaceOf(v, a, true)
+        mine.set(f)
         for (const b of todo) {
-          let s = back.get(b)
-          if (!s) { s = search[v](b, false); back.set(b, s); yield }
-          keep(a, b, v, join(hs[v], f, scratch, s))
+          keep(a, b, v, join(hs[v], f, mine, spaceOf(v, b, false)))
           if (++k % 200 === 0) yield
         }
-        scratch.clear(f)
+        mine.clear(f)
         yield
       }
     }
