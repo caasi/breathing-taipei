@@ -42,6 +42,12 @@ jobs:
       - run: pnpm build
         env:
           BASE: /breathing-taipei/
+      # road-routes.bin is not in git: each build makes it. Its size goes to the log and the summary of the run, so the
+      # size of any past build is in its record:
+      #   gh run view <run id> --repo caasi/breathing-taipei --log | grep -E 'road-routes.bin: [0-9]+ bytes'
+      - run: |
+          raw=$(wc -c < dist/road-routes.bin) gz=$(gzip -6 -c dist/road-routes.bin | wc -c)
+          echo "road-routes.bin: $raw bytes, $gz bytes with gzip -6" | tee -a "$GITHUB_STEP_SUMMARY"
       # The build makes road-routes.bin, which the test of the routes file reads.
       - if: github.ref != 'refs/heads/main'
         run: pnpm test
