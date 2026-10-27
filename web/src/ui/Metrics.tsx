@@ -34,14 +34,18 @@ export function Metrics({ ms }: { ms: number }) {
       if (frames.length && now - drawn >= REDRAW_MS) {
         drawn = now
         const recent = at.filter(t => t > now - 1000).length, sorted = frames.slice().sort((a, b) => a - b)
-        const text = `SIM ${Math.min(999.9, simMs.current).toFixed(1).padStart(5, '0')}ms · FPS ${fps(recent)} ↓${fps(tail(sorted, true))}↑${fps(tail(sorted, false))}`
+        const sim = `SIM ${Math.min(999.9, simMs.current).toFixed(1).padStart(5, '0')}ms `, text = `${sim}  FPS ${fps(recent)} ↓${fps(tail(sorted, true))}↑${fps(tail(sorted, false))}`
         g.font = font
         const tw = Math.ceil(g.measureText(text).width) + 2
         // A new size clears the canvas and its state; it changes only when a figure gets another digit.
         if (tw !== w) { w = tw; c.width = w * dpr; c.height = h * dpr; c.style.width = `${w}px`; c.style.height = `${h}px` }
         g.setTransform(dpr, 0, 0, dpr, 0, 0); g.clearRect(0, 0, w, h)
-        g.font = font; g.fillStyle = '#ccc'; g.textBaseline = 'top'
-        g.fillText(text, 1, 2)
+        g.font = font; g.fillStyle = '#ccc'; g.textBaseline = 'middle'
+        g.fillText(text, 1, h / 2)
+        // The separator is a line as tall as a figure: the bar of the font went below the line.
+        const zero = g.measureText('0'), x = Math.round(1 + g.measureText(sim).width + g.measureText(' ').width / 2) + 0.5
+        g.strokeStyle = '#666'; g.lineWidth = 1 // dimmer than the text, so it parts the figures without standing out
+        g.beginPath(); g.moveTo(x, h / 2 - zero.actualBoundingBoxAscent); g.lineTo(x, h / 2 + zero.actualBoundingBoxDescent); g.stroke()
       }
       raf = requestAnimationFrame(tick)
     }
