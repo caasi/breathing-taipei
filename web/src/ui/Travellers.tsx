@@ -107,15 +107,17 @@ export function Travellers({ tracks, trips, clock, byMode, view, traffic }: Prop
         const play = trips.dest[k] === PLAY, there = trips.dest[k] === GONE ? undefined : tracks.current[play ? n + k : k]
         if (!there) continue
         // Home along its own path when it has one (a one-way road), else along the way there backwards.
-        let p: number, t = there
+        let p: number, t = there, reversed = false
         if (m >= trips.dep[k] && m < trips.dep[k] + trips.dur1[k]) p = (m - trips.dep[k]) / trips.dur1[k]
         else if (m >= trips.ret[k] && m < trips.ret[k] + trips.dur2[k]) {
           const back = tracks.current[(play ? 3 : 2) * n + k]
           p = (m - trips.ret[k]) / trips.dur2[k]
-          if (back) t = back; else p = 1 - p
+          if (back) t = back; else { p = 1 - p; reversed = true }
         }
         else continue
-        const [x, y, i] = at(t, p), md = play ? trips.playMode[k] : trips.mode[k], c = cells && ROAD_MODES.has(md) ? cells.index.get(t.cell[i]) : undefined
+        // The cell of the last point passed: on a track run backwards, the point after the one that `at` gives.
+        const [x, y, lo] = at(t, p), i = reversed ? Math.min(lo + 1, t.cell.length - 1) : lo
+        const md = play ? trips.playMode[k] : trips.mode[k], c = cells && ROAD_MODES.has(md) ? cells.index.get(t.cell[i]) : undefined
         xy[2 * count] = x; xy[2 * count + 1] = y; mode[count] = md; slow[count] = c === undefined ? 0 : cells!.level[c] / 255; count++
       }
       // A whole number of device pixels: a fractional size covers 1 or 2 pixels by position, and moving dots flicker.
