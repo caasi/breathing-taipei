@@ -79,9 +79,13 @@ export const roadUse = (w: World, routes: Routes, ends: (agent: number, leg: num
       yield* routes.fill(part.flatMap(([, , , a, b]) => [[a, b], [b, a]] as [number, number][]))
       for (let k = 0; k < part.length; k++) {
         const [, j, leg, a, b] = part[k]
-        for (let v = 0; v < VARIANTS; v++) {
-          ;[routes.path(a, b, v), routes.path(b, a, v)].forEach((es, back) => { if (es) { add(es); paths[((2 * j + leg) * 2 + back) * VARIANTS + v] = es } })
-        }
+        // A variant with no path (a pair that the streets alone do not connect) drives the variant before it.
+        ;[[a, b], [b, a]].forEach(([x, y], back) => {
+          for (let v = 0, last: Uint16Array | undefined; v < VARIANTS; v++) {
+            const es = routes.path(x, y, v) ?? last
+            if (es) { add(es); paths[((2 * j + leg) * 2 + back) * VARIANTS + v] = es; last = es }
+          }
+        })
         if (k % 500 === 499) yield
       }
       yield

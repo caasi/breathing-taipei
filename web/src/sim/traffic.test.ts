@@ -3,7 +3,8 @@ import fc from 'fast-check'
 import { existsSync, readFileSync } from 'node:fs'
 import { advance, init, now, where, ROAD, type City, type World } from './core.ts'
 import { cityFrom } from './city.ts'
-import { networks, readRoutes, roadNode } from './paths.ts'
+import { networks, readRoutes, roadNode, VARIANTS, type Routes } from './paths.ts'
+import { SCOOTER } from './city.ts'
 import { workNodes } from './jobs.ts'
 import { cellKey, cellMax, extraTime, MOST, gridOf, levels, liveOf, fullRoadUse, slowerOn, stepper, take, type Live } from './traffic.ts'
 import type { GraphJson } from './route.ts'
@@ -83,6 +84,14 @@ test('the slowness of the rest of a path counts only the part of the current edg
   const live = { grid: { cellOf: Int32Array.from([0, 1]) }, time: Float64Array.from([10, 10]), slower: Float64Array.from([4, 1]) } as unknown as Live
   expect(slowerOn([0, 1], 0, live, 0.1)).toBeCloseTo(1.4 / 1.1, 9)
   expect(slowerOn([0, 1], 0, live)).toBeCloseTo(2.5, 9)
+})
+
+test('a variant with no path drives the variant before it, so a scooter whose streets alone do not connect its ends still loads the road', () => {
+  const w = { movers: Uint32Array.from([0]), mode: Uint8Array.from([SCOOTER]), playMode: Uint8Array.from([4]), dest: Uint8Array.from([0]), dep: Int32Array.from([0]) } as unknown as World
+  const fastest = Uint16Array.from([0, 1])
+  const routes: Routes = { path: (a, b, v) => (v === 0 && a !== b ? fastest : undefined), *fill() {} }
+  const use = fullRoadUse(w, routes, () => [5, 9], [1, 1])
+  expect(use.paths.slice(0, VARIANTS)).toEqual([fastest, fastest, fastest])
 })
 
 // The app's run on the real data, with its routes file (made by `pnpm routes`, not in git).
