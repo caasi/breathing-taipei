@@ -77,7 +77,8 @@ void main() {
   vec4 c = ramp(t);
   float a = glow ? cover * smoothstep(${GLOW_FROM.toFixed(2)}, 1.0, t) : c.a * cover;
   if (!glow) {
-    // Dashes that move both ways, slower on a slower road; a road in use shows them over a brighter line.
+    // Dashes that move both ways, slower on a slower road; a road in use shows them over a brighter line. ponytail: the
+    // dash (0.25 to 0.45 of a period), the line of a road in use (0.5) and the gap (0.3 of it) are chosen by eye.
     float run = time * mix(${FLOW_FAST.toFixed(1)}, ${FLOW_SLOW.toFixed(1)}, sqrt(t)) / ${FLOW_PERIOD.toFixed(1)};
     float dash = max(1.0 - smoothstep(0.25, 0.45, fract(e.b - run)), 1.0 - smoothstep(0.25, 0.45, fract(e.b + run)));
     a = mix(a, max(a, 0.5 * cover) * mix(0.3, 1.0, dash), used);

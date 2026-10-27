@@ -55,7 +55,8 @@ out vec4 c;
 ${RAMP}
 void main() {
   c = byMode ? vec4(palette[int(mode)], gain) : vec4(dot.rgb, dot.a * gain);
-  // A dot on a slow road takes the colour of the traffic layer, so the jam shows on the dots as well.
+  // A dot on a slow road takes the colour of the traffic layer, so the jam shows on the dots as well. ponytail: it takes
+  // the full colour at the orange stop (AT[1]), chosen by eye.
   vec4 r = ramp(slow);
   if (slow > 0.0) c = mix(c, vec4(r.rgb, r.a * gain), smoothstep(0.0, AT[1], slow));
   gl_PointSize = size;
