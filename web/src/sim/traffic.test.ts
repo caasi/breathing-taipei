@@ -12,11 +12,11 @@ const pub = (f: string) => JSON.parse(readFileSync(new URL(`../../public/${f}`, 
 // A world with no agents: the stepper only needs its clock.
 const empty: City = { od: Array.from({ length: 24 }, () => [[0]]), group: [0], homes: [0], to: [1], perAgent: 10, modeOf: () => 0, minutes: () => 10 }
 
-test('the stepper takes each boundary once, at the same times for any steps', () => {
+test('the stepper takes each boundary once, at the whole minute, for any steps', () => {
   fc.assert(fc.property(fc.array(fc.double({ min: 0.01, max: 200, noNaN: true }), { minLength: 1, maxLength: 60 }), steps => {
     const total = steps.reduce((a, b) => a + b, 0)
     const at = (parts: number[]) => {
-      const w = init(empty, 1), seen: number[] = [], step = stepper(15, x => seen.push(Math.round(now(x) * 1e6) / 1e6))
+      const w = init(empty, 1), seen: number[] = [], step = stepper(15, x => seen.push(now(x)))
       for (const p of parts) step(w, p)
       return seen
     }
