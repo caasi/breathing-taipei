@@ -45,12 +45,13 @@ export type Routes = {
  * File layout, all Uint16: graph hash (low, high), layout (3), then per variant: the rank of each node, the number of
  * shortcuts (low, high), and per shortcut its left and right arc (each low, high).
  * The hash ties the file to its road graph; a file for another graph, or of another length, is ignored.
- * Limits: fewer than 65,536 road nodes (writeRoutes throws beyond it). The hash does not cover the routing costs: after
- * a change to them, run `pnpm routes` again (dev and build do).
+ * Limits: fewer than 65,536 road nodes and road edges, as a path is a Uint16Array of edge ids (writeRoutes throws
+ * beyond them). The hash does not cover the routing costs: after a change to them, run `pnpm routes` again (dev and
+ * build do).
  */
 const LAYOUT = 3
 export const writeRoutes = (g: Graph, parts: { rank: Uint16Array; shortcuts: Uint32Array }[]) => {
-  if (g.lon.length > 65535) throw new Error('road nodes do not fit Uint16')
+  if (g.lon.length > 65535 || g.geom.length > 65535) throw new Error('road nodes or edges do not fit Uint16')
   const hash = graphHash(g), out = [hash & 0xffff, hash >>> 16, LAYOUT]
   for (const { rank, shortcuts } of parts) {
     out.push(...rank, shortcuts.length / 2 & 0xffff, shortcuts.length / 2 >>> 16)
