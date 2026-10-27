@@ -130,7 +130,8 @@ const plan = (w: World, i: number, after: number): number => {
       if (today !== (off?.kindOf(dayOf(dep)) ?? 0)) continue
       return trip(w, i, WORK, dep, k, w.mode[i], minuteOf(od, EVENING, group[k], group[h], w.rng(), w.rng()))
     }
-    if (w.dest[i] !== STAY && dayOf(w.dep[i]) === day) continue
+    // The day of the arrival, not of dep: a jam moves dep into the past (stretch), and the arrival only later.
+    if (w.dest[i] !== STAY && dayOf(w.dep[i] + w.dur1[i]) === day) continue
     const r = w.rng(), away = off!.away[today - 1], p = w.play[i], dayOd = off!.od[today - 1]
     if (r >= away + (1 - away) * off!.out[today - 1][group[h]]) return stay(w, i, day)
     // ponytail: the hours of a day away follow the trips inside the home district; there is no data on trips out of the city.

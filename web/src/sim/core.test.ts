@@ -87,6 +87,27 @@ describe('core properties', () => {
     }), { numRuns: 30 })
   })
 
+  test('a jam that moves the start of an outing into the day before gives no second outing that day', () => {
+    // Every day is off and every outing leaves from 05:00 and takes 150 minutes. A jam near the end of the leg asks for
+    // 60 more minutes: at MAX_LEG the start moves before 00:00 (core.ts stretch).
+    const od = Array.from({ length: 24 }, (_, h) => [[0, h >= 5 && h < 20 ? 10 : 0], [0, 0]])
+    const city: City = { od, group: [0, 1], homes: [5, 0], to: [0, 1], perAgent: 10, modeOf: () => 0, minutes: () => 150,
+      off: { kindOf: () => 1, od: [od, od], out: [[1, 1], [1, 1]], away: [0, 0] } }
+    const bad: string[] = []
+    for (let seed = 0; seed < 200; seed++) {
+      const w = init(city, seed), left = new Map<string, number>()
+      for (let t = 0; t <= 2 * MINUTES_PER_DAY; t++, advance(w, 1)) for (const i of w.movers) {
+        const on = t >= w.dep[i] && t < w.dep[i] + w.dur1[i]
+        if (on && w.dep[i] >= 0 && (t - w.dep[i]) / w.dur1[i] > 0.85) stretch(w, i, t + 60)
+        if (!w.dur1[i] || w.dep[i] !== t) continue
+        const key = `${i} ${Math.floor(t / MINUTES_PER_DAY)}`
+        left.set(key, (left.get(key) ?? 0) + 1)
+        if (left.get(key)! > 1) bad.push(`seed ${seed} twice ${key}`)
+      }
+    }
+    expect(bad).toEqual([])
+  })
+
   test('the share of commuters out on a day off does not grow over a run of days off', () => {
     const od = Array.from({ length: 24 }, () => [[0, 3000], [3000, 0]]) // morning trips above the 20,000 residents: everyone commutes
     const city: City = { od, group: [0, 1], homes: [2000, 0], to: [1, 1], perAgent: 10, modeOf: () => 0, minutes: () => 10,
