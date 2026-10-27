@@ -29,19 +29,19 @@ const SEED = 42, PER_AGENT = 10, DAY = '2026-10-27'
 const pub = (f: string) => JSON.parse(readFileSync(new URL(`../web/public/${f}`, import.meta.url), 'utf8'))
 const data = { ...pub('od2.json'), villages: pub('villages2.json'), signal: pub('signal.json'), night: pub('night.json') }
 const cal: Calendar = pub('calendar.json'), start = indexOf(cal, DAY)
-const { coords } = cityFrom(data, PER_AGENT, 'village', day => kindAt(cal, start + day))
+const { coords } = cityFrom(data, PER_AGENT, day => kindAt(cal, start + day))
 const roadJson = pub('road-graph.json'), net = networks(roadJson, pub('mrt-graph.json'))
 const file = readFileSync(new URL('../web/public/road-routes.bin', import.meta.url))
 const routes = readRoutes(new Uint16Array(file.buffer, file.byteOffset, file.byteLength / 2), net.road)
 if (!routes) throw new Error('road-routes.bin is missing or for another road graph: run `pnpm routes` in web/')
 const node = new Map<number, number>(), at = (v: number) => node.get(v) ?? node.set(v, roadNode(net, coords, v)).get(v)!
-const workAt = workNodes(net, coords, true)
+const workAt = workNodes(net, coords)
 const metres: number[] = roadJson.edges.map((e: number[]) => e[2])
 const villages: { town: string }[] = data.villages, grid = gridOf(roadJson, pub('road-names.json').edge)
 const inTaipei = (v: number) => villages[v].town.startsWith('台北市')
 
 const run = (capacity: number) => {
-  const c = cityFrom(data, PER_AGENT, 'village', day => kindAt(cal, start + day)), w = init(c.city, SEED)
+  const c = cityFrom(data, PER_AGENT, day => kindAt(cal, start + day)), w = init(c.city, SEED)
   const live = liveOf(roadJson, grid)
   const use = fullRoadUse(w, routes, (i, leg) => [at(w.home[i]), leg ? at(w.play[i]) : workAt(i, w.work[i])], live.time)
   const load = new Float32Array(metres.length)

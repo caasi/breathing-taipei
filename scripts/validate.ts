@@ -27,13 +27,13 @@ const HOTSPOTS = ['台北橋', '重陽橋', '中興橋', '艋舺大道', '中華
 const pub = (f: string) => JSON.parse(readFileSync(new URL(`../web/public/${f}`, import.meta.url), 'utf8'))
 const data = { ...pub('od2.json'), villages: pub('villages2.json'), signal: pub('signal.json'), night: pub('night.json') }
 const cal: Calendar = pub('calendar.json'), start = indexOf(cal, '2026-10-27')
-const c = cityFrom(data, 10, 'village', day => kindAt(cal, start + day)), w = init(c.city, 42)
+const c = cityFrom(data, 10, day => kindAt(cal, start + day)), w = init(c.city, 42)
 const road = pub('road-graph.json'), names = pub('road-names.json'), net = networks(road, pub('mrt-graph.json'))
 const file = readFileSync(new URL('../web/public/road-routes.bin', import.meta.url))
 const routes = readRoutes(new Uint16Array(file.buffer, file.byteOffset, file.byteLength / 2), net.road)
 if (!routes) throw new Error('road-routes.bin is missing or for another road graph: run `pnpm routes` in web/')
 const node = new Map<number, number>(), at = (v: number) => node.get(v) ?? node.set(v, roadNode(net, c.coords, v)).get(v)!
-const workAt = workNodes(net, c.coords, true), grid = gridOf(road, names.edge), live = liveOf(road, grid)
+const workAt = workNodes(net, c.coords), grid = gridOf(road, names.edge), live = liveOf(road, grid)
 const use = fullRoadUse(w, routes, (i, leg) => [at(w.home[i]), leg ? at(w.play[i]) : workAt(i, w.work[i])], live.time)
 
 // A bucket is in 台北市 when the village nearest to the first node of its first edge is; its name is the road's.

@@ -118,7 +118,7 @@ const daysOff = (mrt: number[][][], days: number[][][][], od: number[][][], kind
   }
 }
 
-export const cityFrom = ({ od: mrt, saturday, holiday, districts, villages, signal, night }: Data, perAgent: number, level: 'district' | 'village',
+export const cityFrom = ({ od: mrt, saturday, holiday, districts, villages, signal, night }: Data, perAgent: number,
   kindOf?: (day: number) => number) => {
   const g = villages.map(v => districts.indexOf(v.town))
   const popD = new Array(districts.length).fill(0), lon = [...popD], lat = [...popD]
@@ -127,12 +127,10 @@ export const cityFrom = ({ od: mrt, saturday, holiday, districts, villages, sign
   const residents = popD.map(p => Math.round(p / perAgent))
   const { od, morningMrt, other, target, commuters, hourly } = calibrate(mrt, residents, signal, districts, perAgent)
 
-  const village = level === 'village'
-  const coords = village ? villages.map(v => [v.lon, v.lat] as [number, number]) : centreD
-  const groupOf = village ? g : districts.map((_, i) => i)
-  // Walk and bike are allowed by the distance between the two nodes (villages at village level).
+  const coords = villages.map(v => [v.lon, v.lat] as [number, number])
+  // Walk and bike are allowed by the distance between the two villages.
   const modeOf = (from: number, to: number, r: number) => {
-    const a = groupOf[from], b = groupOf[to]
+    const a = g[from], b = g[to]
     const mrtPart = morningMrt[a][b], otherPart = other[a][b]
     if (r * (mrtPart + otherPart) < mrtPart) return MRT
     const d = km(coords[from], coords[to]), ws = OTHER.map((w, m) => (d <= MAX_KM[m] ? w : 0))
@@ -155,17 +153,15 @@ export const cityFrom = ({ od: mrt, saturday, holiday, districts, villages, sign
   const minutes = (a: number, b: number, mode: number, hour: number) =>
     ACCESS[mode] + 60 * 1.3 * km(coords[a], coords[b]) / SPEED[mode]
 
-  const homes = village ? villages.map(v => Math.round(v.pop / perAgent)) : residents
+  const homes = villages.map(v => Math.round(v.pop / perAgent))
   // Short trips stay inside the home district: the cross-district flows are already calibrated to the
-  // telecom daytime targets, and a district-level run cannot show a move inside a district anyway.
-  const local = village ? localTrips(districts, residents, commuters, coords, homes, villages.map(v => v.arrivals), g, hourly, perAgent) : undefined
-  const nightKinds = night ? nightTrips(night, g, groupOf, village, centreD, coords, homes, perAgent) : []
-  const kinds = [...(local ? [local] : []), ...nightKinds]
+  // telecom daytime targets.
+  const local = localTrips(districts, residents, commuters, coords, homes, villages.map(v => v.arrivals), g, hourly, perAgent)
+  const nightKinds = night ? nightTrips(night, g, centreD, coords, homes, perAgent) : []
+  const kinds = [local, ...nightKinds]
   const off = kindOf && saturday && holiday ? daysOff(mrt, [saturday, holiday], od, kindOf) : undefined
-  const city: City = village
-    ? { od, group: g, homes, to, toPlay: spread, perAgent, modeOf, minutes, kinds, off }
-    : { od, group: groupOf, homes, to: districts.map(() => 1), perAgent, modeOf, minutes, kinds, off }
-  return { city, nodes: village ? villages.map(v => v.code) : districts, coords, target }
+  const city: City = { od, group: g, homes, to, toPlay: spread, perAgent, modeOf, minutes, kinds, off }
+  return { city, nodes: villages.map(v => v.code), coords, target }
 }
 
 /**
@@ -173,15 +169,14 @@ export const cityFrom = ({ od: mrt, saturday, holiday, districts, villages, sign
  * Each kind is the same share of the residents of every node, taken from those who do not commute on the OD
  * and do not make a short trip; the work district is drawn with a gravity rule
  * (businesses x exp(-distance / decay) between district centers), then the village by its businesses.
- * At district level the district is the node.
  */
-const nightTrips = (night: Night, villageGroup: number[], nodeGroup: number[], village: boolean, centreD: [number, number][],
+const nightTrips = (night: Night, group: number[], centreD: [number, number][],
   coords: [number, number][], homes: number[], perAgent: number): Kind[] => {
   const G = centreD.length, total = sum(homes)
   const col = (name: string) => night.counts.map(c => c[night.kinds.indexOf(name)])
   const shifts = SHIFTS.map(s => {
     const people = Object.entries(s.from).map(([k, per]) => col(k).map(n => n * per * s.share))
-    return { ...s, jobs: villageGroup.map((_, v) => sum(people.map(p => p[v]))), decay: WORK_DECAY_KM }
+    return { ...s, jobs: group.map((_, v) => sum(people.map(p => p[v]))), decay: WORK_DECAY_KM }
   })
   const visits = VISITS.map(x => {
     const s = shifts.find(s => s.name === x.shift)!
@@ -189,12 +184,11 @@ const nightTrips = (night: Night, villageGroup: number[], nodeGroup: number[], v
   })
   return [...shifts.map(s => ({ ...s, places: s.jobs })), ...visits].map(k => {
     const people = sum(k.jobs)
-    const place = new Array(nodeGroup.length).fill(0)
-    k.places.forEach((p, v) => (place[village ? v : villageGroup[v]] += p))
+    const place = k.places
     const placeD = new Array(G).fill(0)
-    place.forEach((p, u) => (placeD[nodeGroup[u]] += p))
+    place.forEach((p, u) => (placeD[group[u]] += p))
     const members: number[][] = Array.from({ length: G }, () => [])
-    nodeGroup.forEach((d, u) => members[d].push(u))
+    group.forEach((d, u) => members[d].push(u))
     const toD = centreD.map(a => centreD.map((b, d) => placeD[d] * Math.exp(-km(a, b) / k.decay)))
     const draw = (ws: number[], r: number) => {
       let x = r * sum(ws)
@@ -205,7 +199,7 @@ const nightTrips = (night: Night, villageGroup: number[], nodeGroup: number[], v
     return {
       name: k.name, dep: weights(k.dep), ret: weights(k.ret), rate: homes.map(() => rate),
       pick: (home: number, rng: () => number) => {
-        const d = draw(toD[nodeGroup[home]], rng())
+        const d = draw(toD[group[home]], rng())
         const work = members[d][draw(members[d].map(u => place[u]), rng())]
         // They do not commute on the OD, so the mode comes from the survey split and the hours of the trip.
         return work === home ? undefined : { work, mode: surveyMode(km(coords[home], coords[work]), [...k.dep, ...k.ret], rng()) }

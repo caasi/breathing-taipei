@@ -14,6 +14,8 @@ This file lists the changes that a user of the site can see, for each version. T
 
 ### Changed
 
+- The district level shows the same run as the village level: each district is the sum of its villages. A switch of the level keeps the run and its clock; before, it started a new run at 00:00. At district level the events name the district only.
+- While the run waits for the road paths, the map fades in halfway; it becomes clear when the run starts.
 - The road paths come from a file of about 1 MB, not 54.6 MB (10 MB with gzip): the page finds the shortest path of any trip on the roads with contraction hierarchies. A run starts when the page has found the paths of every trip on the roads.
 - The simulation runs at half the speed: 1x is half a simulated hour a second, and 8x is 4 hours. The events come more slowly, and a slow device keeps up more easily.
 - The pause is a play and pause button, apart from the speed buttons 1x to 8x, so a pause keeps the speed for when the run goes on.
