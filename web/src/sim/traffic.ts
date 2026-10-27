@@ -5,8 +5,9 @@ import { freeTime, type GraphJson } from './route.ts'
 
 // BPR (Bureau of Public Roads, 1964): time on a road = free time x (1 + ALPHA (volume / capacity)^BETA). ponytail: BETA
 // is 1, not the 4 of the manual, and MOST is 4: of a grid of BETA and MOST, each with CAPACITY fitted to TomTom, these
-// gave the spread of the peak slowness of the named roads of 台北市 nearest to the TDX section speeds of 6 weekdays
-// (DATA.md "Figures in the code"). With 4, a few roads stood at the limit and the rest were free.
+// gave a spread of the peak slowness of the named roads of 台北市 near the TDX section speeds of 6 weekdays. BETA 1.25
+// with MOST 3 scored a little better, but MOST 3 holds every road below the slowest TDX sections (DATA.md "Figures in
+// the code"). With BETA 4, a few roads stood at the limit and the rest were free.
 const ALPHA = 0.15, BETA = 1
 // ponytail: one capacity for every cell, in passenger car units (PCU) per km of road, fitted so that the morning peak of 台北市 has the
 // TomTom congestion level (scripts/traffic.ts, DATA.md "Figures in the code"). Real roads differ in lanes.
