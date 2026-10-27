@@ -29,7 +29,6 @@ const PER_AGENT = 10
 // Plans are made ahead of their departure, so the newest events are not all shown yet: keep more than the list shows.
 const KEEP_EVENTS = 3 * MAX_EVENTS
 // On a phone the clock sits right of the title, and a long holiday name wraps instead of running under it.
-const TITLE_ROOM = 116
 // The English subtitle at this share of the title size is a little narrower than 台北鼓動; the user chose it by eye.
 const SUBTITLE_SCALE = 0.46
 const WINDOWS = [15, 30, 60, KEEP] // simulated minutes the change rate can look back; history keeps the longest
@@ -365,21 +364,25 @@ export function App() {
       <div role="status" style={{ position: 'absolute', right: box.w - fit.x - fit.w + 16, bottom: 16, color: '#fff', pointerEvents: 'none' }}>
         {(waiting !== undefined || onScreen?.level !== level || onScreen.runStart !== runStart) && !runError && !loadError && <><SpinnerIcon /><span style={HIDDEN}>準備中</span></>}
       </div>
-      {/* Right of the map, as the turning icon, and below the clock, which can be as wide as the map. */}
-      {metrics && <Metrics ms={s?.ms ?? 0} style={{ right: box.w - fit.x - fit.w + 16, top: phone ? 56 : 58 }} />}
-      <header style={{ position: 'absolute', top: 16, left: 16, pointerEvents: 'none' }}>
-        <h1 style={{ margin: 0, fontSize: titleSize, fontWeight: 'bold', color: '#fff' }}>台北鼓動</h1>
-        {/* Centred on the Chinese title alone: a flex row with no width of its own overflows evenly to both sides. */}
-        <p style={{ margin: 0, width: 0, minWidth: '100%', display: 'flex', justifyContent: 'center', whiteSpace: 'nowrap',
-          fontSize: titleSize * SUBTITLE_SCALE, fontVariantCaps: 'small-caps', letterSpacing: '0.05em', color: '#ccc' }}>Breathing Taipei</p>
-      </header>
-      {/* A phone's map is too narrow for the clock between the title and the edge, so it moves to the right. */}
-      <div style={{ position: 'absolute', top: 16, left: fit.x + (phone ? TITLE_ROOM : 16), width: fit.w - (phone ? TITLE_ROOM + 16 : 32), textAlign: phone ? 'right' : 'center', color: '#fff', pointerEvents: 'none', fontVariantNumeric: 'tabular-nums' }}>
-        <p style={{ margin: 0, fontSize: phone ? 16 : 24 }}>{date?.roc}{s && ` ${hhmm(s.minute)}`}</p>
-        <p style={{ margin: 0, fontSize: phone ? 12 : 14, color: '#ccc' }}>{date && [date.lunar, date.term].filter(Boolean).join('　')}
-          {date?.holiday && <span style={{ color: '#db6a41' }}>　{date.holiday}</span>}
-          {/* Blue: commemorated, not a day off; orange: a day off. */}
-          {date?.observances && <span style={{ color: '#8fb8de' }}>　{date.observances}</span>}</p>
+      {/* index.html (.top-row) places the title, the clock and the metrics. */}
+      <div className="top" style={{ position: 'absolute', top: 16, left: fit.x + 16, width: fit.w - 32 }}>
+        <div className={phone ? 'top-row phone' : 'top-row'}>
+          {/* As wide as the title, so the subtitle centres on it. */}
+          <header style={{ justifySelf: 'start' }}>
+            <h1 style={{ margin: 0, fontSize: titleSize, fontWeight: 'bold', color: '#fff' }}>台北鼓動</h1>
+            {/* Centred on the Chinese title alone: a flex row with no width of its own overflows evenly to both sides. */}
+            <p style={{ margin: 0, width: 0, minWidth: '100%', display: 'flex', justifyContent: 'center', whiteSpace: 'nowrap',
+              fontSize: titleSize * SUBTITLE_SCALE, fontVariantCaps: 'small-caps', letterSpacing: '0.05em', color: '#ccc' }}>Breathing Taipei</p>
+          </header>
+          <div style={{ justifySelf: phone ? 'end' : 'center', textAlign: phone ? 'right' : 'center', color: '#fff', fontVariantNumeric: 'tabular-nums' }}>
+            <p style={{ margin: 0, fontSize: phone ? 16 : 24 }}>{date?.roc}{s && ` ${hhmm(s.minute)}`}</p>
+            <p style={{ margin: 0, fontSize: phone ? 12 : 14, color: '#ccc' }}>{date && [date.lunar, date.term].filter(Boolean).join('　')}
+              {date?.holiday && <span style={{ color: '#db6a41' }}>　{date.holiday}</span>}
+              {/* Blue: commemorated, not a day off; orange: a day off. */}
+              {date?.observances && <span style={{ color: '#8fb8de' }}>　{date.observances}</span>}</p>
+          </div>
+          {metrics && <div className="metrics"><Metrics ms={s?.ms ?? 0} /></div>}
+        </div>
       </div>
       </div>
       {loadError && <p role="alert" style={{ ...ALERT, width: fit.w - 32 }}>無法載入地圖資料：{loadError}</p>}
