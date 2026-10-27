@@ -4,7 +4,7 @@ import { mulberry32, pick } from './rng.ts'
  * Two-level origin-destination model. Trips are known between groups (districts);
  * nodes (villages) inside a group share the group's trips: as an origin in proportion to
  * residents, as a destination in proportion to the `to` weight.
- * A district-only run is the case where every group has exactly one node.
+ * A group can have one node; the synthetic tests use this. The app runs the villages of the 41 districts.
  *
  * Each agent has one plan at a time (leave home, travel, work, travel, home), in minutes since 00:00 of day 0.
  * Where an agent is at any minute is a pure function of that plan, so the renderer can ask for any time.
