@@ -111,12 +111,12 @@ const routesOf = (hs: Hierarchy[]): Routes => {
   // Yields after each source and each 200 joins, so that no part takes long. Each call has its own dense arrays: two
   // fills can take turns (the worker runs the dots' and the road load's), and a fill left unfinished is dropped.
   function* fill(pairs: Iterable<[number, number]>, variants = hs.map((_, v) => v)) {
-    const bySource = new Map<number, number[]>(), mine = dense(n)
-    for (const [a, b] of pairs) if (a !== b) (bySource.get(a) ?? bySource.set(a, []).get(a)!).push(b)
+    const bySource = new Map<number, Set<number>>(), mine = dense(n)
+    for (const [a, b] of pairs) if (a !== b) (bySource.get(a) ?? bySource.set(a, new Set()).get(a)!).add(b)
     for (const v of variants) {
       let k = 0
       for (const [a, bs] of bySource) {
-        const todo = bs.filter(b => !found.has(routeKey(a, b, v)))
+        const todo = [...bs].filter(b => !found.has(routeKey(a, b, v)))
         if (!todo.length) continue
         const f = spaceOf(v, a, true)
         mine.set(f)
