@@ -16,12 +16,13 @@ export type Graph = {
 // against 25 on a street); a guess, so that routes take the fast roads. The weight of an edge is its time in metres of street.
 export const FASTER = [1, 80 / 25, 60 / 25, 40 / 25]
 // ponytail: the mean wait at a traffic light, in metres of street at 25 km/h (30 s, a guess), at each street node where 3
-// or more edges meet; half of it goes to each edge that ends there, so the time of an edge does not depend on its way.
+// or more edges of any class meet, so a ramp that meets a street makes a light too (a guess; the lights of the city
+// were not checked); half of it goes to each street edge that ends there, so the time of an edge does not depend on its way.
 export const SIGNAL = 25 / 3.6 * 30
 
 /**
  * The free time of each edge, in metres of street: its length over its speed, and with `lights` (the road graph; the
- * MRT has none) half a traffic light at each end where streets meet.
+ * MRT has none) half a traffic light at each end of a street edge where three or more edges meet (SIGNAL).
  */
 export const freeTime = (j: GraphJson, lights = false) => {
   const deg = new Int32Array(j.lon.length)
