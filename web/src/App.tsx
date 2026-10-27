@@ -36,6 +36,8 @@ const WINDOWS = [15, 30, 60, KEEP] // simulated minutes the change rate can look
 // A node is a village code (台北市 is county 63000) or a district name.
 const inTaipei = (node: string) => node.startsWith('63000') || node.startsWith('台北市')
 const ALERT = { position: 'absolute', top: 72, left: 16, margin: 0, color: '#ff8b6b' } as const
+// The note of a setting, in grey on the line below it.
+const NOTE = { display: 'block', fontSize: 12, color: '#aaa' } as const
 const SIDE_PANEL = { position: 'absolute', top: 16, bottom: 16, overflowY: 'auto', padding: '0 12px', boxSizing: 'border-box', background: 'rgba(33, 29, 29, 0.85)', borderRadius: 4 } as const
 // Turns in a CSS animation of an HTML box (index.html), which the browser can run while the main thread builds a run.
 const SpinnerIcon = () => <span className="spin" style={{ display: 'inline-block', width: 24, height: 24 }}>
@@ -299,7 +301,7 @@ export function App() {
     <p>{SPEEDS.map(v => <button key={v} onClick={() => setSpeed(v)} style={{ marginRight: 4, fontWeight: v === speed ? 'bold' : 'normal' }}>{v === 0 ? '暫停' : `${v}x`}</button>)}
       <span style={{ marginLeft: 12 }}>{(['district', 'village'] as Level[]).map(l => <button key={l} onClick={() => { if (l !== level) { if (onScreen && startDay !== undefined) setDayOffset(onScreen.runStart - startDay + (s?.day ?? 0)); setLevel(l) } }}
         style={{ marginRight: 4, fontWeight: l === level ? 'bold' : 'normal' }}>{l === 'district' ? '區' : '里'}</button>)}</span>
-      <br /><small>切換區、里會從當天 00:00 重新模擬。</small></p>
+      <span style={NOTE}>1x 是每秒半小時。切換區、里會從當天 00:00 重新模擬。</span></p>
     <p><label><input type="checkbox" checked={dots} onChange={() => setDots(!dots)} />路上的人</label>，1 點 = {every * PER_AGENT} 人：
       {EVERY.map(v => <button key={v} onClick={() => setDot(v * PER_AGENT)} style={{ marginLeft: 4, fontWeight: v === every ? 'bold' : 'normal' }}>{v * PER_AGENT}</button>)}
       <label style={{ marginLeft: 8 }}><input type="checkbox" checked={byMode} onChange={() => setByMode(!byMode)} />依交通方式上色</label></p>
@@ -314,7 +316,8 @@ export function App() {
     <p style={{ fontSize: 13 }}>{MODES.map((m, k) => <span key={m} style={{ marginRight: 10, whiteSpace: 'nowrap', display: 'inline-block' }}>
       <span style={{ color: MODE_COLOURS[k] }}>●</span> {m} {padded((road[k] ?? 0) * PER_AGENT, 6)}</span>)}</p>
     {dotTrips && <p>{padded(dotTrips.home.length, 6)} 點{routed < 2 * dotTrips.home.length ? `，路網計算中 ${padded(Math.floor(50 * routed / dotTrips.home.length), 2)}%` : ''}</p>}
-    <p><label><input type="checkbox" checked={metrics} onChange={() => setMetrics(on => !on)} />效能指標（右上角：模擬每幀的毫秒數、畫面 fps，與最慢、最快 1% 的幀）</label></p>
+    <p><label><input type="checkbox" checked={metrics} onChange={() => setMetrics(on => !on)} />效能指標</label>
+      <span style={NOTE}>在右上角：模擬每幀的毫秒數、畫面 fps，以及最慢、最快 1% 幀的 fps。</span></p>
     </div>
   </>
   const info = <>
@@ -362,7 +365,7 @@ export function App() {
         {(waiting !== undefined || onScreen?.level !== level || onScreen.runStart !== runStart) && !runError && !loadError && <><SpinnerIcon /><span style={HIDDEN}>準備中</span></>}
       </div>
       {/* Right of the map, as the turning icon, and below the clock, which can be as wide as the map. */}
-      {metrics && <Metrics ms={s?.ms ?? 0} style={{ right: box.w - fit.x - fit.w + 16, top: phone ? 60 : 76 }} />}
+      {metrics && <Metrics ms={s?.ms ?? 0} style={{ right: box.w - fit.x - fit.w + 16, top: phone ? 56 : 58 }} />}
       <header style={{ position: 'absolute', top: 16, left: 16, pointerEvents: 'none' }}>
         <h1 style={{ margin: 0, fontSize: titleSize, fontWeight: 'bold', color: '#fff' }}>台北鼓動</h1>
         {/* Centred on the Chinese title alone: a flex row with no width of its own overflows evenly to both sides. */}
