@@ -23,7 +23,7 @@ This file lists the changes that a user of the site can see, for each version. T
 - The simulation runs at half the speed: 1x is half a simulated hour a second, and 8x is 4 hours. The events come more slowly, and a slow device keeps up more easily (#28).
 - The pause is a play and pause button, apart from the speed buttons 1x to 8x, so a pause keeps the speed for when the run goes on (#28).
 - The settings give the number of dots as 追蹤 N 個移動單位 (#28).
-- The road paths come from a file of about 1 MB that holds contraction hierarchies, not precomputed paths: the page finds the shortest path of any trip on the roads. A run starts when the page has found the paths of every trip on the roads. The settings no longer show the share of the dots' road paths (#31).
+- The road paths come from a file of contraction hierarchies of 1.05 MB (0.54 MB with gzip), not from the precomputed paths of 0.1.5 (6.39 MB, 1.01 MB with gzip): the page finds the shortest path of any trip on the roads. A run starts when the page has found the paths of every trip on the roads. The settings no longer show the share of the dots' road paths (#31).
 - The district level shows the same run as the village level: each district is the sum of its villages. A switch of the level keeps the run and its clock; before, it started a new run at 00:00. At district level the events name the district only (#35).
 - While the run waits for the road paths, the map fades in halfway; it becomes clear when the run starts (#35).
 
