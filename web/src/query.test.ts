@@ -15,6 +15,14 @@ test('bool round-trips and rejects other strings', () => {
   fc.assert(fc.property(fc.string().filter(s => s !== '0' && s !== '1'), s => { expect(bool(s)).toBeUndefined() }))
 })
 
+test('setOf leaves out retired names, so a list of only retired names is empty, not unknown', () => {
+  const parse = setOf(['mrt', 'tra'], ['airport'])
+  expect(parse('airport')).toEqual(new Set())
+  expect(parse('mrt,airport')).toEqual(new Set(['mrt']))
+  expect(parse('bus')).toBeUndefined()
+  expect(parse(',')).toBeUndefined()
+})
+
 test('setOf keeps known names and gives undefined when names are given but none is known', () => {
   const parse = setOf(['mrt', 'tra', 'highway'])
   expect(parse('mrt,highway')).toEqual(new Set(['mrt', 'highway']))
