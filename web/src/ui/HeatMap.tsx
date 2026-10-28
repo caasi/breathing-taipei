@@ -7,6 +7,7 @@ import { Borders } from './Borders.tsx'
 import { Rails } from './Rails.tsx'
 import { R, SPACING, Stations, signsOf, stationScale } from './Stations.tsx'
 import { Traffic, type RoadLines } from './Traffic.tsx'
+import { Labels, type Text } from './Labels.tsx'
 import { MAP_SIZE, svgTransform, type Rect, type View } from './view.ts'
 
 const NO_TRAFFIC = new Uint8Array(0)
@@ -109,14 +110,12 @@ export function HeatMap({ towns, villages, level, nodes, counts, perAgent, proj,
   // A name moves out with its signs when they grow past their size in map units (stationScale); the view changes the
   // scale only when the window does.
   const scale = stationScale(view.k)
-  // The names keep the opacity of the SVG markers: they are for orientation, so the eye follows the area colours.
-  // The station names never change during a run, so they are one SVG whose text is built once. A name follows the last
-  // sign of its station (Stations.tsx).
-  const fixed = useMemo(() => <>
-      {points.map(p => [p, signsOf(p, show).length] as const).filter(([, n]) => n > 0).map(([p, n]) =>
-        <text key={p.kinds.join() + p.name} x={p.xy[0] + (R + 3 + (n - 1) * SPACING) * scale} y={p.xy[1] + (-R - 1 + (n - 1) * SPACING) * scale} opacity={0.6}
-          fontSize={11} fill="#fff" stroke="#000" strokeWidth={3} paintOrder="stroke">{p.name}</text>)}
-  </>, [points, show, scale])
+  // The names keep the opacity of the SVG markers: they are for orientation, so the eye follows the area colours. A
+  // name follows the last sign of its station (Stations.tsx).
+  const names = useMemo(() => points.map(p => [p, signsOf(p, show).length] as const).filter(([, n]) => n > 0).map(([p, n]): Text => ({
+    xy: [p.xy[0] + (R + 3 + (n - 1) * SPACING) * scale, p.xy[1] + (-R - 1 + (n - 1) * SPACING) * scale], dy: 0,
+    text: p.name, style: 'station', anchor: 'start', alpha: 0.6,
+  })), [points, show, scale])
 
   const byTown = new Map<string, number>()
   // A cell with no node (-1) counts as empty.
@@ -134,13 +133,12 @@ export function HeatMap({ towns, villages, level, nodes, counts, perAgent, proj,
       <Stations points={points} show={show} />
       {/* Until the first take of a run, it draws the network with no traffic. */}
       {roads && <Traffic lines={roads} proj={proj} levels={traffic ?? NO_TRAFFIC} fadeSeconds={fadeSeconds} running={speed > 0} shown={show.has('traffic')} />}
-      {/* The station names are over the roads now, which are a layer of the map; the SVG had them under the roads.
-          The view is outside the memo, so a zoom or pan step changes one attribute and leaves the text alone. */}
-      <svg style={SVG}><g transform={svgTransform(view)}>{fixed}</g></svg>
-      <svg style={SVG}><g transform={svgTransform(view)}>
-        {geo.labels.map(l => <text key={l.town} x={l.xy[0]} y={l.xy[1]} textAnchor="middle" fontSize={12} fill="#fff" stroke="#211d1d" strokeWidth={3} paintOrder="stroke">
-          {l.name}<tspan x={l.xy[0]} dy={14}>{((byTown.get(l.town) ?? 0) * perAgent).toLocaleString()}</tspan></text>)}
-      </g></svg>
+      {/* The names of the stations, then over them the names of the districts with their counts, as two lines 14 units
+          apart: the SVG had the district labels over the station names. */}
+      <Labels texts={[...names, ...geo.labels.flatMap(l => [
+        { xy: l.xy, dy: 0, text: l.name, style: 'district', anchor: 'middle', alpha: 1 },
+        { xy: l.xy, dy: 14, text: ((byTown.get(l.town) ?? 0) * perAgent).toLocaleString(), style: 'district', anchor: 'middle', alpha: 1 },
+      ] satisfies Text[])]} />
     </div>
   )
 }
