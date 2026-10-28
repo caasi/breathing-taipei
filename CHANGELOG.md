@@ -4,6 +4,16 @@ This file lists the changes that a user of the site can see, for each version. T
 
 ## [Unreleased]
 
+### Changed
+
+- The map is one WebGL canvas, and the text, the stations, the roads and the dots are drawn in it (#34).
+- A station is a square badge with round corners and the sign of its kind: a train, a high speed train or a plane, in the colour of the kind (高鐵 orange, 台鐵 grey, the airport white). A station of two kinds (臺北, 南港) stacks its badges as cards. A badge is never smaller than 9 CSS pixels (#41).
+- The airport name no longer starts with ✈ (#41).
+- The station names are over the roads (#42).
+- Before the first frame of a run, the map itself shows, blurred and faint: the land, the borders, the lines, the stations and the names, with the registered residents as the counts. Before, a blurred outline of the districts showed (#45).
+- While the run waits for the road paths, the map stays blurred, and becomes clear when the run starts. Before, it faded in halfway (#45).
+- The dots are under the names. Where many dots meet, the map under them is a little brighter, because the dots add their colour onto the map (#34).
+
 ## [0.2.0] - 2026-10-27
 
 ### Added
