@@ -28,19 +28,19 @@ test('a layer that throws is returned, and the other layers still draw', () => {
   expect(log).toEqual(['a', 'b'])
 })
 
-test('with a group, the layers from its order up draw between begin and end', () => {
+test('with groups, the layers of each group draw between its begin and end', () => {
   const log: string[] = []
-  const entries = [{ ...layer(log, 'land'), order: -1 }, layer(log, 'a', { dirty: () => true }), { ...layer(log, 'b'), order: 1 }]
-  const group = { from: 0, begin: () => log.push('begin'), end: () => log.push('end') }
-  paint(entries, f, false, () => {}, () => log.push('clear'), group)
-  expect(log).toEqual(['clear', 'land', 'begin', 'a', 'b', 'end'])
+  const entries = [{ ...layer(log, 'sea'), order: -2 }, { ...layer(log, 'land'), order: -1 }, layer(log, 'a', { dirty: () => true }), { ...layer(log, 'b'), order: 1 }]
+  const groupOf = (from: number, name: string) => ({ from, begin: () => log.push(`begin ${name}`), end: () => log.push(`end ${name}`) })
+  paint(entries, f, false, () => {}, () => log.push('clear'), [groupOf(-1, 'land'), groupOf(0, 'map')])
+  expect(log).toEqual(['clear', 'sea', 'begin land', 'land', 'end land', 'begin map', 'a', 'b', 'end map'])
 })
 
-test('a hidden group draws none of its layers, and calls neither begin nor end', () => {
+test('a group with no layer begins and ends nothing', () => {
   const log: string[] = []
-  const entries = [{ ...layer(log, 'land'), order: -1 }, layer(log, 'a', { dirty: () => true })]
-  paint(entries, f, false, () => {}, () => {}, { from: 0, hide: true, begin: () => log.push('begin'), end: () => log.push('end') })
-  expect(log).toEqual(['land'])
+  const groupOf = (from: number, name: string) => ({ from, begin: () => log.push(`begin ${name}`), end: () => log.push(`end ${name}`) })
+  paint([layer(log, 'a', { dirty: () => true })], f, false, () => {}, () => {}, [groupOf(-1, 'land'), groupOf(0, 'map')])
+  expect(log).toEqual(['begin map', 'a', 'end map'])
 })
 
 test('the fade follows CSS ease, and ends on 0 and 1 exactly', () => {

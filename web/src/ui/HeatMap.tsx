@@ -8,7 +8,8 @@ import { Rails } from './Rails.tsx'
 import { R, SPACING, Stations, signsOf, stationScale } from './Stations.tsx'
 import { Traffic, type RoadLines } from './Traffic.tsx'
 import { Labels, type Text } from './Labels.tsx'
-import { MAP_SIZE, svgTransform, type Rect, type View } from './view.ts'
+import { Land as LandLayer } from './Land.tsx'
+import { MAP_SIZE, type Rect, type View } from './view.ts'
 
 const NO_TRAFFIC = new Uint8Array(0)
 
@@ -35,16 +36,13 @@ const rateColour = (perHour: number) => {
   const t = Math.max(-1, Math.min(1, perHour / 0.3)), to = t > 0 ? IN : OUT, f = Math.sqrt(Math.abs(t))
   return BASE.map((v, i) => v + (to[i] - v) * f)
 }
+// The colour of the land, and the colour that the fills of 新北 are faded toward, so a faded cell shows almost no edge
+// against the land around it.
 const BACKGROUND = [0x21, 0x1d, 0x1d]
 // The background of the map box. Much darker than the land, so that the sea does not look like land.
 export const SEA = '#0c0f13'
-// The same as BACKGROUND, the colour that the fills of 新北 are faded toward, so a faded cell shows almost no edge against
-// the land around it.
-const LAND = `rgb(${BACKGROUND.join(', ')})`
 // 新北 is drawn faded so the eye stays on Taipei.
 const NEW_TAIPEI_OPACITY = 0.45
-
-const SVG = { position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none' } as const
 
 const EARTH_KM2 = 6371 * 6371
 const features = (topo: any, key: string) =>
@@ -65,7 +63,10 @@ export const taipeiIn = (towns: any, proj: GeoProjection): Rect => {
 }
 
 type Props = {
-  towns: any; villages: any; level: 'district' | 'village'; nodes: string[]; counts: Uint32Array; perAgent: number
+  towns: any; villages: any; level: 'district' | 'village'; nodes: string[]; perAgent: number
+  // The people of each node by the run; before its first frame there is none, and the map draws no fills, and the
+  // district counts are `pop`, the registered residents by town (villages2.json), which differ a little.
+  counts?: Uint32Array; pop?: Map<string, number>
   proj: GeoProjection; transit?: Transit; show: Set<string>
   rate?: Float32Array // when given, colour by change per hour / residents instead of density
   speed: number // simulated hours per second
@@ -73,20 +74,22 @@ type Props = {
   view: View
 }
 
-export function HeatMap({ towns, villages, level, nodes, counts, perAgent, proj, transit, show, rate, speed, view, roads, traffic }: Props) {
+export function HeatMap({ towns, villages, level, nodes, counts, pop, perAgent, proj, transit, show, rate, speed, view, roads, traffic }: Props) {
   // The fade runs in real time; scale it so it always spans about 30 simulated minutes, or it shows a past hour. Half an
   // hour a second is the slowest speed (1x); a pause (0) keeps the fade of 1x.
   const fadeSeconds = 0.5 / Math.max(0.5, speed)
   // Geometry is fixed per level; only the fills and the label counts change each frame.
-  // The cells and the districts do not depend on transit, so a late transit.json does not rebuild a WebGL layer.
-  const cells = useMemo(() => {
+  // The cells and the districts do not depend on transit, so a late transit.json does not rebuild a WebGL layer. The
+  // shapes do not depend on the nodes either, which come with the first frame of the run: the borders draw before it.
+  const shapes = useMemo(() => {
     const fs = level === 'village' ? features(villages, 'villages') : cityTowns(towns)
     return fs.map(f => ({
       geometry: f.geometry, km2: geoArea(f) * EARTH_KM2, taipei: f.properties.COUNTYNAME === '台北市',
       town: f.properties.COUNTYNAME + f.properties.TOWNNAME,
-      node: nodes.indexOf(level === 'village' ? f.properties.VILLCODE : f.properties.COUNTYNAME + f.properties.TOWNNAME),
+      code: level === 'village' ? f.properties.VILLCODE : f.properties.COUNTYNAME + f.properties.TOWNNAME,
     }))
-  }, [towns, villages, level, nodes, proj])
+  }, [towns, villages, level])
+  const cells = useMemo(() => shapes.map(s => ({ ...s, node: nodes.indexOf(s.code) })), [shapes, nodes])
   const districts = useMemo(() => cityTowns(towns).map(f => ({ geometry: f.geometry, taipei: f.properties.COUNTYNAME === '台北市' })), [towns])
   const geo = useMemo(() => {
     const path = geoPath(proj)
@@ -119,68 +122,40 @@ export function HeatMap({ towns, villages, level, nodes, counts, perAgent, proj,
 
   const byTown = new Map<string, number>()
   // A cell with no node (-1) counts as empty.
-  geo.cells.forEach(c => byTown.set(c.town, (byTown.get(c.town) ?? 0) + (counts[c.node] ?? 0)))
-  const colours = new Uint8Array(geo.cells.length * 3)
-  geo.cells.forEach((c, k) => {
+  if (counts) geo.cells.forEach(c => byTown.set(c.town, (byTown.get(c.town) ?? 0) + (counts[c.node] ?? 0) * perAgent))
+  const colours = counts && new Uint8Array(geo.cells.length * 3)
+  if (counts) geo.cells.forEach((c, k) => {
     const rgb = rate ? rateColour(rate[c.node] ?? 0) : color((counts[c.node] ?? 0) * perAgent / c.km2), a = c.taipei ? 1 : NEW_TAIPEI_OPACITY
-    for (let i = 0; i < 3; i++) colours[3 * k + i] = Math.round(BACKGROUND[i] + (rgb[i] - BACKGROUND[i]) * a)
+    for (let i = 0; i < 3; i++) colours![3 * k + i] = Math.round(BACKGROUND[i] + (rgb[i] - BACKGROUND[i]) * a)
   })
+  const people = counts ? byTown : pop
   return (
     <div style={{ position: 'absolute', inset: 0 }}>
-      <Fills cells={geo.cells} proj={proj} colours={colours} fadeSeconds={fadeSeconds} />
-      <Borders cells={geo.cells} districts={districts} proj={proj} />
+      {colours && <Fills cells={geo.cells} proj={proj} colours={colours} fadeSeconds={fadeSeconds} />}
+      <Borders cells={shapes} districts={districts} proj={proj} />
       {transit && <Rails lines={transit.lines} proj={proj} show={show} />}
       <Stations points={points} show={show} />
-      {/* Until the first take of a run, it draws the network with no traffic. */}
-      {roads && <Traffic lines={roads} proj={proj} levels={traffic ?? NO_TRAFFIC} fadeSeconds={fadeSeconds} running={speed > 0} shown={show.has('traffic')} />}
+      {/* Until the first take of a run, it draws the network with no traffic, and before the first frame its dashes stand
+          still, so the blurred map is not drawn again in each frame. */}
+      {roads && <Traffic lines={roads} proj={proj} levels={traffic ?? NO_TRAFFIC} fadeSeconds={fadeSeconds} running={speed > 0 && !!counts} shown={show.has('traffic')} />}
       {/* The names of the stations, then over them the names of the districts with their counts, as two lines 14 units
           apart: the SVG had the district labels over the station names. */}
-      <Labels texts={[...names, ...geo.labels.flatMap(l => [
+      <Labels texts={[...names, ...geo.labels.flatMap((l): Text[] => [
         { xy: l.xy, dy: 0, text: l.name, style: 'district', anchor: 'middle', alpha: 1 },
-        { xy: l.xy, dy: 14, text: ((byTown.get(l.town) ?? 0) * perAgent).toLocaleString(), style: 'district', anchor: 'middle', alpha: 1 },
-      ] satisfies Text[])]} />
+        ...people ? [{ xy: l.xy, dy: 14, text: (people.get(l.town) ?? 0).toLocaleString(), style: 'district', anchor: 'middle', alpha: 1 } as const] : [],
+      ])]} />
     </div>
   )
 }
 
-/** All counties of Taiwan as land, under the outline and the map; only the borders of the other counties show. */
-export function Land({ towns, proj, view }: { towns: any; proj: GeoProjection; view: View }) {
-  // As the fixed SVG of the map: the paths are built once, and the view stays outside the memo.
-  const paths = useMemo(() => {
-    const path = geoPath(proj), city = (g: any) => CITIES.includes(g.properties.COUNTYNAME)
+/** All counties of Taiwan as land, a layer under the map (Land.tsx); only the borders of the other counties show. */
+export function Land({ towns, proj }: { towns: any; proj: GeoProjection }) {
+  const { counties, borders } = useMemo(() => {
+    const city = (g: any) => CITIES.includes(g.properties.COUNTYNAME)
     // One line for all borders, so an edge that two counties share is not drawn twice and darker than the coast. No edge
     // of the two cities: the town borders of the map draw those.
-    const borders = mesh(towns, towns.objects.counties, (a: any, b: any) => !(city(a) || city(b)))
-    return <>
-      {features(towns, 'counties').map((f, k) => <path key={k} d={path(f) ?? ''} fill={LAND} />)}
-      <path d={path(borders) ?? ''} fill="none" stroke="#fff" strokeOpacity={0.12} strokeWidth={1} />
-    </>
-  }, [towns, proj])
-  return <svg style={SVG}><g transform={svgTransform(view)}>{paths}</g></svg>
-}
-
-/**
- * The town borders, faint and blurred, with the Taipei labels of the map: what shows before the first frame of the
- * first run. It needs no run, so it draws as soon as the page has the towns and the projection. `pop` (registered
- * residents by town, from villages2.json) is used in place of the counts of the first frame; the two differ a little.
- */
-export function Outline({ towns, proj, view, pop }: { towns: any; proj: GeoProjection; view: View; pop?: Map<string, number> }) {
-  const { borders, labels } = useMemo(() => {
-    const path = geoPath(proj), all = cityTowns(towns)
-    return {
-      borders: all.map(f => path(f) ?? ''),
-      labels: all.filter(f => f.properties.COUNTYNAME === '台北市').map(f => ({ xy: path.centroid(f), name: f.properties.TOWNNAME, town: f.properties.COUNTYNAME + f.properties.TOWNNAME })),
-    }
-  }, [towns, proj])
-  return <>
-    <svg style={{ ...SVG, filter: 'blur(3px)', opacity: 0.6 }}><g transform={svgTransform(view)}>
-      {borders.map((d, k) => <path key={k} d={d} fill="#2c2626" stroke="#fff" strokeOpacity={0.3} strokeWidth={1.2} />)}
-    </g></svg>
-    {/* The same place and style as the labels of the map, so they meet when the map fades in. Blurred too: the
-        figures are not the ones of the run, so they are not to be read. */}
-    <svg style={{ ...SVG, filter: 'blur(1.5px)', opacity: 0.6 }}><g transform={svgTransform(view)}>
-      {labels.map(l => <text key={l.town} x={l.xy[0]} y={l.xy[1]} textAnchor="middle" fontSize={12} fill="#fff" stroke="#211d1d" strokeWidth={3} paintOrder="stroke">
-        {l.name}{pop && <tspan x={l.xy[0]} dy={14}>{(pop.get(l.town) ?? 0).toLocaleString()}</tspan>}</text>)}
-    </g></svg>
-  </>
+    const lines = mesh(towns, towns.objects.counties, (a: any, b: any) => !(city(a) || city(b))).coordinates
+    return { counties: features(towns, 'counties'), borders: lines.map(l => l.flat()) }
+  }, [towns])
+  return <LandLayer counties={counties} borders={borders} colour={BACKGROUND} proj={proj} />
 }

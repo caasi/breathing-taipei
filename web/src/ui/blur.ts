@@ -16,7 +16,8 @@ export const planOf = (sigma: number) => {
 
 const VS = `#version 300 es
 void main() { gl_Position = vec4(gl_VertexID == 1 ? 3.0 : -1.0, gl_VertexID == 2 ? 3.0 : -1.0, 0, 1); }`
-// One direction of the blur. Outside the source is transparent, as outside the box of a CSS blur.
+// One direction of the blur. Outside the source reads its edge (the textures clamp to the edge): the map goes on past the
+// screen, so a transparent outside, as a CSS blur has, would fade the land to the sea along the edges of the box.
 const FS = `#version 300 es
 precision highp float;
 uniform sampler2D src; uniform vec2 size; uniform vec2 step; uniform float lod; uniform float sigma; uniform int taps;
@@ -28,7 +29,7 @@ void main() {
     float w = exp(-float(i * i) / (2.0 * sigma * sigma));
     vec2 p = uv + float(i) * step;
     total += w;
-    if (all(greaterThanEqual(p, vec2(0))) && all(lessThanEqual(p, vec2(1)))) sum += w * textureLod(src, p, lod);
+    sum += w * textureLod(src, p, lod);
   }
   o = sum / total * opacity;
 }`

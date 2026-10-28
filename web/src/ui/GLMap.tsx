@@ -28,7 +28,7 @@ export type Frame = { now: number; view: View; clip: number[]; width: number; he
 export type Layer = { dirty: (f: Frame) => boolean; draw: (f: Frame) => void; dispose: () => void }
 
 /** The order of the layers, from the bottom. One list, so that a new layer finds its place among all the others. */
-export const LAYER = { fills: 0, borders: 1, rails: 2, stations: 3, traffic: 4, labels: 5 } as const
+export const LAYER = { land: 0, fills: 1, borders: 2, rails: 3, stations: 4, traffic: 5, labels: 6 } as const
 
 /** How far the map has faded in: its opacity, and its blur in CSS pixels, as CSS `filter: blur()`. */
 export type Reveal = { opacity: number; blur: number }
@@ -54,11 +54,11 @@ const Ctx = createContext<MapCtx | undefined>(undefined)
  * One frame: asks every layer whether it is dirty, and when one is (or `force`), clears and draws every layer in order,
  * with `reset` before the clear and before each layer. A layer that throws is returned in `failed` and draws no more in
  * this frame, so that one bad layer does not stop the map.
- * With `group`, the layers from the order `group.from` up draw between `group.begin` and `group.end`; with
- * `group.hide`, they do not draw.
+ * With `groups` (in the order of `from`), the layers from the order `from` of a group, up to the next group, draw
+ * between its `begin` and `end`; a group with no layer begins and ends nothing.
  */
 export const paint = (entries: Entry[], f: Frame, force: boolean, reset: () => void, clear: () => void,
-  group?: { from: number; hide?: boolean; begin: () => void; end: () => void }) => {
+  groups: { from: number; begin: () => void; end: () => void }[] = []) => {
   const failed: Entry[] = []
   const run = (e: Entry, step: () => unknown) => {
     try { return step() } catch (err) { console.error(err); failed.push(e) }
@@ -66,21 +66,22 @@ export const paint = (entries: Entry[], f: Frame, force: boolean, reset: () => v
   const dirty = entries.map(e => run(e, () => e.layer.dirty(f))).some(Boolean)
   if (!dirty && !force) return { drawn: false, failed }
   reset(); clear()
-  let grouped = false
+  let open: (typeof groups)[number] | undefined
   for (const e of entries) {
-    if (group && !grouped && e.order >= group.from) { grouped = true; if (!group.hide) group.begin() }
-    if (failed.includes(e) || (grouped && group!.hide)) continue
+    const group = groups.filter(g => g.from <= e.order).at(-1)
+    if (group !== open) { open?.end(); group?.begin(); open = group }
+    if (failed.includes(e)) continue
     reset(); run(e, () => e.layer.draw(f))
   }
-  if (grouped && !group!.hide) group!.end()
+  open?.end()
   return { drawn: true, failed }
 }
 
 /**
  * The one WebGL canvas of the map. Layers are components under it that call `useLayer`; they draw in `order`, the lowest
  * first. The canvas is mounted once: an unmount loses its context (gl.ts), and then every layer stays blank.
- * `reveal` fades the layers from the fills up, as one picture: while it is not clear, they draw into a texture, which
- * goes onto the canvas blurred and faded. A change of `reveal` moves to it over REVEAL_MS.
+ * While `reveal` is not clear, the map draws in two pictures, each into a texture that goes onto the canvas blurred: the
+ * land only blurred, and the layers from the fills up blurred and faded. A change of `reveal` moves to it over REVEAL_MS.
  */
 export function GLMap({ view, reveal = CLEAR, children }: { view: View; reveal?: Reveal; children: ReactNode }) {
   const ref = useRef<HTMLCanvasElement>(null)
@@ -124,8 +125,9 @@ export function GLMap({ view, reveal = CLEAR, children }: { view: View; reveal?:
       gl.colorMask(true, true, true, true)
     }
     const clear = () => { gl.clearColor(0, 0, 0, 0); gl.clear(gl.COLOR_BUFFER_BIT) }
-    const group = {
-      from: LAYER.fills, hide: false,
+    // Each group goes onto the canvas blurred by its own: the land is only blurred, the map is blurred and faded.
+    const groupOf = (from: number, faded: boolean) => ({
+      from,
       begin: () => {
         // The levels of the mip chain go with the size, so a new size makes the texture again.
         if (pictureSize !== `${canvas.width} ${canvas.height}`) {
@@ -148,9 +150,10 @@ export function GLMap({ view, reveal = CLEAR, children }: { view: View; reveal?:
         // Attached only for the blit: a framebuffer that is not bound keeps a deleted texture alive.
         gl.framebufferTexture2D(gl.DRAW_FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, null, 0)
         target = null; reset()
-        blur!.run(picture!, canvas.width, canvas.height, shown.blur * canvas.width / Math.max(1, canvas.clientWidth), shown.opacity, null)
+        blur!.run(picture!, canvas.width, canvas.height, shown.blur * canvas.width / Math.max(1, canvas.clientWidth), faded ? shown.opacity : 1, null)
       },
-    }
+    })
+    const groups = [groupOf(LAYER.land, false), groupOf(LAYER.fills, true)]
     let raf = 0, drawn = ''
     const draw = () => {
       // The next frame first, and the canvas as the target: a throw in the fade must not stop the map.
@@ -166,9 +169,8 @@ export function GLMap({ view, reveal = CLEAR, children }: { view: View; reveal?:
       const f: Frame = { now, view: v, clip: clip(v, canvas.clientWidth, canvas.clientHeight), width: canvas.width, height: canvas.height, cssWidth: canvas.clientWidth, cssHeight: canvas.clientHeight, target: null }
       // A clear map draws straight on the canvas; only a fade pays for the texture and the blur.
       const fading = shown.opacity !== 1 || shown.blur !== 0
-      group.hide = shown.opacity === 0
       // Every layer is asked, also after one is dirty: a layer can keep its state up to date in `dirty`.
-      const done = paint(entries, f, changed || key !== drawn, () => { f.target = target; reset() }, clear, fading && (blur || group.hide) ? group : undefined)
+      const done = paint(entries, f, changed || key !== drawn, () => { f.target = target; reset() }, clear, fading && blur ? groups : undefined)
       // The fade runs once for each page, so its textures go when it ends.
       if (!fading && pictureSize) {
         // A new texture: a smaller level 0 would keep the other levels of the mip chain.
