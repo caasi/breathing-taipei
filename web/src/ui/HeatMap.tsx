@@ -4,6 +4,8 @@ import { feature, mesh } from 'topojson-client'
 import type { FeatureCollection, Geometry } from 'geojson'
 import { Fills } from './Fills.tsx'
 import { Borders } from './Borders.tsx'
+import { Rails } from './Rails.tsx'
+import { R, SPACING, Stations, signsOf, stationScale } from './Stations.tsx'
 import { Traffic, type RoadLines } from './Traffic.tsx'
 import { MAP_SIZE, svgTransform, type Rect, type View } from './view.ts'
 
@@ -41,9 +43,6 @@ const LAND = `rgb(${BACKGROUND.join(', ')})`
 // 新北 is drawn faded so the eye stays on Taipei.
 const NEW_TAIPEI_OPACITY = 0.45
 
-// Lines and stations are for orientation; kept faint so the eye follows the area colours.
-const LINE_OPACITY = 0.35
-const STATION_OPACITY = 0.6
 const SVG = { position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none' } as const
 
 const EARTH_KM2 = 6371 * 6371
@@ -92,30 +91,32 @@ export function HeatMap({ towns, villages, level, nodes, counts, perAgent, proj,
     const path = geoPath(proj)
     const allTowns = cityTowns(towns)
     const labels = allTowns.filter(f => f.properties.COUNTYNAME === '台北市').map(f => ({ xy: path.centroid(f), name: f.properties.TOWNNAME, town: f.properties.COUNTYNAME + f.properties.TOWNNAME }))
-    const lines = transit?.lines.map(l => ({ ...l, d: path({ type: 'LineString', coordinates: l.coords }) ?? '' })) ?? []
-    // A railway and a high speed rail station in one building (臺北, 南港) are one marker with both kinds:
-    // two half-transparent markers on top of each other looked darker and printed the name twice.
+    return { cells, labels }
+  }, [cells, towns, proj])
+  // A railway and a high speed rail station in one building (臺北, 南港) are one marker with both kinds: two
+  // half-transparent markers on top of each other looked darker and printed the name twice. Apart from the cells, so a
+  // change of level does not build the station layer again.
+  const points = useMemo(() => {
     const points: { kinds: string[]; name: string; xy: [number, number] }[] = []
     for (const p of transit?.points ?? []) {
       const xy = proj([p.lon, p.lat])!, near = points.find(q => Math.hypot(q.xy[0] - xy[0], q.xy[1] - xy[1]) < 3)
       if (near) near.kinds.push(p.kind)
       else points.push({ kinds: [p.kind], name: p.name, xy })
     }
-    return { cells, labels, lines, points }
-  }, [cells, towns, proj, transit])
+    return points
+  }, [proj, transit])
 
-  // Lines and stations never change during a run, so they are one SVG whose paths are built once.
+  // A name moves out with its signs when they grow past their size in map units (stationScale); the view changes the
+  // scale only when the window does.
+  const scale = stationScale(view.k)
+  // The names keep the opacity of the SVG markers: they are for orientation, so the eye follows the area colours.
+  // The station names never change during a run, so they are one SVG whose text is built once. A name follows the last
+  // sign of its station (Stations.tsx).
   const fixed = useMemo(() => <>
-      {geo.lines.filter(l => show.has(l.kind)).map((l, k) =>
-        <path key={'l' + k} d={l.d} fill="none" stroke={l.colour} strokeWidth={l.kind === 'mrt' ? 1.8 : 1.5}
-          strokeDasharray={l.kind === 'tra' ? '6 3' : undefined} opacity={LINE_OPACITY} />)}
-      {geo.points.filter(p => p.kinds.some(k => show.has(k))).map(p => {
-        const has = (k: string) => p.kinds.includes(k) && show.has(k)
-        return <g key={p.kinds.join() + p.name} opacity={STATION_OPACITY}>
-          <circle cx={p.xy[0]} cy={p.xy[1]} r={has('airport') ? 7 : 5} fill={has('hsr') ? '#f47321' : has('airport') ? '#fff' : '#ccc'} stroke="#000" />
-          <text x={p.xy[0] + 8} y={p.xy[1] - 6} fontSize={11} fill="#fff" stroke="#000" strokeWidth={3} paintOrder="stroke">{has('airport') ? '✈ ' : ''}{p.name}</text></g>
-      })}
-  </>, [geo, show])
+      {points.map(p => [p, signsOf(p, show).length] as const).filter(([, n]) => n > 0).map(([p, n]) =>
+        <text key={p.kinds.join() + p.name} x={p.xy[0] + (R + 3 + (n - 1) * SPACING) * scale} y={p.xy[1] + (-R - 1 + (n - 1) * SPACING) * scale} opacity={0.6}
+          fontSize={11} fill="#fff" stroke="#000" strokeWidth={3} paintOrder="stroke">{p.name}</text>)}
+  </>, [points, show, scale])
 
   const byTown = new Map<string, number>()
   // A cell with no node (-1) counts as empty.
@@ -129,6 +130,8 @@ export function HeatMap({ towns, villages, level, nodes, counts, perAgent, proj,
     <div style={{ position: 'absolute', inset: 0 }}>
       <Fills cells={geo.cells} proj={proj} colours={colours} fadeSeconds={fadeSeconds} />
       <Borders cells={geo.cells} districts={districts} proj={proj} />
+      {transit && <Rails lines={transit.lines} proj={proj} show={show} />}
+      <Stations points={points} show={show} />
       {/* The view is outside the memo, so a zoom or pan step changes one attribute and leaves the paths alone. */}
       <svg style={SVG}><g transform={svgTransform(view)}>{fixed}</g></svg>
       {/* Mounted once and then hidden, not unmounted: a WebGL canvas must not be mounted again (AGENTS.md). Until the
