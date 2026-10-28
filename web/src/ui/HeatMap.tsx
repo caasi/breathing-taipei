@@ -132,11 +132,11 @@ export function HeatMap({ towns, villages, level, nodes, counts, perAgent, proj,
       <Borders cells={geo.cells} districts={districts} proj={proj} />
       {transit && <Rails lines={transit.lines} proj={proj} show={show} />}
       <Stations points={points} show={show} />
-      {/* The view is outside the memo, so a zoom or pan step changes one attribute and leaves the paths alone. */}
+      {/* Until the first take of a run, it draws the network with no traffic. */}
+      {roads && <Traffic lines={roads} proj={proj} levels={traffic ?? NO_TRAFFIC} fadeSeconds={fadeSeconds} running={speed > 0} shown={show.has('traffic')} />}
+      {/* The station names are over the roads now, which are a layer of the map; the SVG had them under the roads.
+          The view is outside the memo, so a zoom or pan step changes one attribute and leaves the text alone. */}
       <svg style={SVG}><g transform={svgTransform(view)}>{fixed}</g></svg>
-      {/* Mounted once and then hidden, not unmounted: a WebGL canvas must not be mounted again (AGENTS.md). Until the
-          first take of a run, it draws the network with no traffic. */}
-      {roads && <Traffic lines={roads} proj={proj} levels={traffic ?? NO_TRAFFIC} fadeSeconds={fadeSeconds} view={view} running={speed > 0} shown={show.has('traffic')} />}
       <svg style={SVG}><g transform={svgTransform(view)}>
         {geo.labels.map(l => <text key={l.town} x={l.xy[0]} y={l.xy[1]} textAnchor="middle" fontSize={12} fill="#fff" stroke="#211d1d" strokeWidth={3} paintOrder="stroke">
           {l.name}<tspan x={l.xy[0]} dy={14}>{((byTown.get(l.town) ?? 0) * perAgent).toLocaleString()}</tspan></text>)}
