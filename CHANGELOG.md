@@ -8,6 +8,7 @@ This file lists the changes that a user of the site can see, for each version. T
 
 - The setting 區名與人數 hides the district names and their counts, to show the map with no text over the districts.
 - The setting 車站與機場 hides the badges and names of the stations and the airport. The box 機場 is gone: the airport follows 車站與機場.
+- While the road paths are found, sparks run along a sample of them on the map. The map is darker and blurred under them, and becomes clear as the paths are found. With reduced motion, the map loads with no sparks.
 
 ### Changed
 
