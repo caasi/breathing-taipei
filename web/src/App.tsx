@@ -39,7 +39,7 @@ const WINDOWS = [15, 30, 60, KEEP] // simulated minutes the change rate can look
 type Level = 'district' | 'village'
 // The map at each step of its fade in (revealed): hidden, half while the run waits for the road paths, then clear.
 // ponytail: the half step (opacity 0.5, blur 4 px) is by eye.
-const REVEAL = [{ opacity: 0, filter: 'blur(8px)' }, { opacity: 0.5, filter: 'blur(4px)' }, { opacity: 1, filter: 'none' }]
+const REVEAL = [{ opacity: 0, blur: 8 }, { opacity: 0.5, blur: 4 }, { opacity: 1, blur: 0 }]
 const inTaipei = (node: string) => node.startsWith('63000') // the village code of 台北市
 const ALERT = { position: 'absolute', top: 72, left: 16, margin: 0, color: '#ff8b6b' } as const
 // The note of a setting, in grey on the line below it.
@@ -378,15 +378,16 @@ export function App() {
       {towns && projection && <Land towns={towns} proj={projection} view={view} />}
       {/* The blurred outline is under the map until the map has faded in fully, once, when the first run starts. */}
       {!faded && towns && projection && <Outline towns={towns} proj={projection} view={view} pop={pop} />}
-      <div className="reveal" style={{ position: 'absolute', inset: 0, ...REVEAL[revealed] }}>
       {/* Mounted before the data, and never again: the map draws its WebGL layers in this one canvas. */}
-      <GLMap view={view}>
+      <GLMap view={view} reveal={REVEAL[revealed]}>
       {ready && <>
         <HeatMap towns={towns} villages={villages} level={byDistrict ? 'district' : 'village'} nodes={byDistrict?.names ?? nodes} counts={shownCounts!} perAgent={PER_AGENT} proj={projection} transit={transit} show={layers} rate={rate} roads={roads} traffic={traffic} speed={paused ? 0 : speed * HOURS_AT_1X} view={view} />
-        {dots && dotTrips && <Travellers tracks={dotRun!.tracks} trips={dotTrips} clock={clock} byMode={byMode} traffic={cellTraffic} view={view} />}
+        {/* The dots keep their own canvas until step 6 of #34, so they fade with CSS. */}
+        {dots && dotTrips && <div className="reveal" style={{ position: 'absolute', inset: 0, opacity: REVEAL[revealed].opacity, filter: REVEAL[revealed].blur ? `blur(${REVEAL[revealed].blur}px)` : 'none' }}>
+          <Travellers tracks={dotRun!.tracks} trips={dotTrips} clock={clock} byMode={byMode} traffic={cellTraffic} view={view} />
+        </div>}
       </>}
       </GLMap>
-      </div>
       {/* Always there, so a screen reader reads the change. */}
       {/* In the bottom right of the map, left of the panels on a desktop. It shows from the first paint until the
           run of the selected day is on the screen and started, also in the paint right after a new run starts. */}
