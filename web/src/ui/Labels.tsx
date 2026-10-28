@@ -53,8 +53,11 @@ const atlasOf = (need: [keyof typeof STYLES, string][], px: number, family: stri
     const { size, halo, whole } = STYLES[style], font = `${size * px}px ${family}`, line = HALO * px
     ctx.font = font
     const m = ctx.measureText('國'), ascent = m.fontBoundingBoxAscent || size * px * 0.9, descent = m.fontBoundingBoxDescent || size * px * 0.25
-    const edge = PAD + line / 2, advance = ctx.measureText(piece).width
-    const w = Math.ceil(advance + 2 * edge), h = Math.ceil(ascent + descent + 2 * edge)
+    // A digit takes the width of the widest digit, centred in it, which gives the fixed width of CSS tabular-nums
+    // (canvas 2D has no font-variant-numeric): a count that changes keeps its width, so a centred count does not move.
+    const edge = PAD + line / 2, own = ctx.measureText(piece).width, digit = /^[0-9]$/.test(piece)
+    const advance = digit ? Math.max(...[...'0123456789'].map(d => ctx.measureText(d).width)) : own
+    const w = Math.ceil(own + 2 * edge), h = Math.ceil(ascent + descent + 2 * edge)
     const paint = (c: CanvasRenderingContext2D, x: number, y: number, parts: ('halo' | 'fill')[]) => {
       c.font = font; c.textBaseline = 'alphabetic'
       for (const part of parts) {
@@ -63,7 +66,7 @@ const atlasOf = (need: [keyof typeof STYLES, string][], px: number, family: stri
       }
     }
     for (const part of whole ? ['whole'] as const : ['halo', 'fill'] as const) cells.push({
-      key: `${style} ${part} ${piece}`, w, h, left: -edge, top: -(edge + ascent), advance,
+      key: `${style} ${part} ${piece}`, w, h, left: -edge + (advance - own) / 2, top: -(edge + ascent), advance,
       draw: (c, x, y) => paint(c, x, y, part === 'whole' ? ['halo', 'fill'] : [part]),
     })
   }
