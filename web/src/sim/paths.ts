@@ -40,6 +40,8 @@ export type Routes = {
   path: (a: number, b: number, v: number) => Uint16Array | undefined
   fill: (pairs: Iterable<[number, number]>, variants?: number[]) => Generator<number> // yields the share done, 0 to 1
   clear: () => void
+  /** When set, called with each path that path() or fill() finds (not with one found before). */
+  onFound?: (path: Uint16Array) => void
 }
 
 /**
@@ -90,6 +92,8 @@ const routesOf = (hs: Hierarchy[]): Routes => {
     const before = v ? found.get(routeKey(a, b, v - 1)) : undefined
     if (p && before && same(p, before)) p = before
     found.set(routeKey(a, b, v), p)
+    // A variant equal to the one before is not a new path.
+    if (p && p !== before) routes.onFound?.(p)
     return p ?? undefined
   }
   const path = (a: number, b: number, v: number): Uint16Array | undefined => {
@@ -131,7 +135,8 @@ const routesOf = (hs: Hierarchy[]): Routes => {
       }
     }
   }
-  return { path, fill, clear: () => found.clear() }
+  const routes: Routes = { path, fill, clear: () => found.clear() }
+  return routes
 }
 
 /** Runs a generator to its end and gives its result, for a caller that does not spread the work over frames. */
