@@ -24,7 +24,7 @@ export type Frame = { now: number; view: View; clip: number[]; width: number; he
 export type Layer = { dirty: (f: Frame) => boolean; draw: (f: Frame) => void; dispose: () => void }
 
 /** The order of the layers, from the bottom. One list, so that a new layer finds its place among all the others. */
-export const LAYER = { fills: 0, borders: 1 } as const
+export const LAYER = { fills: 0, borders: 1, rails: 2, stations: 3 } as const
 
 type Entry = { order: number; layer: Layer }
 type MapCtx = { gl: WebGL2RenderingContext; add: (e: Entry) => () => void; reset: () => void }

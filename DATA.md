@@ -8,6 +8,7 @@ The app reads the files in `web/public/`. This file lists the source, the licens
 
 - **Open Government Data License, version 1.0** (政府資料開放授權條款－第1版, https://data.gov.tw/license). You can use, change, and share the data. You must keep the attribution statements below. The license is compatible with CC BY 4.0.
 - **Open Database License (ODbL) 1.0** (https://opendatacommons.org/licenses/odbl/). Data from OpenStreetMap. © OpenStreetMap contributors. Changed versions of these files are also under ODbL 1.0.
+- **CC0 1.0** (public domain dedication, https://creativecommons.org/publicdomain/zero/1.0/) for the station signs: the icons `train.svg`, `train_bullet.svg` and `airport.svg` of Temaki v5.13.0 (https://github.com/rapideditor/temaki), checked on 2026-10-28 in its `LICENSE.md`. The paths are copied into `web/src/ui/icons.ts`. CC0 asks for no attribution; this line keeps the source.
 - **MIT** for the `taiwan-atlas` package. Copyright (c) 2020 Daniel Kao. The full license text is in [web/public/licenses/taiwan-atlas-MIT.txt](web/public/licenses/taiwan-atlas-MIT.txt), so the built site serves it next to the data.
 
 ## Files
