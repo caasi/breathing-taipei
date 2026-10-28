@@ -157,7 +157,7 @@ export function Traffic({ lines, proj, levels, fadeSeconds, running, shown }: Pr
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE)
       return t
     })
-    let sizes: [number, number][] = [], width = 0, height = 0
+    let sizes: [number, number][] = [], width = 0, height = 0, onto: WebGLFramebuffer | null = null
     for (const p of [down, up, glow]) { gl.useProgram(p); gl.uniform1i(gl.getUniformLocation(p, 'src'), 4) }
     gl.useProgram(show)
     ;['before', 'after', 'cover', 'edges'].forEach((name, unit) => gl.uniform1i(showAt(name), unit))
@@ -195,7 +195,7 @@ export function Traffic({ lines, proj, levels, fadeSeconds, running, shown }: Pr
     /** Draws one pass over the screen into glow level i (or the map when i is -1), reading level `from`. */
     const pass = (p: WebGLProgram, i: number, from?: number) => {
       gl.useProgram(p)
-      if (i < 0) { gl.bindFramebuffer(gl.FRAMEBUFFER, null); gl.viewport(0, 0, width, height) }
+      if (i < 0) { gl.bindFramebuffer(gl.FRAMEBUFFER, onto); gl.viewport(0, 0, width, height) }
       else { gl.bindFramebuffer(gl.FRAMEBUFFER, frame); gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, bloom[i], 0); gl.viewport(0, 0, ...sizes[i]) }
       if (from !== undefined) {
         gl.activeTexture(gl.TEXTURE4); gl.bindTexture(gl.TEXTURE_2D, bloom[from])
@@ -224,7 +224,7 @@ export function Traffic({ lines, proj, levels, fadeSeconds, running, shown }: Pr
         const now = f.now
         // A hidden layer draws nothing, and draws again in full when it shows.
         if (!shown$.current) { glowed = ''; return }
-        width = f.width; height = f.height
+        width = f.width; height = f.height; onto = f.target
         bind()
         const key = keyOf(f), t = target.current
         if (key !== network) { drawNetwork(f); network = key; glowed = '' }
