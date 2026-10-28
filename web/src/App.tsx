@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { Metrics } from './ui/Metrics.tsx'
+import { GLMap } from './ui/GLMap.tsx'
 import { HeatMap, Land, Outline, SEA, projectionFor, taipeiIn, type Transit } from './ui/HeatMap.tsx'
 import { Travellers, MODE_COLOURS, addBatches, type CellTraffic, type Track } from './ui/Travellers.tsx'
 import type { RoadLines } from './ui/Traffic.tsx'
@@ -378,10 +379,13 @@ export function App() {
       {/* The blurred outline is under the map until the map has faded in fully, once, when the first run starts. */}
       {!faded && towns && projection && <Outline towns={towns} proj={projection} view={view} pop={pop} />}
       <div className="reveal" style={{ position: 'absolute', inset: 0, ...REVEAL[revealed] }}>
+      {/* Mounted before the data, and never again: the map draws its WebGL layers in this one canvas. */}
+      <GLMap view={view}>
       {ready && <>
         <HeatMap towns={towns} villages={villages} level={byDistrict ? 'district' : 'village'} nodes={byDistrict?.names ?? nodes} counts={shownCounts!} perAgent={PER_AGENT} proj={projection} transit={transit} show={layers} rate={rate} roads={roads} traffic={traffic} speed={paused ? 0 : speed * HOURS_AT_1X} view={view} />
         {dots && dotTrips && <Travellers tracks={dotRun!.tracks} trips={dotTrips} clock={clock} byMode={byMode} traffic={cellTraffic} view={view} />}
       </>}
+      </GLMap>
       </div>
       {/* Always there, so a screen reader reads the change. */}
       {/* In the bottom right of the map, left of the panels on a desktop. It shows from the first paint until the
