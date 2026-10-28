@@ -4,23 +4,35 @@ This file lists the changes that a user of the site can see, for each version. T
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-10-29
+
 ### Added
 
-- The setting 區名與人數 hides the district names and their counts, to show the map with no text over the districts.
-- The setting 車站與機場 hides the badges and names of the stations and the airport. The box 機場 is gone: the airport follows 車站與機場.
-- While the road paths are found, sparks run along a sample of them on the map. The map is darker and blurred under them, and becomes clear as the paths are found. With reduced motion, the map loads with no sparks.
+- The setting 區名與人數 hides the district names and their counts, to show the map with no text over the districts (#47).
+- The setting 車站與機場 hides the badges and names of the stations and the airport (#47).
+- While the road paths are found, sparks run along a sample of them on the map. With reduced motion, the map loads with no sparks (#48).
 
 ### Changed
 
-- The settings of the map are in two rows: 路網 for the lines and the traffic, and 標示 for the stations and the district names.
-- The digits of a count have one width, so a count under a district name no longer moves when a digit changes.
+- The settings of the map are in two rows: 路網 for the lines and the traffic, and 標示 for the stations and the district names (#47).
+- The digits of a count have one width, so a count under a district name no longer moves when a digit changes (#47).
 - The map is one WebGL canvas, and the text, the stations, the roads and the dots are drawn in it (#34).
 - A station is a square badge with round corners and the sign of its kind: a train, a high speed train or a plane, in the colour of the kind (高鐵 orange, 台鐵 grey, the airport white). A station of two kinds (臺北, 南港) stacks its badges as cards. A badge is never smaller than 9 CSS pixels (#41).
 - The airport name no longer starts with ✈ (#41).
 - The station names are over the roads (#42).
-- Before the first frame of a run, the map itself shows, blurred and faint: the land, the borders, the lines, the stations and the names, with the registered residents as the counts. Before, a blurred outline of the districts showed (#45).
-- While the run waits for the road paths, the map stays blurred, and becomes clear when the run starts. Before, it faded in halfway (#45).
-- The dots are under the names. Where many dots meet, the map under them is a little brighter, because the dots add their colour onto the map (#34).
+- Before the run starts, the map itself shows, darker and blurred: the land, the borders, the lines, the stations and the names, with the registered residents as the counts until the first frame. It becomes less blurred as the road paths are found, and clear when the run starts. Before, a blurred outline of the districts showed, and the map faded in halfway while the paths were found (#45, #48).
+- The dots are under the names. Where many dots meet, the map under them is a little brighter, because the dots add their colour onto the map (#46).
+- The dots move smoothly between pixels. Before, they stepped by whole pixels (#46).
+- A screen reader can no longer read the district names, their counts and the station names: they are drawn in the WebGL canvas, and the page has no text alternative yet (#43). KNOWN-ISSUES.md has the limit.
+
+### Removed
+
+- The box 機場: the airport follows 車站與機場 (#47).
+
+### Fixed
+
+- When a hidden tab comes back, the dashes of the traffic no longer jump forward (#42).
+- While the run waits for its road paths, the dashes of the traffic stand still (#45).
 
 ## [0.2.0] - 2026-10-27
 
@@ -144,7 +156,8 @@ The first public version.
 - A placeholder policy panel. Its settings do not change the simulation yet.
 - Publishing to GitHub Pages by a workflow on each push to `main`.
 
-[Unreleased]: https://github.com/caasi/breathing-taipei/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/caasi/breathing-taipei/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/caasi/breathing-taipei/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/caasi/breathing-taipei/compare/v0.1.5...v0.2.0
 [0.1.5]: https://github.com/caasi/breathing-taipei/compare/v0.1.4...v0.1.5
 [0.1.4]: https://github.com/caasi/breathing-taipei/compare/v0.1.3...v0.1.4
