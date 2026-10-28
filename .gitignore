@@ -6,3 +6,7 @@ data/
 __pycache__/
 # Made by `pnpm routes` (scripts/routes.ts) before dev and build.
 web/public/road-routes.bin
+# Work folders of agents: screenshots for a comparison, and the Playwright MCP output. Not kept in git; clear them when
+# they grow large (screenshots/ held 87 files, 29 MB, on 2026-10-28).
+screenshots/
+.playwright-mcp/
