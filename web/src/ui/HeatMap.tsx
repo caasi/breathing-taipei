@@ -3,8 +3,8 @@ import { geoArea, geoMercator, geoPath, type GeoProjection } from 'd3-geo'
 import { feature, mesh } from 'topojson-client'
 import type { FeatureCollection, Geometry } from 'geojson'
 import { Fills } from './Fills.tsx'
+import { Borders } from './Borders.tsx'
 import { Traffic, type RoadLines } from './Traffic.tsx'
-import { PLACE } from './Dashboard.tsx'
 import { MAP_SIZE, svgTransform, type Rect, type View } from './view.ts'
 
 const NO_TRAFFIC = new Uint8Array(0)
@@ -78,20 +78,19 @@ export function HeatMap({ towns, villages, level, nodes, counts, perAgent, proj,
   // hour a second is the slowest speed (1x); a pause (0) keeps the fade of 1x.
   const fadeSeconds = 0.5 / Math.max(0.5, speed)
   // Geometry is fixed per level; only the fills and the label counts change each frame.
-  // The cells do not depend on transit, so a late transit.json does not rebuild the WebGL fills.
+  // The cells and the districts do not depend on transit, so a late transit.json does not rebuild a WebGL layer.
   const cells = useMemo(() => {
-    const path = geoPath(proj)
     const fs = level === 'village' ? features(villages, 'villages') : cityTowns(towns)
     return fs.map(f => ({
-      d: path(f) ?? '', geometry: f.geometry, km2: geoArea(f) * EARTH_KM2, taipei: f.properties.COUNTYNAME === '台北市',
+      geometry: f.geometry, km2: geoArea(f) * EARTH_KM2, taipei: f.properties.COUNTYNAME === '台北市',
       town: f.properties.COUNTYNAME + f.properties.TOWNNAME,
       node: nodes.indexOf(level === 'village' ? f.properties.VILLCODE : f.properties.COUNTYNAME + f.properties.TOWNNAME),
     }))
   }, [towns, villages, level, nodes, proj])
+  const districts = useMemo(() => cityTowns(towns).map(f => ({ geometry: f.geometry, taipei: f.properties.COUNTYNAME === '台北市' })), [towns])
   const geo = useMemo(() => {
     const path = geoPath(proj)
     const allTowns = cityTowns(towns)
-    const borders = allTowns.map(f => ({ d: path(f) ?? '', taipei: f.properties.COUNTYNAME === '台北市' }))
     const labels = allTowns.filter(f => f.properties.COUNTYNAME === '台北市').map(f => ({ xy: path.centroid(f), name: f.properties.TOWNNAME, town: f.properties.COUNTYNAME + f.properties.TOWNNAME }))
     const lines = transit?.lines.map(l => ({ ...l, d: path({ type: 'LineString', coordinates: l.coords }) ?? '' })) ?? []
     // A railway and a high speed rail station in one building (臺北, 南港) are one marker with both kinds:
@@ -102,15 +101,11 @@ export function HeatMap({ towns, villages, level, nodes, counts, perAgent, proj,
       if (near) near.kinds.push(p.kind)
       else points.push({ kinds: [p.kind], name: p.name, xy })
     }
-    return { cells, borders, labels, lines, points }
+    return { cells, labels, lines, points }
   }, [cells, towns, proj, transit])
 
-  // The borders take the blue of the place names in the events (Dashboard.tsx), and village edges are dashed, so they
-  // stay apart from the roads (white to red, Traffic.tsx).
-  // Cell edges, borders, lines and stations never change during a run, so they are one SVG whose paths are built once.
+  // Lines and stations never change during a run, so they are one SVG whose paths are built once.
   const fixed = useMemo(() => <>
-      {geo.cells.map((c, k) => <path key={'c' + k} d={c.d} fill="none" stroke={PLACE.village} strokeOpacity={0.15} strokeWidth={0.4} strokeDasharray="1.2 1" />)}
-      {geo.borders.map((b, k) => <path key={'b' + k} d={b.d} fill="none" stroke={PLACE.town} strokeOpacity={0.3} strokeWidth={b.taipei ? 1.8 : 1} />)}
       {geo.lines.filter(l => show.has(l.kind)).map((l, k) =>
         <path key={'l' + k} d={l.d} fill="none" stroke={l.colour} strokeWidth={l.kind === 'mrt' ? 1.8 : 1.5}
           strokeDasharray={l.kind === 'tra' ? '6 3' : undefined} opacity={LINE_OPACITY} />)}
@@ -133,6 +128,7 @@ export function HeatMap({ towns, villages, level, nodes, counts, perAgent, proj,
   return (
     <div style={{ position: 'absolute', inset: 0 }}>
       <Fills cells={geo.cells} proj={proj} colours={colours} fadeSeconds={fadeSeconds} />
+      <Borders cells={geo.cells} districts={districts} proj={proj} />
       {/* The view is outside the memo, so a zoom or pan step changes one attribute and leaves the paths alone. */}
       <svg style={SVG}><g transform={svgTransform(view)}>{fixed}</g></svg>
       {/* Mounted once and then hidden, not unmounted: a WebGL canvas must not be mounted again (AGENTS.md). Until the
