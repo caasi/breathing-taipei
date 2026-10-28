@@ -21,7 +21,7 @@ void main() { gl_Position = vec4(gl_VertexID == 1 ? 3.0 : -1.0, gl_VertexID == 2
 const FS = `#version 300 es
 precision highp float;
 uniform sampler2D src; uniform vec2 size; uniform vec2 step; uniform float lod; uniform float sigma; uniform int taps;
-uniform float opacity; out vec4 o;
+uniform float light; out vec4 o;
 void main() {
   vec2 uv = gl_FragCoord.xy / size;
   vec4 sum = vec4(0); float total = 0.0;
@@ -31,16 +31,17 @@ void main() {
     total += w;
     sum += w * textureLod(src, p, lod);
   }
-  o = sum / total * opacity;
+  o = sum / total;
+  o.rgb *= light;
 }`
 
 /**
  * Draws the texture `src` (premultiplied, `width` x `height`) onto the framebuffer `target`, blurred by
- * `sigma` device pixels and times `opacity`, with the blend of GLMap. It sets the filter of `src` and makes its mip levels.
+ * `sigma` device pixels, its colour times `light`, with the blend of GLMap, or added with `add`. It sets the filter of `src` and makes its mip levels.
  */
 export const gaussian = (gl: WebGL2RenderingContext) => {
   const prog = program(gl, VS, FS)
-  const at = Object.fromEntries(['src', 'size', 'step', 'lod', 'sigma', 'taps', 'opacity'].map(n => [n, gl.getUniformLocation(prog, n)]))
+  const at = Object.fromEntries(['src', 'size', 'step', 'lod', 'sigma', 'taps', 'light'].map(n => [n, gl.getUniformLocation(prog, n)]))
   const vao = gl.createVertexArray()
   // The first direction goes into `half`, at the size of the mip level that it reads.
   const half = gl.createTexture(), frame = gl.createFramebuffer()
@@ -49,7 +50,7 @@ export const gaussian = (gl: WebGL2RenderingContext) => {
     gl.texParameteri(gl.TEXTURE_2D, k, v)
   let halfSize = ''
   return {
-    run: (src: WebGLTexture, width: number, height: number, sigma: number, opacity: number, target: WebGLFramebuffer | null) => {
+    run: (src: WebGLTexture, width: number, height: number, sigma: number, light: number, target: WebGLFramebuffer | null, add = false) => {
       const { lod, scale, s, taps } = planOf(sigma)
       const w = Math.max(1, Math.floor(width / scale)), h = Math.max(1, Math.floor(height / scale))
       gl.useProgram(prog); gl.bindVertexArray(vao); gl.activeTexture(gl.TEXTURE0)
@@ -64,12 +65,14 @@ export const gaussian = (gl: WebGL2RenderingContext) => {
       gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, half, 0)
       gl.viewport(0, 0, w, h); gl.disable(gl.BLEND)
       gl.bindTexture(gl.TEXTURE_2D, src)
-      gl.uniform2f(at.size, w, h); gl.uniform2f(at.step, 1 / w, 0); gl.uniform1f(at.lod, lod); gl.uniform1f(at.opacity, 1)
+      gl.uniform2f(at.size, w, h); gl.uniform2f(at.step, 1 / w, 0); gl.uniform1f(at.lod, lod); gl.uniform1f(at.light, 1)
       gl.drawArrays(gl.TRIANGLES, 0, 3)
       gl.bindFramebuffer(gl.FRAMEBUFFER, target)
-      gl.viewport(0, 0, width, height); gl.enable(gl.BLEND); gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA)
+      // `add` adds the light of src and does not darken what is under it (the sparks); the alpha still adds up.
+      gl.viewport(0, 0, width, height); gl.enable(gl.BLEND)
+      if (add) gl.blendFunc(gl.ONE, gl.ONE); else gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA)
       gl.bindTexture(gl.TEXTURE_2D, half)
-      gl.uniform2f(at.size, width, height); gl.uniform2f(at.step, 0, 1 / h); gl.uniform1f(at.lod, 0); gl.uniform1f(at.opacity, opacity)
+      gl.uniform2f(at.size, width, height); gl.uniform2f(at.step, 0, 1 / h); gl.uniform1f(at.lod, 0); gl.uniform1f(at.light, light)
       gl.drawArrays(gl.TRIANGLES, 0, 3)
     },
     /** Frees the half texture until the next run. */
