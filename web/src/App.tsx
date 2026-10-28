@@ -112,6 +112,8 @@ export function App() {
   const [dots, setDots] = useStored('dots', true, bool, fromBool)
   const [byMode, setByMode] = useStored('mode', false, bool, fromBool)
   const [metrics, setMetrics] = useStored('metrics', false, bool, fromBool)
+  // The district names and counts; off shows the whole map with no text over the districts.
+  const [districtLabels, setDistrictLabels] = useStored('labels', true, bool, fromBool)
   const [colourBy, setColourBy] = useStored<'density' | 'rate'>('color', 'rate', oneOf(['density', 'rate'] as const))
   const [history, setHistory] = useState<Entry[]>([])
   const [personal, setPersonal] = useState<SimEvent[]>([]) // the personal events from the worker; the newest KEEP_EVENTS stay
@@ -329,7 +331,8 @@ export function App() {
       style={{ marginRight: 4, fontWeight: c === colourBy ? 'bold' : 'normal' }}>{c === 'density' ? '人口密度' : '人口變化率'}</button>)}
       {colourBy === 'rate' && <span style={{ marginLeft: 8 }}>變化區間：{WINDOWS.map(v => <button key={v} onClick={() => setRateWindow(v)}
         style={{ marginRight: 4, fontWeight: v === rateWindow ? 'bold' : 'normal' }}>{v} 分</button>)}</span>}</p>
-    <p>{LAYER_BOXES.map(([k, label]) => <label key={k} style={{ marginRight: 12 }}><input type="checkbox" checked={layers.has(k)} onChange={() => (k === 'traffic' ? setTrafficOn(on => !on) : toggle(k))} />{label}</label>)}</p>
+    <p>{LAYER_BOXES.map(([k, label]) => <label key={k} style={{ marginRight: 12 }}><input type="checkbox" checked={layers.has(k)} onChange={() => (k === 'traffic' ? setTrafficOn(on => !on) : toggle(k))} />{label}</label>)}
+      <label><input type="checkbox" checked={districtLabels} onChange={() => setDistrictLabels(on => !on)} />區名與人數</label></p>
     <h2 style={H2}>模擬</h2>
     <div style={{ fontVariantNumeric: 'tabular-nums' }}>
     <p>台北市 {people(inTaipei)} 人，新北市 {people(n => !inTaipei(n))} 人，路上 {padded(road.reduce((a, b) => a + b, 0) * PER_AGENT, 6)} 人，外地 {padded((s?.away ?? 0) * PER_AGENT, 6)} 人</p>
@@ -373,7 +376,7 @@ export function App() {
       {/* Mounted before the data, and never again: the map draws its WebGL layers in this one canvas. */}
       <GLMap view={view} reveal={REVEAL[revealed]}>
       {towns && projection && <Land towns={towns} proj={projection} />}
-      {towns && villages && projection && <HeatMap towns={towns} villages={villages} level={byDistrict ? 'district' : ready ? 'village' : level} nodes={byDistrict?.names ?? nodes} counts={ready ? shownCounts : undefined} pop={pop} perAgent={PER_AGENT} proj={projection} transit={transit} show={layers} rate={rate} roads={roads} traffic={traffic} speed={paused || waiting !== undefined ? 0 : speed * HOURS_AT_1X} view={view} />}
+      {towns && villages && projection && <HeatMap towns={towns} villages={villages} level={byDistrict ? 'district' : ready ? 'village' : level} nodes={byDistrict?.names ?? nodes} counts={ready ? shownCounts : undefined} pop={pop} perAgent={PER_AGENT} proj={projection} transit={transit} show={layers} districtLabels={districtLabels} rate={rate} roads={roads} traffic={traffic} speed={paused || waiting !== undefined ? 0 : speed * HOURS_AT_1X} view={view} />}
       {ready && dots && dotTrips && <Travellers tracks={dotRun!.tracks} trips={dotTrips} clock={clock} byMode={byMode} traffic={cellTraffic} />}
       </GLMap>
       {/* Always there, so a screen reader reads the change. */}
