@@ -374,12 +374,7 @@ export function App() {
       <GLMap view={view} reveal={REVEAL[revealed]}>
       {towns && projection && <Land towns={towns} proj={projection} />}
       {towns && villages && projection && <HeatMap towns={towns} villages={villages} level={byDistrict ? 'district' : ready ? 'village' : level} nodes={byDistrict?.names ?? nodes} counts={ready ? shownCounts : undefined} pop={pop} perAgent={PER_AGENT} proj={projection} transit={transit} show={layers} rate={rate} roads={roads} traffic={traffic} speed={paused || waiting !== undefined ? 0 : speed * HOURS_AT_1X} view={view} />}
-      {ready && <>
-        {/* The dots keep their own canvas until step 6 of #34, so they fade with CSS. */}
-        {dots && dotTrips && <div className="reveal" style={{ position: 'absolute', inset: 0, opacity: REVEAL[revealed].opacity, filter: REVEAL[revealed].blur ? `blur(${REVEAL[revealed].blur}px)` : 'none' }}>
-          <Travellers tracks={dotRun!.tracks} trips={dotTrips} clock={clock} byMode={byMode} traffic={cellTraffic} view={view} />
-        </div>}
-      </>}
+      {ready && dots && dotTrips && <Travellers tracks={dotRun!.tracks} trips={dotTrips} clock={clock} byMode={byMode} traffic={cellTraffic} />}
       </GLMap>
       {/* Always there, so a screen reader reads the change. */}
       {/* In the bottom right of the map, left of the panels on a desktop. It shows from the first paint until the

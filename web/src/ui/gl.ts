@@ -33,8 +33,8 @@ export function useWebGL2(ref: RefObject<HTMLCanvasElement>, options: WebGLConte
     canvas.addEventListener('webglcontextrestored', onRestored)
     return () => {
       canvas.removeEventListener('webglcontextlost', onLost); canvas.removeEventListener('webglcontextrestored', onRestored)
-      // Free the context at once: browsers keep about 16, and when there are more they take the oldest,
-      // which is the fills; a dots layer switched on and off many times would leave the map blank.
+      // Free the context at once: browsers keep about 16, and when there are more they take the oldest, and a canvas
+      // mounted and unmounted many times would leave the map blank.
       // A lost context holds nothing to free. The extension is fetched now, because the spec asks for
       // extensions to be fetched again after a restore.
       const gl = canvas.getContext('webgl2', options)
