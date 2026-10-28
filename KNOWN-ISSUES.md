@@ -37,6 +37,11 @@
 - **The evening is too free.** The trips home from work in 台北市 are 33.1% slower than with no jam, against 92% in the TomTom Traffic Index. VALIDATION.md gives this and the other comparisons with measured traffic.
 - **The commuters from other counties are missing**, also on the roads into the city: https://github.com/caasi/breathing-taipei/issues/21.
 
+## Limits of the page that are known
+
+- **A screen reader cannot read the map.** The colours of the cells, the roads, the rail lines and the dots show only on the screen. Today the district names and their counts are SVG text, so a screen reader can read them. https://github.com/caasi/breathing-taipei/issues/34 moves these labels into the WebGL canvas of the map (`web/src/ui/GLMap.tsx`). After that, a screen reader reads nothing of the map. The page has no text alternative yet, for example a hidden list of the districts and their counts.
+- **A live reload can leave the map blank.** A WebGL canvas of the map is mounted once (`web/src/ui/gl.ts`). When Vite fast refresh runs the setup of a canvas again, the canvas loses its context, and its layers stay blank until you reload the page. On 2026-10-28, an edit of `GLMap.tsx` left the cell fills blank, and an edit of `Fills.tsx` did not, because `Fills.tsx` is a layer and owns no canvas. On 2026-10-24, before `GLMap.tsx`, an edit of `Fills.tsx` lost the fills context and an edit of `HeatMap.tsx` lost none. `gl.ts`, `Traffic.tsx` and `Travellers.tsx` own a canvas or its setup in the same way (not measured).
+
 ## Sources that the project cites but did not read
 
 - **The 1964 *Traffic Assignment Manual* of the Bureau of Public Roads**, the usual source of the BPR values 0.15 and 4 (`web/src/sim/traffic.ts`). It was not found online. DATA.md ("Figures in the code") gives what the secondary sources say, and where they do not agree.
