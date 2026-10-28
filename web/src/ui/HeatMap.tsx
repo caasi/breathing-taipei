@@ -67,14 +67,15 @@ type Props = {
   // The people of each node by the run; before its first frame there is none, and the map draws no fills, and the
   // district counts are `pop`, the registered residents by town (villages2.json), which differ a little.
   counts?: Uint32Array; pop?: Map<string, number>
-  proj: GeoProjection; transit?: Transit; show: Set<string>
+  proj: GeoProjection; transit?: Transit; show: Set<string>; districtLabels: boolean
+  signs: Set<string> // the kinds of station whose badge and name show
   rate?: Float32Array // when given, colour by change per hour / residents instead of density
   speed: number // simulated hours per second
   roads?: RoadLines; traffic?: Uint8Array // the road network and its slow edges, over the lines and under the labels
   view: View
 }
 
-export function HeatMap({ towns, villages, level, nodes, counts, pop, perAgent, proj, transit, show, rate, speed, view, roads, traffic }: Props) {
+export function HeatMap({ towns, villages, level, nodes, counts, pop, perAgent, proj, transit, show, signs, districtLabels, rate, speed, view, roads, traffic }: Props) {
   // The fade runs in real time; scale it so it always spans about 30 simulated minutes, or it shows a past hour. Half an
   // hour a second is the slowest speed (1x); a pause (0) keeps the fade of 1x.
   const fadeSeconds = 0.5 / Math.max(0.5, speed)
@@ -115,10 +116,10 @@ export function HeatMap({ towns, villages, level, nodes, counts, pop, perAgent, 
   const scale = stationScale(view.k)
   // The names keep the opacity of the SVG markers: they are for orientation, so the eye follows the area colours. A
   // name follows the last sign of its station (Stations.tsx).
-  const names = useMemo(() => points.map(p => [p, signsOf(p, show).length] as const).filter(([, n]) => n > 0).map(([p, n]): Text => ({
+  const names = useMemo(() => points.map(p => [p, signsOf(p, signs).length] as const).filter(([, n]) => n > 0).map(([p, n]): Text => ({
     xy: [p.xy[0] + (R + 3 + (n - 1) * SPACING) * scale, p.xy[1] + (-R - 1 + (n - 1) * SPACING) * scale], dy: 0,
     text: p.name, style: 'station', anchor: 'start', alpha: 0.6,
-  })), [points, show, scale])
+  })), [points, signs, scale])
 
   const byTown = new Map<string, number>()
   // A cell with no node (-1) counts as empty.
@@ -134,13 +135,13 @@ export function HeatMap({ towns, villages, level, nodes, counts, pop, perAgent, 
       {colours && <Fills cells={geo.cells} proj={proj} colours={colours} fadeSeconds={fadeSeconds} />}
       <Borders cells={shapes} districts={districts} proj={proj} />
       {transit && <Rails lines={transit.lines} proj={proj} show={show} />}
-      <Stations points={points} show={show} />
+      <Stations points={points} show={signs} />
       {/* Until the first take of a run, it draws the network with no traffic, and before the first frame its dashes stand
           still, so the blurred map is not drawn again in each frame. */}
       {roads && <Traffic lines={roads} proj={proj} levels={traffic ?? NO_TRAFFIC} fadeSeconds={fadeSeconds} running={speed > 0 && !!counts} shown={show.has('traffic')} />}
       {/* The names of the stations, then over them the names of the districts with their counts, as two lines 14 units
           apart: the SVG had the district labels over the station names. */}
-      <Labels texts={[...names, ...geo.labels.flatMap((l): Text[] => [
+      <Labels texts={[...names, ...(districtLabels ? geo.labels : []).flatMap((l): Text[] => [
         { xy: l.xy, dy: 0, text: l.name, style: 'district', anchor: 'middle', alpha: 1 },
         ...people ? [{ xy: l.xy, dy: 14, text: (people.get(l.town) ?? 0).toLocaleString(), style: 'district', anchor: 'middle', alpha: 1 } as const] : [],
       ])]} />

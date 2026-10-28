@@ -67,9 +67,13 @@ export const onSteps = (min: number, max: number, step: number) => (s: string) =
 /**
  * A comma list of known names. Unknown names drop out; a list that names something but nothing
  * known is not valid. An empty list is a valid empty selection, so it survives a round trip.
+ * A retired name, one that the page had, is left out first, so a list of only retired names is
+ * an empty list, not an unknown one.
  */
-export const setOf = (options: readonly string[]) => (s: string) => {
+export const setOf = (options: readonly string[], retired: readonly string[] = []) => (s: string) => {
   if (s === '') return new Set<string>()
-  const set = new Set(s.split(',').filter(k => options.includes(k)))
+  const names = s.split(',').filter(k => !retired.includes(k))
+  if (!names.length) return new Set<string>()
+  const set = new Set(names.filter(k => options.includes(k)))
   return set.size ? set : undefined
 }

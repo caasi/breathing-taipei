@@ -4,8 +4,15 @@ This file lists the changes that a user of the site can see, for each version. T
 
 ## [Unreleased]
 
+### Added
+
+- The setting 區名與人數 hides the district names and their counts, to show the map with no text over the districts.
+- The setting 車站與機場 hides the badges and names of the stations and the airport. The box 機場 is gone: the airport follows 車站與機場.
+
 ### Changed
 
+- The settings of the map are in two rows: 路網 for the lines and the traffic, and 標示 for the stations and the district names.
+- The digits of a count have one width, so a count under a district name no longer moves when a digit changes.
 - The map is one WebGL canvas, and the text, the stations, the roads and the dots are drawn in it (#34).
 - A station is a square badge with round corners and the sign of its kind: a train, a high speed train or a plane, in the colour of the kind (高鐵 orange, 台鐵 grey, the airport white). A station of two kinds (臺北, 南港) stacks its badges as cards. A badge is never smaller than 9 CSS pixels (#41).
 - The airport name no longer starts with ✈ (#41).

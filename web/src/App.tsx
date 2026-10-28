@@ -24,7 +24,9 @@ const SPEEDS = [1, 2, 4, 8]
 const HOURS_AT_1X = 0.5
 const EVERY = [2, 5, 10, 20, 50]
 // 國道 and 快速道路 are part of the traffic layer, which draws them with the streets.
-const LAYERS: [string, string][] = [['mrt', '捷運'], ['lrt', '輕軌'], ['tra', '台鐵'], ['hsr', '高鐵'], ['airport', '機場']]
+// The airport has no line: its badge is one of the stations, under the setting `stations`. A stored set that still has
+// `airport` is read without it, and a set of only `airport` is read as no line.
+const LAYERS: [string, string][] = [['mrt', '捷運'], ['lrt', '輕軌'], ['tra', '台鐵'], ['hsr', '高鐵']]
 // The traffic has a key of its own, not a place in `layers`: a browser that stored the layers before it existed would
 // keep it off.
 const LAYER_BOXES: [string, string][] = [...LAYERS, ['traffic', '路況']]
@@ -112,6 +114,10 @@ export function App() {
   const [dots, setDots] = useStored('dots', true, bool, fromBool)
   const [byMode, setByMode] = useStored('mode', false, bool, fromBool)
   const [metrics, setMetrics] = useStored('metrics', false, bool, fromBool)
+  // The district names and counts; off shows the whole map with no text over the districts.
+  const [districtLabels, setDistrictLabels] = useStored('labels', true, bool, fromBool)
+  // The badges and names of the stations and the airport; a badge also needs its line shown.
+  const [stations, setStations] = useStored('stations', true, bool, fromBool)
   const [colourBy, setColourBy] = useStored<'density' | 'rate'>('color', 'rate', oneOf(['density', 'rate'] as const))
   const [history, setHistory] = useState<Entry[]>([])
   const [personal, setPersonal] = useState<SimEvent[]>([]) // the personal events from the worker; the newest KEEP_EVENTS stay
@@ -121,12 +127,13 @@ export function App() {
   const [open, setOpen] = useState<'info' | 'settings' | 'policies'>()
   const [runError, setRunError] = useState<string>()
   const [show, setShow] = useStored('layers', new Set(LAYERS.map(l => l[0])),
-    setOf(LAYERS.map(l => l[0])), v => [...v].join(','))
+    setOf(LAYERS.map(l => l[0]), ['airport']), v => [...v].join(','))
   const [trafficOn, setTrafficOn] = useStored('traffic', true, bool, fromBool)
   // The worker can post a frame with levels after the layer is turned off; the handler of its messages reads this.
   const trafficOnRef = useRef(trafficOn)
   trafficOnRef.current = trafficOn
   const layers = useMemo(() => (trafficOn ? new Set([...show, 'traffic']) : show), [show, trafficOn])
+  const signs = useMemo(() => new Set(stations ? [...show, 'airport'] : []), [show, stations])
   const worker = useRef<Worker>()
   const started = useRef(0), shown = useRef(0) // the latest start posted, and the start of the frames on the page
   // The start of a new run whose clock stands until the page is ready: state for the icon, a ref for the logic, so a
@@ -329,7 +336,9 @@ export function App() {
       style={{ marginRight: 4, fontWeight: c === colourBy ? 'bold' : 'normal' }}>{c === 'density' ? '人口密度' : '人口變化率'}</button>)}
       {colourBy === 'rate' && <span style={{ marginLeft: 8 }}>變化區間：{WINDOWS.map(v => <button key={v} onClick={() => setRateWindow(v)}
         style={{ marginRight: 4, fontWeight: v === rateWindow ? 'bold' : 'normal' }}>{v} 分</button>)}</span>}</p>
-    <p>{LAYER_BOXES.map(([k, label]) => <label key={k} style={{ marginRight: 12 }}><input type="checkbox" checked={layers.has(k)} onChange={() => (k === 'traffic' ? setTrafficOn(on => !on) : toggle(k))} />{label}</label>)}</p>
+    <p role="group" aria-label="路網">路網：{LAYER_BOXES.map(([k, label]) => <label key={k} style={{ marginLeft: 8 }}><input type="checkbox" checked={layers.has(k)} onChange={() => (k === 'traffic' ? setTrafficOn(on => !on) : toggle(k))} />{label}</label>)}</p>
+    <p role="group" aria-label="標示">標示：<label style={{ marginLeft: 8 }}><input type="checkbox" checked={stations} onChange={() => setStations(on => !on)} />車站與機場</label>
+      <label style={{ marginLeft: 8 }}><input type="checkbox" checked={districtLabels} onChange={() => setDistrictLabels(on => !on)} />區名與人數</label></p>
     <h2 style={H2}>模擬</h2>
     <div style={{ fontVariantNumeric: 'tabular-nums' }}>
     <p>台北市 {people(inTaipei)} 人，新北市 {people(n => !inTaipei(n))} 人，路上 {padded(road.reduce((a, b) => a + b, 0) * PER_AGENT, 6)} 人，外地 {padded((s?.away ?? 0) * PER_AGENT, 6)} 人</p>
@@ -373,7 +382,7 @@ export function App() {
       {/* Mounted before the data, and never again: the map draws its WebGL layers in this one canvas. */}
       <GLMap view={view} reveal={REVEAL[revealed]}>
       {towns && projection && <Land towns={towns} proj={projection} />}
-      {towns && villages && projection && <HeatMap towns={towns} villages={villages} level={byDistrict ? 'district' : ready ? 'village' : level} nodes={byDistrict?.names ?? nodes} counts={ready ? shownCounts : undefined} pop={pop} perAgent={PER_AGENT} proj={projection} transit={transit} show={layers} rate={rate} roads={roads} traffic={traffic} speed={paused || waiting !== undefined ? 0 : speed * HOURS_AT_1X} view={view} />}
+      {towns && villages && projection && <HeatMap towns={towns} villages={villages} level={byDistrict ? 'district' : ready ? 'village' : level} nodes={byDistrict?.names ?? nodes} counts={ready ? shownCounts : undefined} pop={pop} perAgent={PER_AGENT} proj={projection} transit={transit} show={layers} signs={signs} districtLabels={districtLabels} rate={rate} roads={roads} traffic={traffic} speed={paused || waiting !== undefined ? 0 : speed * HOURS_AT_1X} view={view} />}
       {ready && dots && dotTrips && <Travellers tracks={dotRun!.tracks} trips={dotTrips} clock={clock} byMode={byMode} traffic={cellTraffic} />}
       </GLMap>
       {/* Always there, so a screen reader reads the change. */}
