@@ -54,6 +54,35 @@ Other facts from the search:
 - The box filter of the dash in `Borders.tsx` (the share of a pixel that the dashes cover, from the integral of the square wave) was not found in these sources.
 - Not opened: Dan Bagnell, "Robust polyline rendering with WebGL", 2013; the three.js `LineMaterial` forum threads; the Skia analytic AA pages.
 
+## Showing many people moving on a map
+
+Collected on 2026-10-28 for issue #34, when the dots moved into the map (`web/src/ui/Travellers.tsx`). The user asked how other projects show the movement of many people. A subagent opened each page below. "Checked (summary)" means that the fetch tool gave a summary of the page, not the full text. A colour value is given only where it was read in docs or in source code.
+
+Moving marks:
+
+- deck.gl `TripsLayer`: the docs (https://deck.gl/docs/api-reference/geo-layers/trips-layer), checked (summary), and the source of the example (https://raw.githubusercontent.com/visgl/deck.gl/master/examples/website/trips/app.tsx), checked (summary). Each vehicle is a path with a trail that fades (`trailLength`, `fadeTrail` true by default). The example draws trails in `[253, 128, 93]` and `[23, 184, 190]` at opacity 0.3 on a dark basemap. The source does not say what the two colours mean. The trails overlap with plain alpha, not additive blending.
+- kepler.gl Trip layer (https://docs.kepler.gl/docs/user-guides/c-types-of-layers/k-trip.md), checked (summary). A path with a trail that fades, with the trail length in seconds, and the colour from a property of the feature.
+- Todd Schneider, the Citi Bike trips of 2015-09-16 (https://toddwschneider.com/posts/a-tale-of-twenty-two-million-citi-bikes-analyzing-the-nyc-bike-share-system/), checked (summary). One blue dot for each of 47,969 trips, with the stations as small orange dots. The trips that start and end at the same station are left out. A second map shows the popular routes as road segments, where the width and the brightness give the number of bikes.
+- Torque.js, CartoDB (https://github.com/CartoDB/torque), checked (summary). Points counted into time frames, with a trail made of the earlier frames drawn larger at opacity 0.05 and 0.02. The example uses `comp-op: "lighten"`, which is not additive.
+- Chris Whong, "NYC Taxis: A Day in the Life" (https://chriswhong.github.io/nyctaxi/), checked (summary). One taxi on a dark map, with its route. It does not show a crowd.
+- SimWrapper, the web viewer of MATSim (https://docs.simwrapper.app/docs/), checked (summary). Taxis of demand-responsive transport as squares, yellow when active. Its flow map of origins and destinations groups the flows by the zoom level.
+- Charlton and others, a portal of MATSim shared taxis, 2021 (https://svn.vsp.tu-berlin.de/repos/public-svn/publications/vspwp/2021/21-01/CharltonEtAl2021AvoevVisualizer_submitted_2020-12-30.pdf), checked (text of the PDF). Vehicles coloured by their occupancy, drawn with deck.gl, and filtered with crossfilter.
+- SUMO, `sumo-gui` (https://sumo.dlr.de/docs/sumo-gui.html), checked (summary). Each vehicle as a triangle or a car shape, coloured by a given colour or by speed, waiting time, time loss or emissions. Vehicles are drawn larger when the view zooms out, so that they stay visible.
+
+Density in place of marks:
+
+- deck.gl `HeatmapLayer` (https://deck.gl/docs/api-reference/aggregation-layers/heatmap-layer), checked (summary). A density surface from a Gaussian kernel on the GPU, in the ColorBrewer YlOrRd scale by default.
+- Todd Schneider, the taxi pickups and drop-offs of 2009 to 2015 (https://toddwschneider.com/posts/analyzing-1-1-billion-nyc-taxi-and-uber-trips-with-a-vengeance/), checked (summary). Tiny dots, where a brighter place has more activity.
+- Flow maps of origins and destinations: Flowmap.blue (https://www.flowmap.blue/), checked (summary), with colour schemes from CARTOColors. Phan and others, "Flow Map Layout", InfoVis 2005, and Holten and van Wijk, "Force-Directed Edge Bundling", 2009, were found only in search results and not opened.
+
+What this means for the dots:
+
+- Most projects draw a short trail that fades, not a bare dot. A trail is the cheapest addition to the dots.
+- No source above uses additive blending for the glow of busy places. The dots of this project add onto the map, as the author chose.
+- Most projects show fewer marks than there are people or trips: a sample, a filter or a count by time. The dots are a sample of the travellers.
+- When the marks are too many, projects change the mark: a density surface, the volume on each road segment, or bundled flow lines.
+- Not confirmed: how MATSim Via and OTFVis, A/B Street and Aimsun draw agents.
+
 ## Performance metrics
 
 The setting `metrics` shows one line at the top of the map, right of the clock when the row has room, else on the right below it: `SIM <ms>ms | FPS <fps> ↓<1% low>↑<1% top>` (`web/src/ui/Metrics.tsx`). The user chose the format after the performance monitor of the Steam overlay.

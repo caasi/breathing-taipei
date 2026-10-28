@@ -20,7 +20,8 @@ export type Frame = { now: number; view: View; clip: number[]; width: number; he
  * map clears it once, and a clear in a layer erases the layers under it.
  * A layer over another one writes premultiplied colour, and enables blend with the function of the baseline. That is
  * how the browser composited each WebGL canvas over the one under it, so a layer that had its own canvas keeps its look
- * only with this blend. The context has antialias on, which a layer that had `antialias: false` did not have: compare a screenshot
+ * only with this blend. A layer can choose another blend that keeps the colour premultiplied: the dots add onto the map,
+ * as the author chose. The context has antialias on, which a layer that had `antialias: false` did not have: compare a screenshot
  * before and after the move.
  * `dispose` can run twice: when the layer fails, and again when its component cleans up. Deleting a GL object twice does
  * nothing, so a dispose that only deletes is safe.
@@ -28,14 +29,14 @@ export type Frame = { now: number; view: View; clip: number[]; width: number; he
 export type Layer = { dirty: (f: Frame) => boolean; draw: (f: Frame) => void; dispose: () => void }
 
 /** The order of the layers, from the bottom. One list, so that a new layer finds its place among all the others. */
-export const LAYER = { land: 0, fills: 1, borders: 2, rails: 3, stations: 4, traffic: 5, labels: 6 } as const
+export const LAYER = { land: 0, fills: 1, borders: 2, rails: 3, stations: 4, traffic: 5, dots: 6, labels: 7 } as const
 
 /** How far the map has faded in: its opacity, and its blur in CSS pixels, as CSS `filter: blur()`. */
 export type Reveal = { opacity: number; blur: number }
 const CLEAR: Reveal = { opacity: 1, blur: 0 }
 // The time of a change of `reveal`, as the CSS transition of the map had; none with reduced motion.
 const REVEAL_MS = 600
-/** CSS `ease`, cubic-bezier(0.25, 0.1, 0.25, 1), the curve of the transition before, which the dots still fade with. */
+/** CSS `ease`, cubic-bezier(0.25, 0.1, 0.25, 1), the curve of the CSS transition that the map had before. */
 export const ease = (x: number) => {
   // 0 and 1 exactly, so that a fade ends on its aim and the map draws straight on the canvas again.
   if (x <= 0) return 0
