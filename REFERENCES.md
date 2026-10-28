@@ -27,6 +27,33 @@ Other facts from the search:
 - Anti-aliased lines from quads with a signed normal: Konstantin Käfer, "Drawing Antialiased Lines with OpenGL", Mapbox (https://blog.mapbox.com/drawing-antialiased-lines-with-opengl-8766f34192dc), not checked (the page returned 403). This is the method of `Traffic.tsx`.
 - No primary source was found for how the Google Maps traffic layer or the Cities: Skylines traffic overlay is drawn.
 
+## Drawing lines in WebGL
+
+Collected on 2026-10-28 for issue #34, when the borders moved into WebGL (`strips()` in `web/src/ui/lines.ts`). The user gave the first two sources and asked for a search of common methods. For the pages marked "checked (summary)", the agent opened the page, but the fetch tool gave a summary, not the full text.
+
+Used already:
+
+- Coverage from a geometry that is 1 pixel wider than the line on each side: the fragment shader gets the signed distance from the line and computes the share of the pixel that the line covers. "How 2 draw lines in WebGL that look like canvas 2d", Ivan, Crazy Panda (PixiJS), Khronos, PDF created 2021-10-13 (https://www.khronos.org/assets/uploads/developers/presentations/Crazy_Panda_How_to_draw_lines_in_WebGL.pdf), checked. The slides call it "HHAA". `coverOf` in `lines.ts` is the coverage of one edge pair (the slides' `pixelLine`); the slides also give the coverage of a miter as `a2*b2 - a1*b1`, which `lines.ts` does not use, because `strips()` builds the miter in the geometry.
+- Miter joins in one strip, with the miter length `width / dot(miter, normal)`: Matt Stobbs, "Drawing Lines with WebGL", Scott Logic, 2019-11-18 (https://blog.scottlogic.com/2019/11/18/drawing-lines-with-webgl.html), checked. Above a miter length of 10 it cuts the corner, with 4 vertices for each point.
+- A bevel when the miter is longer than the limit: Crazy Panda (above), MapLibre GL JS (default `line-miter-limit` 2, style spec v8), deck.gl PathLayer (default `miterLimit` 4). SVG also bevels above its `stroke-miterlimit` (default 4, from memory, not checked); `strips()` uses 4.
+
+Not used yet:
+
+1. Split a line into parts that do not overlap (inner segments, end segments, joins, caps), so that a line with alpha is not darker where parts meet. Rye Terrell, "Instanced Line Rendering Part II: Alpha blending", 2021-09-30 (https://wwwtyro.net/2021/10/01/instanced-lines-part-2.html), checked (summary). Part I, 2019 (https://wwwtyro.net/2019/11/18/instanced-lines.html), checked (summary): one instanced quad for each segment, and joins as separate instances (round: a fan of 16 slices; miter: 6 vertices; bevel: 3). Part II names two ways to one draw call: merge the join geometry into the segments, or use the stencil buffer against the overlap of round joins and round caps, with a cost in performance.
+2. Dashes from a dash texture: MapLibre GL JS keeps each dash pattern as a 1-channel distance field in a texture atlas. The x coordinate is the distance along the line scaled by the length of the dash pattern (`a_linesofar * u_patternscale_a_x / floorwidth`; what `dasharray.w` holds was not checked), and the alpha is a `smoothstep` around 0.5. The units of `line-dasharray` are line widths. At a corner sharper than 75 degrees, MapLibre adds vertices 15 px from the corner, so that the dashes do not tilt. Shaders `line_sdf.vertex.glsl` and `line_sdf.fragment.glsl` (https://github.com/maplibre/maplibre-gl-js/tree/main/src/shaders/glsl), checked (raw files); `line_bucket.ts` (`COS_HALF_SHARP_CORNER`, `SHARP_CORNER_OFFSET = 15`), checked (raw file).
+3. Dashes that stay even across a corner: each instance carries the distance at its start and at the starts of its neighbours, and at a corner the fragment shader takes the union of the dashes of the two segments. Yuqi Pan, "Lesson 12 - Draw polyline", An infinite canvas tutorial (https://infinite-canvas-tutorial.pages.dev/guide/lesson-012), checked (summary).
+4. A colour for each segment from data: MapLibre gives each feature its paint values as vertex attributes (from the `#pragma` lines of the shaders; the code that fills them was not read); `line-gradient` samples a ramp by the share of the line already drawn, and it needs `lineMetrics` on a GeoJSON source. deck.gl takes one colour for each vertex when the colours come as a binary attribute; `getColor` gives one colour for each path. Crazy Panda keeps the style in a data texture, with an ID in the attribute. This is for the load of each rail segment (issue #24).
+5. Dashes in deck.gl `PathStyleExtension` (https://deck.gl/docs/api-reference/extensions/path-style-extension), checked (summary): `dashMode` `segment` starts the pattern again at each vertex; `path` keeps it continuous, from a length measured on the CPU.
+6. Joins, caps and a colour for each vertex in one library: regl-gpu-lines, Ricky Reusser (https://github.com/rreusser/regl-gpu-lines), checked (summary). It has no dashes, and its joins do not follow a change of width.
+
+Other facts from the search:
+
+- `gl.lineWidth` is of no use: ANGLE limits it to 1. Matt DesLauriers, "Drawing Lines is Hard", 2015 (https://mattdesl.svbtle.com/drawing-lines-is-hard), checked (summary). He lists five ways to antialias: MSAA, feathered triangles, a texture of alpha, coverage in the fragment shader, and a second pass of `gl.LINES`.
+- MapLibre does not compute the coverage of a line thinner than a pixel. It fades the alpha over about 1 pixel at the edge, `clamp(min(dist - (inner - blur), outer - dist) / blur, 0, 1)` in `line.fragment.glsl`, checked (raw file). That shader has no special case for the overlap at joins.
+- None of the sources solves the fold of a strip on the inner side of a segment that is shorter than the inner offsets of its miters. Crazy Panda names the case ("self-intersecting"). `strips()` reduces it with a gap between points, and lists it as a limit.
+- The box filter of the dash in `Borders.tsx` (the share of a pixel that the dashes cover, from the integral of the square wave) was not found in these sources.
+- Not opened: Dan Bagnell, "Robust polyline rendering with WebGL", 2013; the three.js `LineMaterial` forum threads; the Skia analytic AA pages.
+
 ## Performance metrics
 
 The setting `metrics` shows one line at the top of the map, right of the clock when the row has room, else on the right below it: `SIM <ms>ms | FPS <fps> ↓<1% low>↑<1% top>` (`web/src/ui/Metrics.tsx`). The user chose the format after the performance monitor of the Steam overlay.

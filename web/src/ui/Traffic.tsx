@@ -2,6 +2,7 @@ import { useMemo, useRef } from 'react'
 import type { GeoProjection } from 'd3-geo'
 import { fit, program, useWebGL2 } from './gl.ts'
 import { clip, type View } from './view.ts'
+import { COVER, quads } from './lines.ts'
 
 // Stops of the colour ramp over the slowness of a road (traffic.ts, 0 to 1): where, colour and opacity. A free road is
 // a faint hairline; a slow one turns orange, red, then dark red, as on a map app. ponytail: chosen by eye.
@@ -32,8 +33,7 @@ vec4 ramp(float t) {
 // The network is drawn into two textures only when the view changes: how much of each pixel the roads cover, and
 // which edge the pixel belongs to. Each frame then draws one triangle over the screen that looks up the slowness of
 // that edge, instead of all the segments.
-// A line thinner than a pixel cannot be drawn by rasterising its width, so each segment is a quad one device pixel
-// wider than the line on each side, and the fragment shader gives each pixel the share of it that the line covers.
+// The roads are lines thinner than a pixel, drawn with the quads and the cover of lines.ts.
 const BAKE_VS = `#version 300 es
 in vec2 xy; in vec2 normal; in float across; in float edge; in float along;
 uniform vec4 view; uniform vec2 devicePx; uniform float w; uniform float pxPerUnit;
@@ -50,9 +50,9 @@ void main() {
 const BAKE_FS = `#version 300 es
 precision highp float;
 in float d; in float s; flat in int id; uniform float w; uniform int pass; out vec4 o;
+${COVER}
 void main() {
-  // The overlap of this pixel, [|d| - 0.5, |d| + 0.5], with the line, [-w / 2, w / 2], in device pixels.
-  float a = abs(d), cover = max(0.0, min(a + 0.5, w * 0.5) - max(a - 0.5, -w * 0.5));
+  float cover = coverOf(d, w);
   if (cover <= 0.0) discard;
   o = pass == 0 ? vec4(cover, 0, 0, 1) : vec4(float(id % 256) / 255.0, float(id / 256) / 255.0, fract(s), 1);
 }`
@@ -112,26 +112,6 @@ void main() { o = min(vec4(1), texture(src, gl_FragCoord.xy / screen) * ${GLOW_G
 /** The real shape of each road edge (lon, lat, ...), in the order of road-graph.json (scripts/graphs.py). */
 export type RoadLines = number[][]
 
-// Two triangles per segment of every edge, in map space, with the unit normal, the side (+1 or -1) and the edge index.
-const quads = (lines: RoadLines, proj: GeoProjection) => {
-  const xy: number[] = [], normal: number[] = [], across: number[] = [], edge: number[] = [], along: number[] = []
-  lines.forEach((lonlat, e) => {
-    const pts: [number, number][] = []
-    for (let i = 0; i < lonlat.length; i += 2) pts.push(proj([lonlat[i], lonlat[i + 1]])!)
-    let run = 0 // map units from the start of the edge
-    for (let i = 1; i < pts.length; i++) {
-      const [x0, y0] = pts[i - 1], [x1, y1] = pts[i], l = Math.hypot(x1 - x0, y1 - y0)
-      if (!l) continue
-      const nx = -(y1 - y0) / l, ny = (x1 - x0) / l
-      for (const [x, y, s, r] of [[x0, y0, 1, 0], [x0, y0, -1, 0], [x1, y1, 1, l], [x1, y1, 1, l], [x0, y0, -1, 0], [x1, y1, -1, l]]) {
-        xy.push(x, y); normal.push(nx * s, ny * s); across.push(s); edge.push(e); along.push(run + r)
-      }
-      run += l
-    }
-  })
-  const f = (a: number[]) => new Float32Array(a)
-  return { xy: f(xy), normal: f(normal), across: f(across), edge: f(edge), along: f(along) }
-}
 
 type Props = { lines: RoadLines; proj: GeoProjection; levels: Uint8Array; fadeSeconds: number; view: View; running: boolean; shown: boolean }
 
