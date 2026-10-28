@@ -132,7 +132,7 @@ export function HeatMap({ towns, villages, level, nodes, counts, perAgent, proj,
   })
   return (
     <div style={{ position: 'absolute', inset: 0 }}>
-      <Fills cells={geo.cells} proj={proj} colours={colours} fadeSeconds={fadeSeconds} view={view} />
+      <Fills cells={geo.cells} proj={proj} colours={colours} fadeSeconds={fadeSeconds} />
       {/* The view is outside the memo, so a zoom or pan step changes one attribute and leaves the paths alone. */}
       <svg style={SVG}><g transform={svgTransform(view)}>{fixed}</g></svg>
       {/* Mounted once and then hidden, not unmounted: a WebGL canvas must not be mounted again (AGENTS.md). Until the
