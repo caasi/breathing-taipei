@@ -13,7 +13,8 @@ const STYLES = {
   taipei: { colour: PLACE.town, opacity: 0.3, width: 1.8, dash: [0, 0] },
 } as const
 
-const VS = `#version 300 es
+/** The shaders of a line of one colour, in map units; Land.tsx draws its borders with them too. */
+export const LINE_VS = `#version 300 es
 in vec2 xy; in vec2 normal; in float across; in float along;
 uniform vec4 view; uniform vec2 devicePx; uniform float w;
 out float d; out float s;
@@ -24,7 +25,7 @@ void main() {
   gl_Position = vec4(xy * view.xy + view.zw + vec2(normal.x, -normal.y) * reach * devicePx, 0, 1);
 }`
 // The dash runs on map units from the start of each ring, as an SVG dash does from the start of each path.
-const FS = `#version 300 es
+export const LINE_FS = `#version 300 es
 precision highp float;
 in float d; in float s; uniform float w; uniform vec4 colour; uniform vec2 dash; uniform float pxPerUnit; out vec4 o;
 ${COVER}
@@ -49,7 +50,7 @@ type Props = { cells: { geometry: Geometry }[]; districts: { geometry: Geometry;
  */
 export function Borders({ cells, districts, proj }: Props) {
   useLayer(LAYER.borders, gl => {
-    const prog = program(gl, VS, FS)
+    const prog = program(gl, LINE_VS, LINE_FS)
     const at = Object.fromEntries(['view', 'devicePx', 'pxPerUnit', 'w', 'colour', 'dash'].map(n => [n, gl.getUniformLocation(prog, n)]))
     const groups = [
       { style: STYLES.cells, lines: cells.flatMap(c => rings(c.geometry)) },

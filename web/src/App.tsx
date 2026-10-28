@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { Metrics } from './ui/Metrics.tsx'
 import { GLMap } from './ui/GLMap.tsx'
-import { HeatMap, Land, Outline, SEA, projectionFor, taipeiIn, type Transit } from './ui/HeatMap.tsx'
+import { HeatMap, Land, SEA, projectionFor, taipeiIn, type Transit } from './ui/HeatMap.tsx'
 import { Travellers, MODE_COLOURS, addBatches, type CellTraffic, type Track } from './ui/Travellers.tsx'
 import type { RoadLines } from './ui/Traffic.tsx'
 import { MODES } from './sim/city.ts'
@@ -37,9 +37,9 @@ const WINDOWS = [15, 30, 60, KEEP] // simulated minutes the change rate can look
 // The district level is a view of the village run (byDistrict below); the run itself is always at village level, and
 // a node of the run is a village code (台北市 is county 63000).
 type Level = 'district' | 'village'
-// The map at each step of its fade in (revealed): hidden, half while the run waits for the road paths, then clear.
-// ponytail: the half step (opacity 0.5, blur 4 px) is by eye.
-const REVEAL = [{ opacity: 0, blur: 8 }, { opacity: 0.5, blur: 4 }, { opacity: 1, blur: 0 }]
+// The map at each step of its fade in (revealed): blurred and faint until the run starts, as the outline it replaced
+// (opacity 0.6, blur 3 px), then clear.
+const REVEAL = [{ opacity: 0.6, blur: 3 }, { opacity: 1, blur: 0 }]
 const inTaipei = (node: string) => node.startsWith('63000') // the village code of 台北市
 const ALERT = { position: 'absolute', top: 72, left: 16, margin: 0, color: '#ff8b6b' } as const
 // The note of a setting, in grey on the line below it.
@@ -145,12 +145,13 @@ export function App() {
     getJson('transit.json').then(setTransit).catch(err => setLoadError(String(err)))
     // The real shapes of the roads, for drawing only. Without the file, only the traffic is missing.
     getJson('road-lines.json').then(setRoads).catch(() => {})
-    // Residents by town for the labels of the outline; the worker loads the same file, so it is usually in the cache.
+    // Residents by town for the district counts before the first frame of the run; the worker loads the same file, so it
+    // is usually in the cache.
     getJson('villages2.json').then((vs: { town: string; pop: number }[]) => {
       const m = new Map<string, number>()
       for (const v of vs) m.set(v.town, (m.get(v.town) ?? 0) + v.pop)
       setPop(m)
-    }).catch(() => {}) // only the outline labels miss it
+    }).catch(() => {}) // only those counts miss it
     const w = new Worker(new URL('./sim/worker.ts', import.meta.url), { type: 'module' })
     w.onmessage = (e: MessageEvent<FromWorker | WorkerError>) => {
       if ('error' in e.data) { if (e.data.start === started.current) setRunError(e.data.error); return }
@@ -260,23 +261,17 @@ export function App() {
     return changeRate(asShown(last.counts), asShown(first.counts), asShown(homes), last.t - first.t)
   }, [history, homes, colourBy, rateWindow, nodes, byDistrict])
   const ready = projection && villages && s && nodes.length === s.counts.length
-  // The map fades in from the blurred outline in two steps: half at its first frame, while the run still waits for the
-  // road paths, and the rest when the run starts. Each step one animation frame later, so the state before it paints.
-  const [revealed, setRevealed] = useState(0), [faded, setFaded] = useState(false)
+  // The parts of the map that need no run (the borders, the lines, the stations, the names) draw, blurred, as soon as
+  // their data is here; the fills join at the first frame of the run, and the map clears when the run starts, one
+  // animation frame later, so the state before it paints.
+  const [revealed, setRevealed] = useState(0)
   // A run that fails after its first frame never stops waiting; the map then clears, under the error.
-  const step = !ready ? 0 : waiting === undefined || runError ? 2 : 1
+  const step = ready && (waiting === undefined || runError) ? 1 : 0
   useEffect(() => {
     if (step <= revealed) return
     const raf = requestAnimationFrame(() => setRevealed(step))
     return () => cancelAnimationFrame(raf)
   }, [step, revealed])
-  // The outline goes when the last fade ends: the cells of 里 do not cover every part of the towns, and the blurs would
-  // stay. The time is the transition in index.html; with reduced motion there is no fade, so it goes at once.
-  useEffect(() => {
-    if (revealed < 2) return
-    const timer = setTimeout(() => setFaded(true), matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : 600)
-    return () => clearTimeout(timer)
-  }, [revealed])
   // After the render that shows new trips (a new run or a new dot density), the older ones go.
   useEffect(() => { for (const id of dotRuns.current.keys()) if (id < tripsId) dotRuns.current.delete(id) }, [tripsId])
   // The new run starts when the map of its first frame is on the screen, or at the deadline, and in both cases only
@@ -375,13 +370,11 @@ export function App() {
   return (
     <div style={{ position: 'fixed', inset: 0, overflow: 'hidden', background: '#211d1d' }}>
       <div style={{ position: 'absolute', left: box.x, top: box.y, width: box.w, height: box.h, overflow: 'hidden', background: SEA }}>
-      {towns && projection && <Land towns={towns} proj={projection} view={view} />}
-      {/* The blurred outline is under the map until the map has faded in fully, once, when the first run starts. */}
-      {!faded && towns && projection && <Outline towns={towns} proj={projection} view={view} pop={pop} />}
       {/* Mounted before the data, and never again: the map draws its WebGL layers in this one canvas. */}
       <GLMap view={view} reveal={REVEAL[revealed]}>
+      {towns && projection && <Land towns={towns} proj={projection} />}
+      {towns && villages && projection && <HeatMap towns={towns} villages={villages} level={byDistrict ? 'district' : ready ? 'village' : level} nodes={byDistrict?.names ?? nodes} counts={ready ? shownCounts : undefined} pop={pop} perAgent={PER_AGENT} proj={projection} transit={transit} show={layers} rate={rate} roads={roads} traffic={traffic} speed={paused || waiting !== undefined ? 0 : speed * HOURS_AT_1X} view={view} />}
       {ready && <>
-        <HeatMap towns={towns} villages={villages} level={byDistrict ? 'district' : 'village'} nodes={byDistrict?.names ?? nodes} counts={shownCounts!} perAgent={PER_AGENT} proj={projection} transit={transit} show={layers} rate={rate} roads={roads} traffic={traffic} speed={paused ? 0 : speed * HOURS_AT_1X} view={view} />
         {/* The dots keep their own canvas until step 6 of #34, so they fade with CSS. */}
         {dots && dotTrips && <div className="reveal" style={{ position: 'absolute', inset: 0, opacity: REVEAL[revealed].opacity, filter: REVEAL[revealed].blur ? `blur(${REVEAL[revealed].blur}px)` : 'none' }}>
           <Travellers tracks={dotRun!.tracks} trips={dotTrips} clock={clock} byMode={byMode} traffic={cellTraffic} view={view} />

@@ -21,8 +21,8 @@ precision mediump float;
 in vec3 c; out vec4 o;
 void main() { o = vec4(c, 1); }`
 
-// Triangles of every cell in map space, with the cell index per vertex.
-const triangles = (cells: Cell[], proj: GeoProjection) => {
+/** Triangles of every cell in map space, with the cell index per vertex. */
+export const triangles = (cells: Cell[], proj: GeoProjection) => {
   const xy: number[] = [], cell: number[] = []
   cells.forEach(({ geometry: g }, k) => {
     const polygons = g.type === 'Polygon' ? [g.coordinates] : g.type === 'MultiPolygon' ? g.coordinates : []

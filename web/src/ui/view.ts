@@ -33,5 +33,3 @@ export const layoutFor = (w: number, h: number, taipei: Rect = SQUARE): Layout =
 /** The same transform in clip space, for a canvas of width x height CSS pixels: clip = map * (sx, sy) + (tx, ty). */
 export const clip = ({ k, x, y }: View, width: number, height: number) =>
   [2 * k / width, -2 * k / height, 2 * x / width - 1, 1 - 2 * y / height]
-
-export const svgTransform = ({ k, x, y }: View) => `matrix(${k} 0 0 ${k} ${x} ${y})`
