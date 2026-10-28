@@ -98,3 +98,23 @@ export const strips = (lines: number[][], proj: (lonlat: [number, number]) => [n
   const f = (a: number[]) => new Float32Array(a)
   return { xy: f(xy), normal: f(normal), across: f(across), along: f(along) }
 }
+
+/**
+ * GLSL that defines `float dashCover(float s, vec2 dash, float pxPerUnit)`: the share of a pixel at `s` map units along
+ * the line that dashes of `dash.x` on and `dash.y` off cover, over the length of one device pixel along the line (a box
+ * filter), so a dash shorter than a pixel still averages to the right tone. A `dash.y` of 0 is a solid line.
+ */
+export const DASHED = `
+// The length of dash from the start of the line to s: whole periods, then the part of the last one.
+float dashed(float s, vec2 dash) {
+  float p = dash.x + dash.y;
+  return floor(s / p) * dash.x + min(mod(s, p), dash.x);
+}
+float dashCover(float s, vec2 dash, float pxPerUnit) {
+  if (dash.y <= 0.0) return 1.0;
+  float h = 0.5 / pxPerUnit;
+  return (dashed(s + h, dash) - dashed(s - h, dash)) / (2.0 * h);
+}`
+
+/** A colour `#rrggbb` as three numbers from 0 to 1. */
+export const rgb = (hex: string) => [1, 3, 5].map(i => parseInt(hex.slice(i, i + 2), 16) / 255)

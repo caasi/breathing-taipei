@@ -2,7 +2,7 @@ import type { GeoProjection } from 'd3-geo'
 import type { Geometry } from 'geojson'
 import { program } from './gl.ts'
 import { LAYER, useLayer } from './GLMap.tsx'
-import { COVER, strips } from './lines.ts'
+import { COVER, DASHED, rgb, strips } from './lines.ts'
 import { PLACE } from './Dashboard.tsx'
 
 // The look the SVG had, in map units, so a line grows with the zoom as an SVG stroke did. The borders take the blue of
@@ -23,29 +23,18 @@ void main() {
   // The map is scaled the same on both axes and y points down on the screen, so the normal on the screen is (x, -y).
   gl_Position = vec4(xy * view.xy + view.zw + vec2(normal.x, -normal.y) * reach * devicePx, 0, 1);
 }`
-// The dash runs on map units from the start of each ring, as an SVG dash does from the start of each path. Each pixel
-// gets the share of its length along the line that the dashes cover (a box filter), so a dash shorter than a pixel
-// still averages to the right tone.
+// The dash runs on map units from the start of each ring, as an SVG dash does from the start of each path.
 const FS = `#version 300 es
 precision highp float;
 in float d; in float s; uniform float w; uniform vec4 colour; uniform vec2 dash; uniform float pxPerUnit; out vec4 o;
 ${COVER}
-// The length of dash from the start of the line to s: whole periods, then the part of the last one.
-float dashed(float s, vec2 dash) {
-  float p = dash.x + dash.y;
-  return floor(s / p) * dash.x + min(mod(s, p), dash.x);
-}
+${DASHED}
 void main() {
-  float a = colour.a * coverOf(d, w);
-  if (dash.y > 0.0) {
-    float h = 0.5 / pxPerUnit;
-    a *= (dashed(s + h, dash) - dashed(s - h, dash)) / (2.0 * h);
-  }
+  float a = colour.a * coverOf(d, w) * dashCover(s, dash, pxPerUnit);
   if (a <= 0.0) discard;
   o = vec4(colour.rgb * a, a);
 }`
 
-const rgb = (hex: string) => [1, 3, 5].map(i => parseInt(hex.slice(i, i + 2), 16) / 255)
 // Each ring of a polygon as one line (lon, lat, ...).
 const rings = (g: Geometry) => {
   const polygons = g.type === 'Polygon' ? [g.coordinates] : g.type === 'MultiPolygon' ? g.coordinates : []
