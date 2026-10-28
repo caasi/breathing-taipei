@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { Metrics } from './ui/Metrics.tsx'
 import { GLMap } from './ui/GLMap.tsx'
 import { HeatMap, Land, SEA, projectionFor, taipeiIn, type Transit } from './ui/HeatMap.tsx'
+import { Sparks, SPARK_MS, type Spark } from './ui/Sparks.tsx'
 import { Travellers, MODE_COLOURS, addBatches, type CellTraffic, type Track } from './ui/Travellers.tsx'
 import type { RoadLines } from './ui/Traffic.tsx'
 import { MODES } from './sim/city.ts'
@@ -39,9 +40,11 @@ const WINDOWS = [15, 30, 60, KEEP] // simulated minutes the change rate can look
 // The district level is a view of the village run (byDistrict below); the run itself is always at village level, and
 // a node of the run is a village code (台北市 is county 63000).
 type Level = 'district' | 'village'
-// The map at each step of its fade in (revealed): blurred and faint until the run starts, as the outline it replaced
-// (opacity 0.6, blur 3 px), then clear.
-const REVEAL = [{ opacity: 0.6, blur: 3 }, { opacity: 1, blur: 0 }]
+// The map while it loads: blurred by 3 px, less as the roads are found, and darker, so that the sparks of the routing
+// (Sparks.tsx) stand out on it; then clear when the run starts (revealed). As the author chose on the dev server.
+// In tenths of the share, so that the aim of GLMap changes 10 times, each moved to over its 600 ms, and not in each frame.
+const loading = (found: number) => ({ blur: 3 * (1 - Math.floor(found * 10) / 10), light: 0.6 })
+const CLEAR = { blur: 0, light: 1 }
 const inTaipei = (node: string) => node.startsWith('63000') // the village code of 台北市
 const ALERT = { position: 'absolute', top: 72, left: 16, margin: 0, color: '#ff8b6b' } as const
 // The note of a setting, in grey on the line below it.
@@ -111,6 +114,7 @@ export function App() {
   const every = dot / PER_AGENT
   const [rateWindow, setRateWindow] = useStored('window', 30, oneOf(WINDOWS))
   const unplaced = useRef<Batch[]>([])
+  const sparks = useRef<Spark[]>([]) // the paths that the worker found while it routes, as they come
   const [dots, setDots] = useStored('dots', true, bool, fromBool)
   const [byMode, setByMode] = useStored('mode', false, bool, fromBool)
   const [metrics, setMetrics] = useStored('metrics', false, bool, fromBool)
@@ -189,6 +193,10 @@ export function App() {
       const dots = dotRuns.current.get(lastDots.current), t = dots?.trips, r = m.replans
       if (t && r) r.k.forEach((k, j) => { t.dest[k] = r.dest[j]; t.dep[k] = r.dep[j]; t.dur1[k] = r.dur1[j]; t.ret[k] = r.ret[j]; t.dur2[k] = r.dur2[j] })
       // The worker sends each batch once; keep the ones that arrive before the map projection exists.
+      if (m.sparks?.length) {
+        const now = performance.now()
+        sparks.current = [...sparks.current.filter(s => now - s.at < SPARK_MS), ...m.sparks.map(p => ({ ...p, at: now }))]
+      }
       if (dots && m.paths?.length) proj.current ? addBatches(dots.tracks.current, m.paths, proj.current) : unplaced.current.push(...m.paths)
       // A clock from before the latest change of speed would take the clock of the page back.
       const l = last.current, model = m.day * 1440 + m.minute
@@ -380,8 +388,10 @@ export function App() {
     <div style={{ position: 'fixed', inset: 0, overflow: 'hidden', background: '#211d1d' }}>
       <div style={{ position: 'absolute', left: box.x, top: box.y, width: box.w, height: box.h, overflow: 'hidden', background: SEA }}>
       {/* Mounted before the data, and never again: the map draws its WebGL layers in this one canvas. */}
-      <GLMap view={view} reveal={REVEAL[revealed]}>
+      <GLMap view={view} reveal={revealed ? CLEAR : loading(s?.roads ?? 0)}>
       {towns && projection && <Land towns={towns} proj={projection} />}
+      {/* Only while the map loads, and not with reduced motion: they run and flicker. */}
+      {!revealed && roads && projection && !matchMedia('(prefers-reduced-motion: reduce)').matches && <Sparks sparks={sparks} lines={roads} proj={projection} />}
       {towns && villages && projection && <HeatMap towns={towns} villages={villages} level={byDistrict ? 'district' : ready ? 'village' : level} nodes={byDistrict?.names ?? nodes} counts={ready ? shownCounts : undefined} pop={pop} perAgent={PER_AGENT} proj={projection} transit={transit} show={layers} signs={signs} districtLabels={districtLabels} rate={rate} roads={roads} traffic={traffic} speed={paused || waiting !== undefined ? 0 : speed * HOURS_AT_1X} view={view} />}
       {ready && dots && dotTrips && <Travellers tracks={dotRun!.tracks} trips={dotTrips} clock={clock} byMode={byMode} traffic={cellTraffic} />}
       </GLMap>

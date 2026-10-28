@@ -7,6 +7,7 @@ import { mulberry32 } from './rng.ts'
 import { FPS, clockAt, respeed, stepsTo, type Clock } from './pace.ts'
 import { cityFrom, MODES, SCOOTER, type Village } from './city.ts'
 import { networks, readRoutes, ROAD_MODES, roadNode, tripPaths, wayBack, type Batch, type Routes } from './paths.ts'
+import { directions, sampler, type SparkPath } from './sparks.ts'
 import type { GraphJson } from './route.ts'
 import { workNodes } from './jobs.ts'
 import { cellMax, gridOf, levels, liveOf, roadUse, stepper, take as takeTraffic, type Grid, type Live, type RoadUse } from './traffic.ts'
@@ -31,6 +32,7 @@ export type Replans = { k: Uint32Array; dest: Uint8Array; dep: Int32Array; dur1:
 export type WorkerError = { error: string; start: number } // start: the id of the init that failed
 export type FromWorker = {
   start?: number; nodes?: string[]; districts?: string[]; homes?: Uint32Array; coords?: [number, number][]; trips?: Trips; replans?: Replans; paths?: Batch[]
+  sparks?: SparkPath[] // a sample of the paths found while the run routes (sparks.ts): the road load's and the dots'
   minute: number; day: number; counts: Uint32Array; road: Uint32Array; away: number; ms: number
   events?: SimEvent[] // personal events of plans made since the last message
   traffic?: Uint8Array // per road edge: 0 no traveller, 1 (free) to 255 (slowest) (traffic.ts levels); sent when it changes
@@ -61,6 +63,8 @@ let routing = false
 // Also when the fill fails: the page waits for routing to end, with no deadline. A frame must carry the change, as a
 // standing clock with nothing to send skips the frame.
 const doneRouting = () => { routing = false; owed = true }
+const sparks = sampler()
+let edgeEnds: (e: number) => [number, number] = () => [0, 0] // of the road graph of the run, for the sparks
 let newEvents: SimEvent[] = []
 let eventId = 0
 let idx = new Uint32Array(0) // agent of each sampled trip
@@ -204,7 +208,8 @@ const frame = () => {
     if (b.done) pending = undefined
     else if (b.value) paths.push(b.value)
   }
-  const msg: FromWorker = { ...extra, paths, routing, roads, minute: w.minute, day: w.day, counts: c.nodes, road: c.road, away: c.away, ms, events: newEvents, clock: clock.minute, at: performance.timeOrigin + t, since }
+  const found = sparks.take().map(edges => ({ edges, back: directions(edges, edgeEnds) }))
+  const msg: FromWorker = { ...extra, ...(found.length ? { sparks: found } : {}), paths, routing, roads, minute: w.minute, day: w.day, counts: c.nodes, road: c.road, away: c.away, ms, events: newEvents, clock: clock.minute, at: performance.timeOrigin + t, since }
   newEvents = []
   owed = false
   postMessage(msg)
@@ -229,6 +234,9 @@ const traffic = (world: World, graphs: Awaited<typeof net>, roadJson: GraphJson,
     if (world !== w) return
     if (!known) { doneRouting(); return }
     known.clear() // the paths of an earlier run
+    // Set for each run; it samples only while the run routes, the dots' paths too, as they share these routes.
+    edgeEnds = e => [roadJson.edges[e][0], roadJson.edges[e][1]]
+    known.onFound = path => { if (routing) sparks.offer(path) }
     const node = new Map<number, number>(), at = (v: number) => node.get(v) ?? node.set(v, roadNode(graphs, coords, v)).get(v)!
     const metres = Float32Array.from(roadJson.edges, e => e[2])
     load = new Float32Array(metres.length); grid = gridOf(roadJson, roadNames.edge); live = liveOf(roadJson, grid); extra.cellKeys = grid.keys

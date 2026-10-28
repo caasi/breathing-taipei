@@ -29,11 +29,13 @@ export type Frame = { now: number; view: View; clip: number[]; width: number; he
 export type Layer = { dirty: (f: Frame) => boolean; draw: (f: Frame) => void; dispose: () => void }
 
 /** The order of the layers, from the bottom. One list, so that a new layer finds its place among all the others. */
-export const LAYER = { land: 0, fills: 1, borders: 2, rails: 3, stations: 4, traffic: 5, dots: 6, labels: 7 } as const
+export const LAYER = { land: 0, fills: 1, borders: 2, rails: 3, stations: 4, traffic: 5, dots: 6, labels: 7, sparks: 8 } as const
 
-/** How far the map has faded in: its opacity, and its blur in CSS pixels, as CSS `filter: blur()`. */
-export type Reveal = { opacity: number; blur: number }
-const CLEAR: Reveal = { opacity: 1, blur: 0 }
+/** How far the map has woken: its blur in CSS pixels, as CSS `filter: blur()`, and its light, 1 for its own colours. */
+export type Reveal = { blur: number; light: number }
+const CLEAR: Reveal = { blur: 0, light: 1 }
+// The sparks of the routing (Sparks.tsx) keep at least this blur while the map wakes, a glow on their thin lines.
+const SPARK_BLUR = 1
 // The time of a change of `reveal`, as the CSS transition of the map had; none with reduced motion.
 const REVEAL_MS = 600
 /** CSS `ease`, cubic-bezier(0.25, 0.1, 0.25, 1), the curve of the CSS transition that the map had before. */
@@ -82,7 +84,8 @@ export const paint = (entries: Entry[], f: Frame, force: boolean, reset: () => v
  * The one WebGL canvas of the map. Layers are components under it that call `useLayer`; they draw in `order`, the lowest
  * first. The canvas is mounted once: an unmount loses its context (gl.ts), and then every layer stays blank.
  * While `reveal` is not clear, the map draws in two pictures, each into a texture that goes onto the canvas blurred: the
- * land only blurred, and the layers from the fills up blurred and faded. A change of `reveal` moves to it over REVEAL_MS.
+ * map, blurred and darkened by `reveal`, and over it the sparks of the routing, blurred less. A change of `reveal` moves
+ * to it over REVEAL_MS.
  */
 export function GLMap({ view, reveal = CLEAR, children }: { view: View; reveal?: Reveal; children: ReactNode }) {
   const ref = useRef<HTMLCanvasElement>(null)
@@ -126,8 +129,9 @@ export function GLMap({ view, reveal = CLEAR, children }: { view: View; reveal?:
       gl.colorMask(true, true, true, true)
     }
     const clear = () => { gl.clearColor(0, 0, 0, 0); gl.clear(gl.COLOR_BUFFER_BIT) }
-    // Each group goes onto the canvas blurred by its own: the land is only blurred, the map is blurred and faded.
-    const groupOf = (from: number, faded: boolean) => ({
+    // Each group goes onto the canvas blurred by its own: the map blurred and darkened, the sparks over it blurred less
+    // and in their own light.
+    const groupOf = (from: number, look: () => Reveal, add = false) => ({
       from,
       begin: () => {
         // The levels of the mip chain go with the size, so a new size makes the texture again.
@@ -151,25 +155,32 @@ export function GLMap({ view, reveal = CLEAR, children }: { view: View; reveal?:
         // Attached only for the blit: a framebuffer that is not bound keeps a deleted texture alive.
         gl.framebufferTexture2D(gl.DRAW_FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, null, 0)
         target = null; reset()
-        blur!.run(picture!, canvas.width, canvas.height, shown.blur * canvas.width / Math.max(1, canvas.clientWidth), faded ? shown.opacity : 1, null)
+        const { blur: b, light } = look()
+        blur!.run(picture!, canvas.width, canvas.height, b * canvas.width / Math.max(1, canvas.clientWidth), light, null, add)
       },
     })
-    const groups = [groupOf(LAYER.land, false), groupOf(LAYER.fills, true)]
+    const groups = [groupOf(LAYER.land, () => shown), groupOf(LAYER.sparks, () => ({ blur: Math.max(SPARK_BLUR, shown.blur), light: 1 }), true)]
     let raf = 0, drawn = ''
     const draw = () => {
       // The next frame first, and the canvas as the target: a throw in the fade must not stop the map.
       raf = requestAnimationFrame(draw); target = null
       const now = performance.now(), w = fit(gl, canvas), v = view$.current
-      if (reveal$.current.opacity !== aim.opacity || reveal$.current.blur !== aim.blur) {
+      // The move is taken to now before a new aim, so that an aim that changes in each frame (the share of the roads
+      // found) is followed, and not started again from where it was.
+      const step = () => {
+        const t = ease(Math.min(1, (now - start) / REVEAL_MS))
+        shown = { blur: from.blur + (aim.blur - from.blur) * t, light: from.light + (aim.light - from.light) * t }
+      }
+      step()
+      if (reveal$.current.light !== aim.light || reveal$.current.blur !== aim.blur) {
         aim = reveal$.current; from = { ...shown }
         start = matchMedia('(prefers-reduced-motion: reduce)').matches ? -Infinity : now
       }
-      const t = ease(Math.min(1, (now - start) / REVEAL_MS))
-      shown = { opacity: from.opacity + (aim.opacity - from.opacity) * t, blur: from.blur + (aim.blur - from.blur) * t }
-      const key = `${w} ${canvas.height} ${v.k} ${v.x} ${v.y} ${shown.opacity} ${shown.blur}`
+      step()
+      const key = `${w} ${canvas.height} ${v.k} ${v.x} ${v.y} ${shown.light} ${shown.blur}`
       const f: Frame = { now, view: v, clip: clip(v, canvas.clientWidth, canvas.clientHeight), width: canvas.width, height: canvas.height, cssWidth: canvas.clientWidth, cssHeight: canvas.clientHeight, target: null }
       // A clear map draws straight on the canvas; only a fade pays for the texture and the blur.
-      const fading = shown.opacity !== 1 || shown.blur !== 0
+      const fading = shown.light !== 1 || shown.blur !== 0
       // Every layer is asked, also after one is dirty: a layer can keep its state up to date in `dirty`.
       const done = paint(entries, f, changed || key !== drawn, () => { f.target = target; reset() }, clear, fading && blur ? groups : undefined)
       // The fade runs once for each page, so its textures go when it ends.
