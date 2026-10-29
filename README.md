@@ -36,12 +36,15 @@ pnpm dev
 
 Open the URL that Vite shows.
 
-To run the tests and the type check:
+To run the tests, the type check and the model checks:
 
 ```sh
 pnpm test
 pnpm typecheck
+pnpm spec
 ```
+
+`pnpm spec` checks the TLA+ models in `web/spec/` (AGENTS.md, "Model checks").
 
 ## Settings
 
