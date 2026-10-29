@@ -38,6 +38,8 @@ A model is not the code. Each `.tla` file names the code that it models. When yo
 
 The first version of `PageFrames.tla` started the clock in one step, and read the routing at the same time as `shown`. In the code these were two gaps: `go()` runs two animation frames after the check, and the routing came from the state `s`, which commits after the ref `shown`. With the gaps in the model, the checker found a way for the clock of a run to start before its routing ended (review of 2026-10-29). `go()` now checks `waitRef`, and the routing is the ref `shownRouting`. Model each gap between a check and its action, and each value that a render reads from state and from a ref.
 
+The models leave out the `sample` and `traffic` messages and the `drawn` counter of `draw()` in `worker.ts`. They do not change the run, `start`, `since` or the routing.
+
 Two models depend on an assumption. A second configuration file removes the assumption, and the checker then finds a counterexample:
 
 - `WorkerRunsAnyOrder.cfg`: if two `init` handlers resume in any order, an older run replaces the newer one. Today JavaScript resumes them in order, because both await the same promises (`data` and `net`). If an `init` gets an await of its own before `w = init(...)`, this order is not certain.
@@ -50,7 +52,7 @@ On 2026-10-29, each invariant failed when its guard was removed from the model: 
 Traps:
 
 - In TLA+, `IF a THEN b ELSE c /\ d` reads `d` as part of the `ELSE`. Put each `IF` and `LET` inside a conjunction in parentheses. Twice on 2026-10-29, this error gave a false report: "Successor state is not completely specified".
-- `tla-ts` was 3 days old when it was added (version `0.0.3`, repository created on 2026-10-26). Its version is exact in `package.json`. pnpm added it to `minimumReleaseAgeExclude` in `pnpm-workspace.yaml`, because the version was newer than the minimum release age. Before you update it, scan the new version as 0.0.3 was scanned on 2026-10-29:
+- `tla-ts` was new when it was added on 2026-10-29: its repository was created on 2026-10-26, and version `0.0.3` was published on 2026-10-28. Its version is exact in `package.json`. pnpm added it to `minimumReleaseAgeExclude` in `pnpm-workspace.yaml`, because the version was newer than the minimum release age. Before you update it, scan the new version as 0.0.3 was scanned on 2026-10-29:
   - no install scripts and no runtime dependencies in `package.json`
   - in `dist/`, no network calls and no `eval`
   - the only process that it starts is `tlapm`, for `tla-ts prove`

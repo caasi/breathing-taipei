@@ -295,9 +295,9 @@ export function App() {
   // After the render that shows new trips (a new run or a new dot density), the older ones go.
   useEffect(() => { for (const id of dotRuns.current.keys()) if (id < tripsId) dotRuns.current.delete(id) }, [tripsId])
   // The new run starts when the map of its first frame is on the screen, or at the deadline, and in both cases only
-  // when a frame of the run says that the worker has found the road paths: a run that started before would depend on
-  // the speed of the device. Until its first frame comes, the run counts as routing. The effect depends on whether the
-  // map is ready, not on each frame.
+  // when a frame of the run says that its routing ended (the paths were found, or the routing gave up): a run that
+  // started before would depend on the speed of the device. Until its first frame comes, the run counts as routing. The
+  // effect depends on whether the map is ready, not on each frame.
   const routing = shown.current !== waiting || shownRouting.current, drawn = !!ready && !routing
   useEffect(() => {
     if (waiting === undefined || routing) return
