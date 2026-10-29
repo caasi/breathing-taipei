@@ -10,7 +10,8 @@
     "typecheck": "tsc --noEmit",
     "bench": "node --experimental-strip-types src/sim/bench.ts",
     "routes": "node --experimental-strip-types ../scripts/routes.ts",
-    "data": "sh ../scripts/data.sh"
+    "data": "sh ../scripts/data.sh",
+    "spec": "tla-ts \"spec/*.tla\""
   },
   "dependencies": {
     "d3-geo": "3.1.1",
@@ -28,6 +29,7 @@
     "@types/topojson-client": "3.1.5",
     "@vitejs/plugin-react": "6.1.2",
     "fast-check": "4.10.2",
+    "tla-ts": "0.0.3",
     "typescript": "5.8.3",
     "vite": "8.3.5",
     "vitest": "5.0.5"

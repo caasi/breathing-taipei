@@ -48,6 +48,9 @@ importers:
       fast-check:
         specifier: 4.10.2
         version: 4.10.2
+      tla-ts:
+        specifier: 0.0.3
+        version: 0.0.3
       typescript:
         specifier: 5.8.3
         version: 5.8.3
@@ -441,6 +444,10 @@ packages:
     resolution: {integrity: sha512-wXR/dYpcqKmfWpEdZjiKJOwCNFndD0DMnrW/cYjVGttEkBfVgcLFHoNrlj47mjOVic9yyNu65alsgF4NQyTa2g==}
     engines: {node: '>=12.0.0'}
 
+  tla-ts@0.0.3:
+    resolution: {integrity: sha512-y5wQZRGMqjc+47BHRZ3I+Re7O1bFSWlNX+835pZkdPzVRPkgQeTlKERPsPcuI1fMGf2Av4Gx8K3n3NnPAAUUBg==}
+    hasBin: true
+
   topojson-client@3.1.0:
     resolution: {integrity: sha512-605uxS6bcYxGXw9qi62XyrV6Q3xwbndjachmNxu8HWTtVPxZfEJN9fd/SZS1Q54Sn2y0TMyMxFj/cJINqGHrKw==}
     hasBin: true
@@ -820,6 +827,8 @@ snapshots:
     dependencies:
       fdir: 6.5.0(picomatch@4.0.7)
       picomatch: 4.0.7
+
+  tla-ts@0.0.3: {}
 
   topojson-client@3.1.0:
     dependencies:

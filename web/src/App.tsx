@@ -140,6 +140,10 @@ export function App() {
   const signs = useMemo(() => new Set(stations ? [...show, 'airport'] : []), [show, stations])
   const worker = useRef<Worker>()
   const started = useRef(0), shown = useRef(0) // the latest start posted, and the start of the frames on the page
+  // The routing of the latest frame on the page. A ref set with `shown`, not read from `s`: a render between the message
+  // and the commit of `s` would see the new run with the routing of the old one (or of no frame), and start the clock
+  // before the routing of the new run ends (web/spec/PageFrames.tla).
+  const shownRouting = useRef(true)
   // The start of a new run whose clock stands until the page is ready: state for the icon, a ref for the logic, so a
   // click between a start and its render does not read an old value. deadline: when the run starts anyway.
   const [waiting, setWaiting] = useState<number>()
@@ -172,6 +176,7 @@ export function App() {
       // page; a setting that starts the run again (for example a policy, #8) needs this.
       if (m.start !== undefined) { if (m.start !== started.current) return; shown.current = m.start; setOnScreen(next.current) }
       else if (shown.current !== started.current) return
+      shownRouting.current = m.routing
       if (m.nodes) setNodes(m.nodes)
       if (m.districts) setDistrictOf(m.districts)
       // The first frame of a run (it has coords) starts the history and the events again. The updaters keep only
@@ -290,13 +295,14 @@ export function App() {
   // After the render that shows new trips (a new run or a new dot density), the older ones go.
   useEffect(() => { for (const id of dotRuns.current.keys()) if (id < tripsId) dotRuns.current.delete(id) }, [tripsId])
   // The new run starts when the map of its first frame is on the screen, or at the deadline, and in both cases only
-  // when a frame of the run says that the worker has found the road paths: a run that started before would depend on
-  // the speed of the device. Until its first frame comes, the run counts as routing. The effect depends on whether the
-  // map is ready, not on each frame.
-  const routing = shown.current !== waiting || !!s?.routing, drawn = !!ready && !routing
+  // when a frame of the run says that its routing ended (the paths were found, or the routing gave up): a run that
+  // started before would depend on the speed of the device. Until its first frame comes, the run counts as routing. The
+  // effect depends on whether the map is ready, not on each frame.
+  const routing = shown.current !== waiting || shownRouting.current, drawn = !!ready && !routing
   useEffect(() => {
     if (waiting === undefined || routing) return
-    const go = () => { waitRef.current = undefined; setWaiting(undefined); resume() }
+    // A new run can start before the cleanup cancels this callback; then it is not this run that waits.
+    const go = () => { if (waitRef.current !== waiting) return; waitRef.current = undefined; setWaiting(undefined); resume() }
     // Two animation frames: the browser paints the new run before the first one ends, and the clock starts after it.
     if (drawn) { let raf = requestAnimationFrame(() => { raf = requestAnimationFrame(go) }); return () => cancelAnimationFrame(raf) }
     const timer = setTimeout(go, Math.max(0, deadline.current - performance.now()))
