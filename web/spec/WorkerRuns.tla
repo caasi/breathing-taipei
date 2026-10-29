@@ -19,7 +19,8 @@ Resume(r) == r \in waiting /\ (InOrder => \A s \in waiting : r <= s)
 
 LoadRoutes == ~routesReady /\ routesReady' = TRUE /\ UNCHANGED <<w, started, waiting, queued, use>>
 
-\* routes.then(known => { if (world !== w) return; ... use = found.use })
+\* routes.then(known => { if (world !== w) return; ... use = found.use }). The fill of the road use takes many frames,
+\* and the code checks `world === w` again at its end; the model makes the fill one step, so it checks only the first.
 Routed(r) == routesReady /\ r \in queued /\ queued' = queued \ {r}
              /\ use' = (IF r = w THEN r ELSE use) /\ UNCHANGED <<w, started, waiting, routesReady>>
 
