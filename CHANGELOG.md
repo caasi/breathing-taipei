@@ -4,6 +4,10 @@ This file lists the changes that a user of the site can see, for each version. T
 
 ## [Unreleased]
 
+### Fixed
+
+- The clock of a run can no longer start before the road paths of the run are ready. This needed a click or a key press at the moment the first frame of the run came, after a load of more than 5 s. Found with a TLA+ model; not seen on a device.
+
 ## [0.3.0] - 2026-10-29
 
 ### Added
