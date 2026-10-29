@@ -63,9 +63,10 @@ Next == NewRun \/ WorkerStarts \/ RoutingDone \/ Frame \/ PageTakes \/ Fire \/ C
 
 \* The page shows only frames of the run that it shows.
 FramesOfShownRun == frameRun # 0 => frameRun = shown
-\* The start day on the screen (setOnScreen(next.current), the ghost `onScreen`: the latest start when the page took the
-\* first frame) is the start day of the run on the screen.
-StartDayOfShownRun == onScreen = shown
+\* The start day on the screen is the one of the run on the screen. setOnScreen(next.current) writes the day of the
+\* latest start; the runStart effect sets next.current with ++started.current, so the model writes the number of that
+\* start, `started`, to the ghost `onScreen`. A run number stands for its start day.
+StartOfShownRun == onScreen = shown
 \* The clock of a run runs only after the routing of that run ended (doneRouting: the paths were found, or the routing
 \* gave up).
 ClockAfterRouting == (started # 0 /\ waiting = 0 /\ shown = started) => started \in routed
