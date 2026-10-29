@@ -24,6 +24,39 @@ The user set this rule for the repository on 2026-10-24. It is not a "zero comme
 - Keep every source and every guess. Give the details in DATA.md ("Figures in the code") and keep one line in the code that points there. Mark a guess with `ponytail:` in the code: if a guess has no comment, the next reader takes it for data.
 - A comment that says why the code must be this way (a constraint, a trap, a fix for a device) stays.
 
+## Model checks (TLA+)
+
+`web/spec/` holds TLA+ models of three message protocols between the page and the worker. `pnpm spec` in `web/` checks them with `tla-ts`, a TypeScript port of the TLC model checker. The CI does not run `pnpm spec`.
+
+A model is not the code. Each `.tla` file names the code that it models. When you change that code, change the model in the same commit, and run `pnpm spec`.
+
+| Model | Code | Invariants |
+|-------|------|------------|
+| `WorkerRuns.tla` | the `init` handler and `traffic()` in `worker.ts` | `UseIsOfThisRun`: the road use of a run never serves another run. `LatestWins`: when every `init` has resumed, the world is the one of the latest `init`. |
+| `SpeedClock.tla` | `startClock` and the `runStart` effect in `App.tsx`, the `speed` and `init` messages in `worker.ts` | `OnlyLatestClock`: the page takes the clock only from a frame that the worker made after the latest change of the page. |
+| `PageFrames.tla` | `w.onmessage` and the effect that starts the clock in `App.tsx`, `frame()` in `worker.ts` | `FramesOfShownRun`: the page applies only frames of the run that it shows. `ClockAfterRouting`: the clock of a run starts only after the worker found the road paths of that run. |
+
+Two models depend on an assumption. A second configuration file removes the assumption, and the checker then finds a counterexample:
+
+- `WorkerRunsAnyOrder.cfg`: if two `init` handlers resume in any order, an older run replaces the newer one. Today JavaScript resumes them in order, because both await the same promises (`data` and `net`). If an `init` gets an await of its own before `w = init(...)`, this order is not certain.
+- `SpeedClockSameStamp.cfg`: if two changes get the same `since`, the page can take the clock of a frame of the older change. KNOWN-ISSUES.md ("Two changes of speed in the same tick of the timer") has this limit.
+
+To see a counterexample, run `pnpm exec tla-ts spec/WorkerRuns.tla -config spec/WorkerRunsAnyOrder.cfg` in `web/`. The command prints the trace and exits with an error code. That is the expected result.
+
+On 2026-10-29, each invariant failed when its guard was removed from the model: the `world === w` check, the `since` check, the drop of frames of another run, and the routing check before the clock starts. When you add an invariant, remove its guard once and make sure that the invariant fails. An invariant that cannot fail checks nothing.
+
+Traps:
+
+- In TLA+, `IF a THEN b ELSE c /\ d` reads `d` as part of the `ELSE`. Put each `IF` and `LET` inside a conjunction in parentheses. Twice on 2026-10-29, this error gave a false report: "Successor state is not completely specified".
+- `tla-ts` was 3 days old when it was added (version `0.0.3`, repository created on 2026-10-26). Its version is exact in `package.json`. pnpm added it to `minimumReleaseAgeExclude` in `pnpm-workspace.yaml`, because the version was newer than the minimum release age. Before you update it, scan the new version as 0.0.3 was scanned on 2026-10-29:
+  - no install scripts and no runtime dependencies in `package.json`
+  - in `dist/`, no network calls and no `eval`
+  - the only process that it starts is `tlapm`, for `tla-ts prove`
+  - it writes only the files that a spec writes through the Json module
+  - the `src/` of the npm package is the same as the `src/` of the git tag
+
+  Not checked: that `dist/` is a build of `src/`.
+
 ## Next steps, in this order
 
 The large items are GitHub issues; each one links to its issue.
