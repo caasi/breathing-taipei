@@ -1,7 +1,7 @@
 import { advance, where, now, stretch, ROAD, PLAY, GONE, type World } from './core.ts'
 import { ROAD_MODES, VARIANTS, type Routes } from './paths.ts'
 import { ACCESS, BUS, SCOOTER } from './city.ts'
-import { freeTime, type GraphJson } from './route.ts'
+import { freeTime, PROFILES, type GraphJson, type Profile } from './route.ts'
 
 // BPR (Bureau of Public Roads, 1964): time on a road = free time x (1 + ALPHA (volume / capacity)^BETA). ponytail: BETA
 // is 1, not the 4 of the manual, and MOST is 4: of a grid of BETA and MOST, each with CAPACITY fitted to TomTom, these
@@ -97,8 +97,8 @@ export const fullRoadUse = (...args: Parameters<typeof roadUse>) => {
 
 /** What a driver who follows the live traffic weighs a path by: the free time of each edge, and the slowness of its bucket. */
 export type Live = { grid: Grid; time: Float64Array; slower: Float64Array }
-export const liveOf = (road: GraphJson, grid: Grid): Live => ({
-  grid, time: freeTime(road, true), slower: new Float64Array(grid.km.length).fill(1),
+export const liveOf = (road: GraphJson, grid: Grid, p: Profile = PROFILES.now): Live => ({
+  grid, time: freeTime(road, true, p), slower: new Float64Array(grid.km.length).fill(1),
 })
 
 const choose = (w: World, use: RoadUse, i: number, base: number, mode: number, live?: Live) => {

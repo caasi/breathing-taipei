@@ -9,14 +9,15 @@ import { cityFrom, MODES, SCOOTER, BIKE, EBIKE, type Village } from './city.ts'
 import { ON_BRIDGE, type Policies } from './policy.ts'
 import { networks, readRoutes, ROAD_MODES, roadNode, tripPaths, wayBack, type Batch, type Routes } from './paths.ts'
 import { directions, sampler, type SparkPath } from './sparks.ts'
-import type { GraphJson } from './route.ts'
+import { PROFILES, type GraphJson, type Scenario } from './route.ts'
 import { workNodes } from './jobs.ts'
 import { cellMax, gridOf, levels, liveOf, roadUse, stepper, take as takeTraffic, type Grid, type Live, type RoadUse } from './traffic.ts'
 
 export type ToWorker =
   // startDay: index into calendar.json of day 0. start: an id that the first frame of the run gives back.
   // at: as in speed. The clock of the new run stands at minute 0 from that time until the page sends a speed.
-  | { type: 'init'; perAgent: number; seed: number; startDay: number; start: number; at: number }
+  // scenario: the roads of the run (route.ts PROFILES); a run keeps its scenario, and a new scenario is a new run.
+  | { type: 'init'; perAgent: number; seed: number; startDay: number; start: number; at: number; scenario: Scenario }
   // The page sends the settings before its first init and at each change; they reach the run that goes on.
   // redraw: the number of the change, for the page to know the trips of its latest change (FromWorker redraw)
   | { type: 'policies'; policies: Policies; redraw: number }
@@ -112,14 +113,30 @@ const policyPicker = (world: World, seed: number) => {
 const data = Promise.all(['od2.json', 'villages2.json', 'signal.json', 'road-graph.json', 'mrt-graph.json', 'night.json', 'calendar.json', 'people.json', 'road-names.json', 'river.json'].map(getJson))
 /** The name of each road edge, from scripts/names.py: edge[e] indexes names, or is -1. */
 type RoadNames = { names: string[]; edge: number[] }
-const net = data.then(([, , , road, mrt]) => networks(road, mrt))
 // Made by `pnpm routes` before dev and build; without it (or for another road graph) the worker routes every road trip
 // of the dots itself, and there is no traffic.
-const routes = Promise.all([net, getOptional('road-routes.bin').catch(() => undefined)])
-  .then(([n, file]) => (file ? readRoutes(file, n.road) : undefined))
-// The start handler awaits data and net and reports their failure; routes only feeds the paths. Mark all three
+const file = getOptional('road-routes.bin').catch(() => undefined)
+/** The roads of a scenario: its graphs, and its road paths, which another scenario contracts from the file of today. */
+type Scene = { scenario: Scenario; graphs: ReturnType<typeof networks>; routes: Promise<Routes | undefined> }
+const scenes = new Map<Scenario, Promise<Scene>>()
+// Each scene is made once, at the first run of its scenario, and kept.
+const sceneOf = (s: Scenario): Promise<Scene> => {
+  const known = scenes.get(s)
+  if (known) return known
+  const made = data.then(([, , , road, mrt]) => {
+    const graphs = networks(road, mrt, PROFILES[s]), now = s === 'now' ? Promise.resolve(graphs) : sceneOf('now').then(n => n.graphs)
+    const routes = Promise.all([now, file]).then(([n, f]) => (f ? readRoutes(f, n.road, graphs.road) : undefined))
+    routes.catch(() => {})
+    return { scenario: s, graphs, routes }
+  })
+  scenes.set(s, made)
+  return made
+}
+// The start handler awaits data and the scene and reports their failure; routes only feeds the paths. Mark them
 // handled, so a failure that settles before the first start does not also log an unhandled rejection.
-data.catch(() => {}); net.catch(() => {}); routes.catch(() => {})
+data.catch(() => {}); sceneOf('now').catch(() => {})
+// The scene of the run w; the two change together, in the same task.
+let scene: Scene | undefined
 
 /** The village whose centre is nearest to a point; a linear search, as it runs about once a take. */
 const nearestOf = (coords: [number, number][], lon: number, lat: number) => {
@@ -159,7 +176,7 @@ const replans = (w: World): Replans | undefined => {
  */
 // The two take turns, so the dots of a day off do not wait for every road path to work. The first batch of each needs
 // no road path; then the road paths of the dots are found in a batch (routes.fill), much faster than one at a time.
-function* bothPaths(trips: Trips, coords: [number, number][], graphs: Awaited<typeof net>, known?: Routes): Generator<Batch | void> {
+function* bothPaths(trips: Trips, coords: [number, number][], graphs: Scene['graphs'], known?: Routes): Generator<Batch | void> {
   const n = trips.home.length
   const work = tripPaths(trips, coords, graphs, known, bikeVia)
   const play = tripPaths({ home: trips.home, work: trips.play, mode: trips.playMode }, coords, graphs, known, bikeVia)
@@ -247,14 +264,14 @@ let drawn = 0 // the latest draw; a routes file that arrives after a newer draw 
 let coords: [number, number][] = []
 // Same sampled agents every day with fixed home, work and day-off place, so paths are built once per draw.
 // The simulation does not wait for the routes file (about 1 MB); the paths start when it is there.
-const draw = (world: World, graphs: Awaited<typeof net>) => {
+const draw = (world: World, { graphs, routes }: Scene) => {
   const trips = sample(world), thisDraw = ++drawn
   pending = undefined
   routes.then(known => { if (thisDraw === drawn) pending = bothPaths(trips, coords, graphs, known) }, () => {})
   return trips
 }
 // Every road traveller of the run, on the paths of the routes file. Without the file there is no traffic.
-const traffic = (world: World, graphs: Awaited<typeof net>, roadJson: GraphJson, roadNames: RoadNames) => {
+const traffic = (world: World, { scenario, graphs, routes }: Scene, roadJson: GraphJson, roadNames: RoadNames) => {
   use = undefined; warming = undefined; routing = true; roads = 0; jam = new Uint8Array(0); lastCells = new Uint8Array(0); stepWithTraffic = stepper(JAM_MINUTES, takeTrafficNow)
   routes.then(known => {
     if (world !== w) return
@@ -265,7 +282,7 @@ const traffic = (world: World, graphs: Awaited<typeof net>, roadJson: GraphJson,
     known.onFound = path => { if (routing) sparks.offer(path) }
     const node = new Map<number, number>(), at = (v: number) => node.get(v) ?? node.set(v, roadNode(graphs, coords, v)).get(v)!
     const metres = Float32Array.from(roadJson.edges, e => e[2])
-    load = new Float32Array(metres.length); grid = gridOf(roadJson, roadNames.edge); live = liveOf(roadJson, grid); extra.cellKeys = grid.keys
+    load = new Float32Array(metres.length); grid = gridOf(roadJson, roadNames.edge); live = liveOf(roadJson, grid, PROFILES[scenario]); extra.cellKeys = grid.keys
     const workAt = workNodes(graphs, coords)
     const found = roadUse(world, known, (i, leg) => [at(world.home[i]), leg ? at(world.play[i]) : workAt(i, world.work[i])], live.time)
     warming = (function* () {
@@ -288,11 +305,11 @@ onmessage = async (e: MessageEvent<ToWorker>) => {
     policies = m.policies; redraw = m.redraw
     if (w && city) {
       city.setPolicies(policies); repolicy(w); pickPolicy = policyPicker(w, w.seed)
-      net.then(g => { if (w) extra = { ...extra, trips: draw(w, g), redraw } })
+      if (scene) extra = { ...extra, trips: draw(w, scene), redraw }
     }
     return
   }
-  if (m.type === 'sample') { every = m.every; redraw = m.redraw; if (w) net.then(g => { if (w) extra = { ...extra, trips: draw(w, g), redraw } }); return }
+  if (m.type === 'sample') { every = m.every; redraw = m.redraw; if (w && scene) extra = { ...extra, trips: draw(w, scene), redraw }; return }
   // The old world stops now. The clock of the new run stands at minute 0 until the page is ready for it and sends a
   // speed, as the clock of the page does.
   w = undefined
@@ -301,13 +318,14 @@ onmessage = async (e: MessageEvent<ToWorker>) => {
   // Any failure while starting (loading, building the city, sampling) goes to the page.
   // The async handler would otherwise reject without a message, and onerror does not see a rejection.
   try {
-    const [[od2, villages, signal, roadJson, , night, cal, people, roadNames, river], graphs] = await Promise.all([data, net])
+    const [[od2, villages, signal, roadJson, , night, cal, people, roadNames, river], run] = await Promise.all([data, sceneOf(m.scenario)])
+    const { graphs } = run
     onJam = undefined; onLate = undefined; jamRng = mulberry32(m.seed + 3)
     // The run is always at village level; the page adds the villages up into districts for the district level.
     const c = cityFrom({ ...od2, villages, signal, night, river }, m.perAgent, day => kindAt(cal as Calendar, m.startDay + day), policies)
     city = c
     bikeVia = (mode, a, b) => (mode === BIKE || mode === EBIKE ? c.bike(a, b).via ?? [] : [])
-    w = init(c.city, m.seed)
+    w = init(c.city, m.seed); scene = run
     const world = w, districtOf = Array.from(w.home, h => villages[h].town)
     const ids = drawNames(people as People, districtOf, m.seed + 1), pickRng = mulberry32(m.seed + 2)
     // ponytail: EVENTS_PER_DAY is the base rate before the SHOWN weights (each agent makes about one plan a day); DATA.md,
@@ -371,8 +389,8 @@ onmessage = async (e: MessageEvent<ToWorker>) => {
     // The plans under way at day 0 were made during init, which calls no onPlan: pass them through the same filter.
     for (const i of w.movers) w.onPlan(i)
     coords = c.coords
-    traffic(w, graphs, roadJson, roadNames as RoadNames)
-    extra = { start: m.start, nodes: c.nodes, districts: (villages as Village[]).map(v => v.town), homes: Uint32Array.from(c.city.homes), coords: c.coords, trips: draw(w, graphs), redraw }
+    traffic(w, run, roadJson, roadNames as RoadNames)
+    extra = { start: m.start, nodes: c.nodes, districts: (villages as Village[]).map(v => v.town), homes: Uint32Array.from(c.city.homes), coords: c.coords, trips: draw(w, run), redraw }
   } catch (err) {
     w = undefined
     postMessage({ error: String(err), start: m.start } satisfies WorkerError)

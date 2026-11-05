@@ -254,8 +254,8 @@ export function App() {
     waitRef.current = ++started.current; deadline.current = now + READY_MS
     next.current = runStart
     setRunError(undefined); setWaiting(started.current)
-    post({ type: 'init', perAgent: PER_AGENT, seed: 42, startDay: runStart, start: started.current, at: since })
-  }, [runStart])
+    post({ type: 'init', perAgent: PER_AGENT, seed: 42, startDay: runStart, start: started.current, at: since, scenario: policies.scenario })
+  }, [runStart, policies.scenario])
   // The page clock goes on at the speed from now, and the worker clock follows it from the same time.
   const startClock = (hours: number) => {
     const l = last.current, now = performance.now(), since = performance.timeOrigin + now

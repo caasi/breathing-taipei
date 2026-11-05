@@ -1,6 +1,7 @@
 import { memo } from 'react'
 import { KEY } from '../sim/policy.ts'
-import { useQuery, bool, fromBool, onSteps } from '../query.ts'
+import { useQuery, bool, fromBool, oneOf, onSteps } from '../query.ts'
+import type { Scenario } from '../sim/route.ts'
 import { hhmm, H2 } from './format.ts'
 
 import { actionOf, jamOf, notesOf, type PlaceOf, type SimEvent } from '../sim/events.ts'
@@ -37,16 +38,24 @@ const Who = ({ who }: { who: string }) =>
   <span style={{ fontSize: 11, color: '#e8c9b8', border: '1px solid #6a4a3d', borderRadius: 3, padding: '0 4px', marginLeft: 6, whiteSpace: 'nowrap' }}>{who}</span>
 const ALL_POLICIES = POLICIES.flatMap(([, ps]) => ps)
 
-export type PolicyValues = { values: Map<string, number>; set: (id: string, value: number) => void }
+// The roads of the 松山機場 plan of 蔣萬安 (route.ts PROFILES). The new roads are guesses from the news (DATA.md).
+const SCENARIOS: [Scenario, string][] = [['now', '現況'], ['works', '施工期（示意）'], ['future', '遷移後（示意）']]
+
+export type PolicyValues = {
+  values: Map<string, number>; set: (id: string, value: number) => void
+  scenario: Scenario; setScenario: (s: Scenario) => void
+}
 /** Policies are the scenario, so each one is a key in the query string: a link reproduces it. */
 export function usePolicies(): PolicyValues {
   // One hook per policy, always the same list in the same order, as the rules of hooks require.
   const settings = ALL_POLICIES.map(p => p.type === 'toggle'
     ? useQuery<number>(p.id, 0, s => { const b = bool(s); return b === undefined ? undefined : b ? 1 : 0 }, v => fromBool(v === 1))
     : useQuery(p.id, p.start, onSteps(p.min, p.max, p.step)))
+  const [scenario, setScenario] = useQuery<Scenario>('scenario', 'now', oneOf(SCENARIOS.map(([k]) => k)))
   return {
     values: new Map(ALL_POLICIES.map((p, i) => [p.id, settings[i][0]])),
     set: (id, value) => settings[ALL_POLICIES.findIndex(p => p.id === id)][1](value),
+    scenario, setScenario,
   }
 }
 
@@ -78,10 +87,16 @@ export const Events = memo(function Events({ events, now, dayLabel, placeOf }: E
   </>
 })
 
-export function Policies({ values, set }: PolicyValues) {
+export function Policies({ values, set, scenario, setScenario }: PolicyValues) {
   return <>
     <h2 style={H2}>政策</h2>
     <p style={NOTE}>調整後從每個人的下一趟通勤開始生效。標籤是提出政策的候選人；數字多半是推估，見 DATA.md。</p>
+    <fieldset style={{ border: 0, borderTop: '1px solid #3a3333', margin: 0, padding: '6px 0' }}>
+      <legend style={{ fontSize: 13, color: '#db6a41', padding: 0 }}>松山機場遷移<Who who="蔣萬安" /></legend>
+      {SCENARIOS.map(([k, label]) => <label key={k} style={{ display: 'block', fontSize: 14, margin: '4px 0' }}>
+        <input type="radio" name="scenario" checked={scenario === k} onChange={() => setScenario(k)} />{label}</label>)}
+      <p style={{ ...NOTE, margin: '4px 0 0' }}>切換後模擬從午夜重新開始。新道路的位置是依新聞推估的示意。</p>
+    </fieldset>
     {POLICIES.map(([group, ps]) => <fieldset key={group} style={{ border: 0, borderTop: '1px solid #3a3333', margin: 0, padding: '6px 0' }}>
       <legend style={{ fontSize: 13, color: '#db6a41', padding: 0 }}>{group}</legend>
       {ps.map(p => p.type === 'toggle'

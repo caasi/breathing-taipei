@@ -18,6 +18,7 @@ export const PROFILES = {
   works: { open: WORKS, works: 1.7 },
   future: { open: WORKS | FUTURE, works: 1 },
 } satisfies Record<string, Profile>
+export type Scenario = keyof typeof PROFILES
 export type Graph = {
   lon: Float64Array; lat: Float64Array
   street: Uint8Array // 1 for a node on an open street (class 0); trips start and end only there
