@@ -17,6 +17,7 @@ import { record, since, KEEP, type Entry } from './history.ts'
 import { layoutFor, PANEL } from './ui/view.ts'
 import { dateText, indexOf, todayInTaipei, type Calendar } from './sim/calendar.ts'
 import { Events, Policies, usePolicies, MAX_EVENTS } from './ui/Dashboard.tsx'
+import type { Scenario } from './sim/route.ts'
 import { withPublic, type SimEvent } from './sim/events.ts'
 import { clockAt, respeed, READY_MS, type Clock } from './sim/pace.ts'
 import { hhmm, H2 } from './ui/format.ts'
@@ -101,6 +102,8 @@ export function App() {
   // The start of the run whose frames are on the screen. When a new run starts, the old picture stays (frozen) until
   // the first frame of the new run comes, so the map does not go black while the new run loads.
   const [onScreen, setOnScreen] = useState<number>()
+  // The scenario of the run on the screen: its new roads change with the map, not when the viewer selects a scenario.
+  const [shownScenario, setShownScenario] = useState<Scenario>(), nextScenario = useRef<Scenario>()
   const [pop, setPop] = useState<Map<string, number>>()
   // The run that loads; the frozen dots (the dots of one run, at one minute).
   const next = useRef<number>(), frozen = useRef<{ run: number; minute: number }>()
@@ -119,7 +122,7 @@ export function App() {
   // A change of a policy reaches the run that goes on (worker.ts 'policies'); the key keeps the effect from a new Map each render.
   const policyKey = JSON.stringify([...policies.values])
   const bridgeOn = policies.values.get(KEY.bridge) === 1
-  const future = policies.scenario === 'future'
+  const future = shownScenario === 'future'
   // The changes that the viewer made: the bridge of a policy, and the guessed new roads of the 松山機場 plan.
   const mapTransit = useMemo(() => transit && (bridgeOn || future) ? {
     lines: [...transit.lines,
@@ -199,7 +202,7 @@ export function App() {
       // Frames of an earlier run can still be on their way after a new run starts (also the first frame of a run that
       // a second new run replaced); their day and nodes would be read with the new start. Today a run starts once per
       // page; a setting that starts the run again (for example a policy, #8) needs this.
-      if (m.start !== undefined) { if (m.start !== started.current) return; shown.current = m.start; setOnScreen(next.current) }
+      if (m.start !== undefined) { if (m.start !== started.current) return; shown.current = m.start; setOnScreen(next.current); setShownScenario(nextScenario.current) }
       else if (shown.current !== started.current) return
       // New dots (a change of a policy or of the density) block the page while it places their paths; the spinner
       // shows from the change until the worker has sent the last path of the new dots.
@@ -265,7 +268,7 @@ export function App() {
     if (on && frozen.current?.run !== on.run) frozen.current = { run: on.run, minute: l.model }
     respeed(l, 0, 0, now, 0); l.model = 0; l.since = since
     waitRef.current = ++started.current; deadline.current = now + READY_MS
-    next.current = runStart
+    next.current = runStart; nextScenario.current = policies.scenario
     setRunError(undefined); setWaiting(started.current)
     post({ type: 'init', perAgent: PER_AGENT, seed: 42, startDay: runStart, start: started.current, at: since, scenario: policies.scenario })
   }, [runStart, policies.scenario])
