@@ -12,7 +12,7 @@ import { freeTime, type GraphJson } from './route.ts'
 const ALPHA = 0.15, BETA = 1
 // ponytail: one capacity for every cell, in passenger car units (PCU) per km of road, fitted so that the morning peak of 台北市 has the
 // TomTom congestion level (scripts/traffic.ts, DATA.md "Figures in the code"). Real roads differ in lanes.
-export const CAPACITY = 10.9
+export const CAPACITY = 11.1
 // ponytail: the road load is taken over cells of CELL degrees (about 500 m) and the PCU per km of road in a cell stand
 // in for the flow of BPR. Per edge (measured on 2026-10-26, when every trip took one shortest path) only a few edges
 // carried any load, with a travel time up to 25 times the free time; a cell spreads it over the roads nearby. The

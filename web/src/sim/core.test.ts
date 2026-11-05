@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'vitest'
 import fc from 'fast-check'
 import { readFileSync } from 'node:fs'
-import { init, advance, counts, where, stretch, now, ROAD, AWAY, PLAY, GONE, MINUTES_PER_DAY, type City, type World } from './core.ts'
+import { init, advance, counts, where, stretch, now, hoursOf, ROAD, AWAY, PLAY, GONE, WORK, MINUTES_PER_DAY, type City, type World } from './core.ts'
 import { cityFrom, km, MODES, MAX_KM, WALK, BIKE } from './city.ts'
 
 // 1-5 groups with 1-4 nodes each, sparse non-negative OD, any destination weights,
@@ -43,6 +43,24 @@ const run = (city: City, seed: number, minutes: number) => { const w = init(city
 const sumOf = (c: { nodes: Uint32Array; road: Uint32Array; away: number }) => c.nodes.reduce((a, b) => a + b, 0) + c.road.reduce((a, b) => a + b, 0) + c.away
 
 describe('core properties', () => {
+  test('an agent keeps its work hours: each day to work leaves home at the same minute, and plans to leave work at the end of its range', () => {
+    fc.assert(fc.property(cityArb, fc.integer(), (city, seed) => {
+      const w = init(city, seed), deps = new Map<number, number>(), bad: string[] = []
+      const mod = (t: number) => ((t % MINUTES_PER_DAY) + MINUTES_PER_DAY) % MINUTES_PER_DAY
+      for (let t = 0; t < 4 * MINUTES_PER_DAY; t++) {
+        advance(w, 1)
+        for (const i of w.movers) {
+          if (w.dest[i] !== WORK || w.dep[i] !== w.start[i] || !w.dur1[i] || w.dep[i] !== Math.floor(now(w))) continue
+          const d = mod(w.dep[i]), [[, until]] = hoursOf(w, i)
+          if (deps.has(i) && deps.get(i) !== d) bad.push(`${i} left at ${deps.get(i)} and ${d}`)
+          deps.set(i, d)
+          if (mod(w.leave[i]) !== until) bad.push(`${i} plans to leave at ${mod(w.leave[i])}, not ${until}`)
+        }
+      }
+      expect(bad).toEqual([])
+    }), { numRuns: 30 })
+  })
+
   test('everyone is at a valid node or on the road, never lost', () => {
     fc.assert(fc.property(cityArb, fc.integer(), fc.integer({ min: 0, max: 3 * MINUTES_PER_DAY }), (city, seed, m) => {
       const w = run(city, seed, m)
