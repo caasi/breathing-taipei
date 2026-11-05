@@ -22,6 +22,7 @@ The app reads the files in `web/public/`. This file lists the source, the licens
 | `road-lines.json` | The real shape of each edge of `road-graph.json`, for the map | G, H | Open Government Data License (Taipei file not confirmed); ODbL for the parts from OSM |
 | `road-names.json` | The name of each edge of `road-graph.json`, for the jam events | H | ODbL |
 | `mrt-graph.json` | MRT graph built from OpenStreetMap lines and station positions | B, H | ODbL 1.0 (lines) and Open Government Data License (station positions) |
+| `river.json` | The 基隆河 and the 57 places where a bicycle can cross it (bridges that are not motorways or trunk roads, unless OSM allows bicycles), for the bicycle trips | H | ODbL 1.0 |
 | `transit.json` | MRT, light rail, railway, high speed rail, motorway and trunk lines, stations, and airport | H | ODbL 1.0 |
 | `night.json` | Businesses of the night-time groups in each village | J, F | Open Government Data License |
 | `road-routes.bin` (not in git, 1,050,726 bytes on 2026-10-27; the log of each CI run gives the size of its build) | Contraction hierarchies of the road graph, made by `pnpm routes` before dev and build | G, H | Open Government Data License (Taipei shape file of G and source D not confirmed); ODbL for the parts from OSM |
@@ -84,6 +85,17 @@ Note: The data.gov.tw entry for the Taipei shape file was not found. The license
 - Bus service hours, 05:00 to 24:00: most first buses leave at 05:00 or later and most last buses before 24:00, in the route files of Taipei (`https://tcgbusfs.blob.core.windows.net/blobbus/GetRoute.gz`) and New Taipei (`https://tcgbusfs.blob.core.windows.net/ntpcbus/GetRoute.gz`), read on 2026-10-24 (same provider as source G).
 - MRT service hours, 06:00 to 24:00: on a workday `od2.json` has 43 trips in hour 05, 36,483 in hour 06, and 10,471 in hour 00 (the last trains). The model counts hour 00 as closed.
 - YouBike rentals in Taipei, 234,000 a day on average in the first half of 2026 (市區公共自行車 平均每日租借 23.4 萬次): 臺北市政府主計處 市政統計週報, 2026-07-29, from data of 臺北市政府交通局.
+
+`web/src/sim/policy.ts` and `web/src/sim/city.ts` use these figures and guesses for the 內湖 bundle of 沈伯洋 (docs/platforms/shen.md). A policy run keeps the `CAPACITY` of the baseline.
+
+- The free hours of the YouBike 2.0E, 08:00 to 10:00 and 17:00 to 19:00, and the free 30 minutes: the platform of 沈伯洋 (交通政策, https://puma.taipei/policies/交通政策, CC BY 4.0).
+- `SWITCH`, 0.1: the share of the reached commuters (bus, scooter or car, both ends in 台北市, a trip by e-bike of at most 30 minutes that leaves home or work in a free hour) who move to the e-bike. A guess. A starting point for a source: 臺北市政府交通局 said that after the first 30 minutes of YouBike 2.0 became free again on 2024-02-28, the rentals grew 42% and the shift from private vehicles grew 22% (from a search summary; the statement itself was not read).
+- `HUB_MORE`, 0.5: the 運動驛站 (showers) raise `SWITCH` by half. A guess, with no source.
+- `FLEET`, 4,500 YouBike 2.0E in 臺北市: a plan for the end of 2026, reported in 2024 (not checked against the fleet now). `TURNS`, 2: the rides of one e-bike in one free window. A guess.
+- `SHIFT`, 30 minutes: a worker of 內科 whose firm staggers its hours starts and ends work 30 minutes earlier or later, half each way. A guess.
+- The speed of the e-bike, 18 km/h door to door (`SPEED` in `city.ts`). A guess.
+- `NEW_BRIDGE`, the 迎風—港墘 bridge at 121.5713, 25.0741: the point of the 基隆河 nearest to the south end of 港墘路 in `osm/streets.json`. The platform names the two ends only (迎風河濱公園 and 內湖科技園區), and the news gives a length of about 340 m (TVBS; 自由時報). A guess for the place.
+- `STRAIGHT_KM`, 0.5 km: 取直 takes this much off a bicycle way that crosses the river into 內科. A guess: 沈伯洋 says only that the way from the riverside into 內科 makes a detour (三立, 2026-09-02).
 
 `web/src/sim/people.ts` uses this figure and these guesses:
 
@@ -185,6 +197,8 @@ The raw downloads are in `data/`, which git ignores (678 MB on 2026-10-24). Only
 | `osm/stations.json`, `osm/airport.json` | H | `transit.py` |
 | `osm-hw/highways.json` (query: `scripts/queries/highways.overpassql`) | H | `graphs.py` |
 | `osm/streets.json` (query: `scripts/queries/streets.overpassql`, OSM data of 2026-10-26T20:14:06Z) | H | `names.py`, `graphs.py` |
+| `osm/keelung.json` (query: `scripts/queries/keelung.overpassql`, downloaded on 2026-11-05) | H | `river.py` |
+| `platforms/shen/` (`sh scripts/platforms.sh`; the pages are CC BY 4.0, `policies.json` states no license) | puma.taipei | `docs/platforms/shen.md` (by hand) |
 | `jobs/neihu-companies.csv` (臺北市內湖科技園區廠商名錄, 臺北市政府產業發展局, data.taipei, downloaded on 2026-10-27; the URL is in the docstring of `villages.py`) | (data.taipei) | `villages.py` |
 | `bus/tpe_GetBusShape.gz`, `ntpc-transit/ntpc_GetBusShape.gz` | G | `graphs.py` |
 | `calendar/office-115.csv` | K | `days.py`, `od.py` |

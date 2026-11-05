@@ -32,7 +32,7 @@ const NAV = 0.6
 // ponytail: the road space of one traveller of each mode (city.ts MODES), in PCU: a vehicle's PCU over the people in it.
 // A bus is 2 PCU with 20 riders, a scooter 0.4 PCU with 1.2 riders, a car 1 PCU with 1.4 riders; all guesses. So a
 // move from car to bus frees road space.
-export const PCU = [0, 2 / 20, 0.4 / 1.2, 1 / 1.4, 0, 0]
+export const PCU = [0, 2 / 20, 0.4 / 1.2, 1 / 1.4, 0, 0, 0]
 
 /**
  * The road paths of each mover j (its index in w.movers), with their cumulative free time (route.ts freeTime, which

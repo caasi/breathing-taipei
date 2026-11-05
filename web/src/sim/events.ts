@@ -22,7 +22,7 @@ export type Mood = 'angry' | 'stuck' | 'blank' | 'work' | 'leave'
 export type PlaceOf = (node: number) => { town: string; village: string }
 
 // How a character travels, in the order of MODES in city.ts.
-const BY = ['搭捷運', '搭公車', '騎機車', '開車', '走路', '騎自行車']
+const BY = ['搭捷運', '搭公車', '騎機車', '開車', '走路', '騎自行車', '騎 YouBike 2.0E']
 // What the night-time groups and short trips go out for (the kind names of city.ts).
 const PURPOSE: Record<string, string> = {
   short: '出門辦事', early: '去早餐店上早班', evening: '去餐廳上晚班', overnight: '去上大夜班', nightlife: '去夜店上班',
