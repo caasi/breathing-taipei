@@ -14,7 +14,7 @@ export type SimEvent =
   // World.policy (policy.ts), the policies that changed the character. scene: on a trip to work, what the roads of a
   // scenario of the 松山機場 plan changed (worker.ts): the minutes more (or fewer, below 0), and a new road on the way.
   | { id: string; t: number; kind: 'personal'; name: string; home: number; to: number; dest: number; mode: number; group: string; back?: boolean; late?: number; mood?: Mood; policy?: number
-    scene?: { minutes: number; via?: string } }
+    scene?: { scenario: 'works' | 'future'; minutes: number; via?: string } }
   | { id: string; t: number; kind: 'public'; text: string }
   // A character stuck on a slow road: the road by name, or else the node nearest to it; how it takes the jam.
   | { id: string; t: number; kind: 'jam'; name: string; home: number; mode: number; road?: string; near: number; mood: Mood }
@@ -53,9 +53,10 @@ export const actionOf = (e: Extract<SimEvent, { kind: 'personal' }>, placeOf: Pl
   if (e.dest === PLAY) return `${by}去${place}走走`
   if (e.group) return `${by}${PURPOSE[e.group] ?? '出門'}`
   const sc = e.dest === WORK && !e.group ? e.scene : undefined
-  // The works are not in the news: their minutes are an estimate of the model, and the text says so. Only the works add
-  // minutes (traffic.ts RoadUse factor).
-  if (sc) return `${by}${sc.via ? `經${sc.via}` : ''}到${place}上班${sc.minutes > 0 ? `，機場周邊施工改道，多花${sc.minutes}分鐘（推估）` : sc.minutes < 0 ? `，比現在快${-sc.minutes}分鐘` : ''}`
+  // The minutes are an estimate of the model on guessed roads, and the text says so. In the future a trip can also be
+  // slower: a driver who takes the shortest way can take a slow new road (traffic.ts RoadUse factor).
+  const more = sc && (sc.scenario === 'works' ? `，機場周邊施工改道，多花${sc.minutes}分鐘（推估）` : `，新路開通後反而多花${sc.minutes}分鐘（推估）`)
+  if (sc) return `${by}${sc.via ? `經${sc.via}` : ''}到${place}上班${sc.minutes > 0 ? more : sc.minutes < 0 ? `，比現在快${-sc.minutes}分鐘（推估）` : ''}`
   if (p) return `${p & STAGGERED ? '公司錯峰，' : ''}${p & TO_BIKE ? '改' : ''}${ride}到${place}上班${after}${p & WASHED ? '，在運動驛站沖完澡才進公司' : ''}`
   return `${by}到${place}上班`
 }

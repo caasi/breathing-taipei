@@ -141,9 +141,9 @@ test.skipIf(!existsSync(bin))('in a jam, a take keeps each traveller where it is
 }, 120_000)
 
 test.skipIf(!existsSync(bin))('a path of a scenario is longer or shorter than today by its free time over that of the same variant today (real data)', () => {
-  const factors = (p: Profile) => { const { use } = appRun(p); return use.paths.flatMap((es, k) => (es && k % VARIANTS === 0 ? [use.factor[k]] : [])) }
-  const works = factors(PROFILES.works), later = factors(PROFILES.future)
-  // The works only slow roads down, so no fastest path of the works is faster than the fastest path of today.
+  const factors = (p: Profile, all = false) => { const { use } = appRun(p); return use.paths.flatMap((es, k) => (es && (all || k % VARIANTS === 0) ? [use.factor[k]] : [])) }
+  const works = factors(PROFILES.works, true), later = factors(PROFILES.future)
+  // The works only slow roads down, so no path of the works is faster than the path of the same variant today.
   expect(works.filter(f => f < 1 - 1e-6)).toEqual([])
   expect(works.filter(f => f > 1.05).length).toBeGreaterThan(0)
   expect(later.filter(f => f < 0.95).length).toBeGreaterThan(0)

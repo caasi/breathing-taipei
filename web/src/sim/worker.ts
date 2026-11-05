@@ -360,7 +360,7 @@ onmessage = async (e: MessageEvent<ToWorker>) => {
       const minutes = Math.round((world.dur1[i] - ACCESS[mode]) * (use.factor[k] - 1))
       let via: string | undefined
       for (let n = 0; n < es.length && !via; n++) if (graphs.road.tags[es[n]] & FUTURE && edgeName[es[n]] >= 0) via = names[edgeName[es[n]]]
-      return Math.abs(minutes) >= SCENE_MINUTES || via ? { minutes, via } : undefined
+      return Math.abs(minutes) >= SCENE_MINUTES || via ? { scenario: run.scenario, minutes, via } : undefined
     }
     let sceneShare: number | undefined // the chance that a changed trip shows, once the run has routed
     const pickScene = (i: number) => {
