@@ -43,7 +43,7 @@ export const actionOf = (e: Extract<SimEvent, { kind: 'personal' }>, placeOf: Pl
   // A trip of a policy: the ride (and the bridge) first, then what the policies add. The e-bike is free only when the
   // trip starts in a free hour, which can be the way there, the way home or both.
   const ride = `${by}${p & ON_BRIDGE ? '經迎風—港墘橋' : ''}`
-  const after = `${p & EBIKE_FREE && inFree(e.t % 1440) ? '，尖峰前 30 分鐘免費' : ''}${p & STRAIGHT ? '，河濱和內科之間不用再繞路' : ''}`
+  const after = `${p & EBIKE_FREE && inFree(e.t % 1440) ? '，尖峰時段前 30 分鐘免費' : ''}${p & STRAIGHT ? '，河濱和內科之間不用再繞路' : ''}`
   if (e.back && p) return `${p & STAGGERED ? `公司錯峰，${ride}提早或延後半小時下班回家，避開尖峰` : `${ride}下班回家`}${after}`
   if (e.back) return e.dest === PLAY ? `${by}從${place}回家` : e.group ? `${by}回家` : `${by}下班回家`
   if (e.dest === STAY) return '今天在家休息'
