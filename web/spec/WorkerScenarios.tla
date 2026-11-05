@@ -6,7 +6,8 @@
 EXTENDS Naturals
 CONSTANTS MaxRuns, Scen,
           ModuleScenario, \* the handlers read a module-level `scenario`, not the scenario of their run
-          ScenarioMessage \* a 'scenario' message changes the scenario without a new 'init'
+          ScenarioMessage, \* a 'scenario' message changes the scenario without a new 'init'
+          NoLatestCheck \* the handler does not stop after its await when a later 'init' came
 VARIABLES w, started, waiting, sc, current, requested, loaded, queued, use, drawn, pend
 vars == <<w, started, waiting, sc, current, requested, loaded, queued, use, drawn, pend>>
 None == <<0, 0>>
@@ -22,9 +23,12 @@ Start(s) == started < MaxRuns /\ started' = started + 1 /\ w' = 0 /\ sc' = [sc E
 \* The scenario that a handler of run r reads when its routes arrive.
 ScenOf(r) == IF ModuleScenario THEN current ELSE sc[r]
 
-\* After the await (in order, WorkerRuns.tla InOrder): w = init(...); traffic(w) and draw(w) ask for the routes of the
-\* scenario of the run (routesFor(s): one promise per scenario, made at the first ask). draw clears pending paths.
-Resume(r) == r \in waiting /\ (\A x \in waiting : r <= x)
+\* After the await: each scenario has its own promise, so the handlers resume in any order. A handler that is not the
+\* last 'init' stops (me !== inits). Else w = init(...); traffic(w) and draw(w) ask for the routes of the scenario of
+\* the run (one promise per scenario, made at the first ask). draw clears pending paths.
+Stale(r) == r \in waiting /\ r # started /\ ~NoLatestCheck /\ waiting' = waiting \ {r}
+            /\ UNCHANGED <<w, started, sc, current, requested, loaded, queued, use, drawn, pend>>
+Resume(r) == r \in waiting /\ (r = started \/ NoLatestCheck)
              /\ w' = r /\ waiting' = waiting \ {r} /\ queued' = queued \cup {r} /\ use' = None
              /\ requested' = requested \cup {sc[r]} /\ drawn' = <<r, 0>> /\ pend' = None
              /\ UNCHANGED <<started, sc, current, loaded>>
@@ -46,11 +50,13 @@ SetScenario(s) == ScenarioMessage /\ current' = s
                   /\ UNCHANGED <<w, started, waiting, sc, requested, loaded, queued, use, drawn, pend>>
 
 Next == \E s \in Scen : Start(s) \/ Load(s) \/ SetScenario(s)
-        \/ \E r \in 1..MaxRuns : Resume(r) \/ Routed(r)
+        \/ \E r \in 1..MaxRuns : Resume(r) \/ Stale(r) \/ Routed(r)
         \/ DrawRouted
 Spec == Init /\ [][Next]_vars /\ WF_vars(\E s \in Scen : Load(s)) /\ WF_vars(\E r \in 1..MaxRuns : Routed(r)) /\ WF_vars(DrawRouted)
-        /\ WF_vars(\E r \in 1..MaxRuns : Resume(r))
+        /\ WF_vars(\E r \in 1..MaxRuns : Resume(r) \/ Stale(r))
 
+\* The world is the last run, or none yet.
+Latest == w \in {0, started}
 \* The road use of the world comes from the routes of the scenario of its run.
 UseOfOwnScenario == (w # 0 /\ use # None) => use = <<w, sc[w]>>
 \* The dots that the world draws have paths of its run and of its scenario.

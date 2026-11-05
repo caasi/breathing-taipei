@@ -64,6 +64,7 @@ const SCENE_EVENTS_PER_DAY = 12
 // ponytail: a trip whose roads add or take off fewer minutes than this does not tell of them; by eye.
 const SCENE_MINUTES = 3
 let w: World | undefined
+let inits = 0 // the number of 'init' messages: a handler whose number is not the last one stops after its await
 let every = 20
 let hoursPerSec = 0, lastHours = 0 // lastHours: the last speed that was not a pause
 const clock: Clock = { minute: 0, at: performance.now(), perMs: 0 }
@@ -322,12 +323,15 @@ onmessage = async (e: MessageEvent<ToWorker>) => {
   // The old world stops now. The clock of the new run stands at minute 0 until the page is ready for it and sends a
   // speed, as the clock of the page does.
   w = undefined
+  const me = ++inits
   respeed(clock, 0, 0, m.at - performance.timeOrigin, 0)
   since = m.at
   // Any failure while starting (loading, building the city, sampling) goes to the page.
   // The async handler would otherwise reject without a message, and onerror does not see a rejection.
   try {
     const [[od2, villages, signal, roadJson, , night, cal, people, roadNames, river], run] = await Promise.all([data, sceneOf(m.scenario)])
+    // Each scenario has its own promise, so the handlers of two inits can resume out of order (WorkerScenarios.tla Latest).
+    if (me !== inits) return
     const { graphs } = run
     onJam = undefined; onLate = undefined; jamRng = mulberry32(m.seed + 3)
     // The run is always at village level; the page adds the villages up into districts for the district level.
@@ -426,6 +430,7 @@ onmessage = async (e: MessageEvent<ToWorker>) => {
     traffic(w, run, roadJson, roadNames as RoadNames)
     extra = { start: m.start, nodes: c.nodes, districts: (villages as Village[]).map(v => v.town), homes: Uint32Array.from(c.city.homes), coords: c.coords, trips: draw(w, run), redraw }
   } catch (err) {
+    if (me !== inits) return
     w = undefined
     postMessage({ error: String(err), start: m.start } satisfies WorkerError)
   }
