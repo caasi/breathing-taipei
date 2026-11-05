@@ -104,7 +104,8 @@ export function App() {
   // run: the start of the run that made the trips.
   const dotRuns = useRef(new Map<number, { trips: Trips; tracks: { current: (Track | undefined)[] }; run: number }>()), lastDots = useRef(0)
   const [tripsId, setTripsId] = useState(0)
-  const [s, setS] = useState<FromWorker>()
+  // run: the start of the frame, so that `ready` never takes the map of an earlier run (web/spec/PageFrames.tla).
+  const [s, setS] = useState<FromWorker & { run: number }>()
   // Display settings belong to this viewer, so they stay in this browser; the policies (usePolicies) are in the URL.
   const policies = usePolicies()
   // A change of a policy reaches the run that goes on (worker.ts 'policies'); the key keeps the effect from a new Map each render.
@@ -225,7 +226,7 @@ export function App() {
       const l = last.current, model = m.day * 1440 + m.minute
       if (m.since === l.since) { l.minute = m.clock; l.at = m.at - performance.timeOrigin }
       l.model = model
-      setS(m)
+      setS(Object.assign(m, { run: shown.current }))
     }
     // A throw in the worker's frame loop (routing, counting) reaches the page through onerror.
     w.onerror = e => setRunError(e.message || 'worker error')
@@ -300,7 +301,7 @@ export function App() {
     if (last.t === first.t) return out
     return changeRate(asShown(last.counts), asShown(first.counts), asShown(homes), last.t - first.t)
   }, [history, homes, colourBy, rateWindow, nodes, byDistrict])
-  const ready = projection && villages && s && nodes.length === s.counts.length
+  const ready = projection && villages && s && s.run === shown.current && nodes.length === s.counts.length
   // The parts of the map that need no run (the borders, the lines, the stations, the names) draw, blurred, as soon as
   // their data is here; the fills join at the first frame of the run, and the map clears when the run starts, one
   // animation frame later, so the state before it paints.
