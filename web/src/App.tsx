@@ -7,6 +7,7 @@ import { Travellers, MODE_COLOURS, addBatches, type CellTraffic, type Track } fr
 import type { RoadLines } from './ui/Traffic.tsx'
 import { BIKE, MODES } from './sim/city.ts'
 import { KEY, NEW_BRIDGE } from './sim/policy.ts'
+import JIANG from './sim/jiang.json'
 import type { FromWorker, WorkerError, ToWorker, Trips } from './sim/worker.ts'
 import { getJson } from './load.ts'
 import type { Batch } from './sim/paths.ts'
@@ -111,10 +112,14 @@ export function App() {
   // A change of a policy reaches the run that goes on (worker.ts 'policies'); the key keeps the effect from a new Map each render.
   const policyKey = JSON.stringify([...policies.values])
   const bridgeOn = policies.values.get(KEY.bridge) === 1
-  const mapTransit = useMemo(() => transit && bridgeOn
-    ? { lines: [...transit.lines, { kind: 'bike', name: NEW_BRIDGE.name, colour: MODE_COLOURS[BIKE], coords: NEW_BRIDGE.ends }],
-      points: [...transit.points, { kind: 'bridge', name: NEW_BRIDGE.name, lon: NEW_BRIDGE.ends[1][0], lat: NEW_BRIDGE.ends[1][1] }] }
-    : transit, [transit, bridgeOn])
+  const future = policies.scenario === 'future'
+  // The changes that the viewer made: the bridge of a policy, and the guessed new roads of the 松山機場 plan.
+  const mapTransit = useMemo(() => transit && (bridgeOn || future) ? {
+    lines: [...transit.lines,
+      ...(bridgeOn ? [{ kind: 'bike', name: NEW_BRIDGE.name, colour: MODE_COLOURS[BIKE], coords: NEW_BRIDGE.ends }] : []),
+      ...(future ? JIANG.future.map(f => ({ kind: 'road', name: f.name, colour: '#e8c9b8', coords: f.line as [number, number][] })) : [])],
+    points: bridgeOn ? [...transit.points, { kind: 'bridge', name: NEW_BRIDGE.name, lon: NEW_BRIDGE.ends[1][0], lat: NEW_BRIDGE.ends[1][1] }] : transit.points,
+  } : transit, [transit, bridgeOn, future])
   const [speed, setSpeed] = useStored('speed', 1, oneOf(SPEEDS))
   // Apart from the speed, and not stored: a viewer who comes back to a stopped page at 00:00 would see nothing move.
   const [paused, setPaused] = useState(false)
@@ -145,8 +150,8 @@ export function App() {
   // The worker can post a frame with levels after the layer is turned off; the handler of its messages reads this.
   const trafficOnRef = useRef(trafficOn)
   trafficOnRef.current = trafficOn
-  // The bridge of a policy is a line of its own kind, always shown while its setting is on.
-  const layers = useMemo(() => new Set([...show, 'bike', ...(trafficOn ? ['traffic'] : [])]), [show, trafficOn])
+  // The bridge of a policy and the new roads of a scenario are lines of their own kinds, always shown while they are on.
+  const layers = useMemo(() => new Set([...show, 'bike', 'road', ...(trafficOn ? ['traffic'] : [])]), [show, trafficOn])
   const signs = useMemo(() => new Set(stations ? [...show, 'airport', 'bridge'] : []), [show, stations])
   const worker = useRef<Worker>()
   const started = useRef(0), shown = useRef(0) // the latest start posted, and the start of the frames on the page

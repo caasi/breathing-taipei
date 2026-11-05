@@ -11,7 +11,7 @@ Usage:
                curl -A <name> --data-urlencode data@scripts/queries/highways.overpassql https://overpass-api.de/api/interpreter
   STREETS      Overpass JSON of scripts/queries/streets.overpassql (named roads; scripts/names.py reads it too)
   OUT_DIR      writes road-graph.json, road-lines.json and mrt-graph.json
-  SCENARIO     scripts/jiang.json: the guessed new roads of a scenario, and the roads of its works
+  SCENARIO     web/src/sim/jiang.json: the guessed new roads of a scenario, and the roads of its works
 
 Output per graph: kept nodes (degree != 2) and edges whose geometry holds the merged degree-2 points.
 road-lines.json has, for each edge of road-graph.json in the same order, the bus shape points that the edge stands

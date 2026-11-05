@@ -11,8 +11,10 @@ import { STAGGERED, EBIKE_FREE, ON_BRIDGE, WASHED, TO_BIKE, STRAIGHT, inFree } f
 export type SimEvent =
   // back: the way home of the same plan, at the minute the character leaves work or the day-off place. late: the
   // minutes that a jam on the way there moved it, with how the character takes it (angry or blank). policy: the bits of
-  // World.policy (policy.ts), the policies that changed the character.
-  | { id: string; t: number; kind: 'personal'; name: string; home: number; to: number; dest: number; mode: number; group: string; back?: boolean; late?: number; mood?: Mood; policy?: number }
+  // World.policy (policy.ts), the policies that changed the character. scene: on a trip to work, what the roads of a
+  // scenario of the 松山機場 plan changed (worker.ts): the minutes more (or fewer, below 0), and a new road on the way.
+  | { id: string; t: number; kind: 'personal'; name: string; home: number; to: number; dest: number; mode: number; group: string; back?: boolean; late?: number; mood?: Mood; policy?: number
+    scene?: { minutes: number; via?: string } }
   | { id: string; t: number; kind: 'public'; text: string }
   // A character stuck on a slow road: the road by name, or else the node nearest to it; how it takes the jam.
   | { id: string; t: number; kind: 'jam'; name: string; home: number; mode: number; road?: string; near: number; mood: Mood }
@@ -50,6 +52,10 @@ export const actionOf = (e: Extract<SimEvent, { kind: 'personal' }>, placeOf: Pl
   if (e.dest === GONE) return '今天出遠門，離開雙北'
   if (e.dest === PLAY) return `${by}去${place}走走`
   if (e.group) return `${by}${PURPOSE[e.group] ?? '出門'}`
+  const sc = e.dest === WORK && !e.group ? e.scene : undefined
+  // The works are not in the news: their minutes are an estimate of the model, and the text says so. Only the works add
+  // minutes (traffic.ts RoadUse factor).
+  if (sc) return `${by}${sc.via ? `經${sc.via}` : ''}到${place}上班${sc.minutes > 0 ? `，機場周邊施工改道，多花${sc.minutes}分鐘（推估）` : sc.minutes < 0 ? `，比現在快${-sc.minutes}分鐘` : ''}`
   if (p) return `${p & STAGGERED ? '公司錯峰，' : ''}${p & TO_BIKE ? '改' : ''}${ride}到${place}上班${after}${p & WASHED ? '，在運動驛站沖完澡才進公司' : ''}`
   return `${by}到${place}上班`
 }
@@ -69,10 +75,14 @@ const NOTES: [number, { who: string; quote: string; page: string; url: string }]
   [WASHED, { who: SHEN, quote: '設置「運動驛站」提供盥洗、置物與租借服務', page: '交通政策', url: TRANSPORT }],
   [STRAIGHT, { who: SHEN, quote: '如果要從河濱進到內科其實需要繞路，「乾脆把它取直」', page: '三立新聞網 2026-09-02', url: 'https://www.setn.com/news/1898889' }],
 ]
-/** The notes of an event: one for each policy that changed the character, in the order of NOTES. */
+// The new roads of the 松山機場 plan of 蔣萬安, in the words of the news (short quotes). The news says nothing of the works.
+const JIANG = '蔣萬安'
+const NEW_ROAD = { who: JIANG, quote: '民族東路向東延伸，穿越松機基地，直接進入到內科', page: '自由時報 2026-10-08', url: 'https://news.ltn.com.tw/news/politics/breakingnews/5599727' }
+const CROSSING = { who: JIANG, quote: '從基湖路、敬業三路、北安路新增跨河廊道，穿越松山機場腹地、銜接松山及信義', page: '自由時報 2026-10-08', url: 'https://news.ltn.com.tw/news/politics/breakingnews/5600394' }
+/** The notes of an event: one for each policy that changed the character, in the order of NOTES, then one for a new road. */
 export const notesOf = (e: SimEvent) => {
-  const p = e.kind === 'personal' ? policyOf(e) : 0
-  return NOTES.filter(([bit]) => p & bit).map(([, note]) => note)
+  const p = e.kind === 'personal' ? policyOf(e) : 0, via = e.kind === 'personal' && e.dest === WORK && !e.group ? e.scene?.via : undefined
+  return [...NOTES.filter(([bit]) => p & bit).map(([, note]) => note), ...(via ? [via.startsWith('民族東路') ? NEW_ROAD : CROSSING] : [])]
 }
 
 /** The sentence after the name for a jam (kind 'jam'). */

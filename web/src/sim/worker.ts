@@ -5,11 +5,11 @@ import { drawNames, nameOf, type People } from './people.ts'
 import { evenPick, type Mood, type SimEvent } from './events.ts'
 import { mulberry32 } from './rng.ts'
 import { FPS, clockAt, respeed, stepsTo, type Clock } from './pace.ts'
-import { cityFrom, MODES, SCOOTER, BIKE, EBIKE, type Village } from './city.ts'
+import { ACCESS, cityFrom, MODES, SCOOTER, BIKE, EBIKE, type Village } from './city.ts'
 import { ON_BRIDGE, type Policies } from './policy.ts'
-import { networks, readRoutes, ROAD_MODES, roadNode, tripPaths, wayBack, type Batch, type Routes } from './paths.ts'
+import { networks, readRoutes, ROAD_MODES, roadNode, tripPaths, VARIANTS, wayBack, type Batch, type Routes } from './paths.ts'
 import { directions, sampler, type SparkPath } from './sparks.ts'
-import { freeTime, PROFILES, type GraphJson, type Scenario } from './route.ts'
+import { freeTime, FUTURE, PROFILES, type GraphJson, type Scenario } from './route.ts'
 import { workNodes } from './jobs.ts'
 import { cellMax, gridOf, levels, liveOf, roadUse, stepper, take as takeTraffic, type Grid, type Live, type RoadUse } from './traffic.ts'
 
@@ -59,6 +59,10 @@ const SHOWN = [0.25, 1, 3, 0.05]
 // ponytail: the plans to work of the agents that a policy changed, shown a day on top of the others, so a policy can be
 // seen in the stream; by eye.
 const POLICY_EVENTS_PER_DAY = 12, BRIDGE_EVENTS_PER_DAY = 4
+// ponytail: the trips to work that the roads of a scenario changed, shown a day on top of the others; by eye, as above.
+const SCENE_EVENTS_PER_DAY = 12
+// ponytail: a trip whose roads add or take off fewer minutes than this does not tell of them; by eye.
+const SCENE_MINUTES = 3
 let w: World | undefined
 let every = 20
 let hoursPerSec = 0, lastHours = 0 // lastHours: the last speed that was not a pause
@@ -340,6 +344,30 @@ onmessage = async (e: MessageEvent<ToWorker>) => {
     eventId = 0
     const pick = evenPick(SHOWN.map(s => keep * s), pickRng)
     pickPolicy = policyPicker(w, m.seed)
+    // The trip to work of agent i in a scenario: the minutes that its roads add or take off (traffic.ts RoadUse factor)
+    // on the path of its mode, and the first new road on it. Known once the run has routed (use).
+    const moverOf = new Map(Array.from(w.movers, (i, j) => [i, j])), sceneRng = mulberry32(m.seed + 5)
+    const tripScene = (i: number): Extract<SimEvent, { kind: 'personal' }>['scene'] => {
+      const j = moverOf.get(i), mode = world.mode[i]
+      if (run.scenario === 'now' || !use || j === undefined || !ROAD_MODES.has(mode)) return undefined
+      const k = 4 * j * VARIANTS + (mode === SCOOTER && use.paths[4 * j * VARIANTS + 1] ? 1 : 0), es = use.paths[k]
+      if (!es) return undefined
+      const minutes = Math.round((world.dur1[i] - ACCESS[mode]) * (use.factor[k] - 1))
+      let via: string | undefined
+      for (let n = 0; n < es.length && !via; n++) if (graphs.road.tags[es[n]] & FUTURE && edgeName[es[n]] >= 0) via = names[edgeName[es[n]]]
+      return Math.abs(minutes) >= SCENE_MINUTES || via ? { minutes, via } : undefined
+    }
+    let sceneShare: number | undefined // the chance that a changed trip shows, once the run has routed
+    const pickScene = (i: number) => {
+      if (!use) return undefined
+      if (sceneShare === undefined) {
+        let changed = 0
+        for (const a of world.movers) if (world.dest[a] === WORK && tripScene(a)) changed++
+        sceneShare = Math.min(1, SCENE_EVENTS_PER_DAY / Math.max(1, changed))
+      }
+      const sc = tripScene(i)
+      return sc && sceneRng() < sceneShare ? sc : undefined
+    }
     w.onPlan = i => {
       backs.delete(i)
       const dest = world.dest[i]
@@ -349,9 +377,10 @@ onmessage = async (e: MessageEvent<ToWorker>) => {
       // A day at home has no departure. ponytail: it shows at 09:00 of that day, a time chosen by eye.
       const t = dest === STAY ? world.dep[i] - 15 * 60 : world.dep[i]
       if (t < 0) return // a night shift that left on day -1
-      if (!pick(dest) && !(dest === WORK && world.policy[i] && pickPolicy?.(world.policy[i] & ON_BRIDGE ? 1 : 0))) return
+      const scene = dest === WORK ? pickScene(i) : undefined
+      if (!scene && !pick(dest) && !(dest === WORK && world.policy[i] && pickPolicy?.(world.policy[i] & ON_BRIDGE ? 1 : 0))) return
       const e = { t, kind: 'personal' as const, name: nameOf(ids, i), home: world.home[i], to: play ? world.play[i] : world.work[i],
-        dest, mode: play ? world.playMode[i] : world.mode[i], group, policy: world.policy[i] || undefined }
+        dest, mode: play ? world.playMode[i] : world.mode[i], group, policy: world.policy[i] || undefined, scene: scene ?? (dest === WORK ? tripScene(i) : undefined) }
       newEvents.push({ ...e, id: `a${++eventId}` })
       // A shown trip also shows its way home, so the stream follows one character through the day.
       if (dest === WORK || play) { const b = { ...e, id: `a${++eventId}`, t: world.ret[i], back: true }; newEvents.push(b); backs.set(i, b); planned.set(i, b.t) }

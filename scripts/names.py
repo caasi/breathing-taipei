@@ -6,7 +6,7 @@ Usage:
   STREETS     Overpass JSON of scripts/queries/streets.overpassql (named roads from 國道 down to tertiary):
               curl -A <name> --data-urlencode data@scripts/queries/streets.overpassql https://overpass-api.de/api/interpreter
   PUBLIC_DIR  reads road-graph.json and road-lines.json, writes road-names.json
-  SCENARIO    scripts/jiang.json: a new road (tag FUTURE, scripts/graphs.py) takes the name of the nearest line in it
+  SCENARIO    web/src/sim/jiang.json: a new road (tag FUTURE, scripts/graphs.py) takes the name of the nearest line in it
 
 road-names.json: {"names": [...], "edge": [...]}, where edge[e] is the index of the name of edge e of road-graph.json,
 or -1 when no named road of its class lies within MAX_M of the middle of the edge (a lane, or a road with no name).
