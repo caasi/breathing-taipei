@@ -101,25 +101,31 @@ export function HeatMap({ towns, villages, level, nodes, counts, pop, perAgent, 
   // A railway and a high speed rail station in one building (臺北, 南港) are one marker with both kinds: two
   // half-transparent markers on top of each other looked darker and printed the name twice. Apart from the cells, so a
   // change of level does not build the station layer again.
+  // A name moves out with its signs when they grow past their size in map units (stationScale); the view changes the
+  // scale only when the window does.
+  const scale = stationScale(view.k)
   const points = useMemo(() => {
     const points: { kinds: string[]; name: string; xy: [number, number] }[] = []
     for (const p of transit?.points ?? []) {
-      const xy = proj([p.lon, p.lat])!, near = points.find(q => Math.hypot(q.xy[0] - xy[0], q.xy[1] - xy[1]) < 3)
+      const at = proj([p.lon, p.lat])!
+      // The point of a bridge is its east end; its sign stands right of it, a little apart, so the bridge shows (author's choice).
+      const xy: [number, number] = p.kind === 'bridge' ? [at[0] + (R + 3) * scale, at[1]] : at, near = points.find(q => Math.hypot(q.xy[0] - xy[0], q.xy[1] - xy[1]) < 3)
       if (near) near.kinds.push(p.kind)
       else points.push({ kinds: [p.kind], name: p.name, xy })
     }
     return points
-  }, [proj, transit])
+  }, [proj, transit, scale])
 
-  // A name moves out with its signs when they grow past their size in map units (stationScale); the view changes the
-  // scale only when the window does.
-  const scale = stationScale(view.k)
   // The names keep the opacity of the SVG markers: they are for orientation, so the eye follows the area colours. A
   // name follows the last sign of its station (Stations.tsx).
-  const names = useMemo(() => points.map(p => [p, signsOf(p, signs).length] as const).filter(([, n]) => n > 0).map(([p, n]): Text => ({
-    xy: [p.xy[0] + (R + 3 + (n - 1) * SPACING) * scale, p.xy[1] + (-R - 1 + (n - 1) * SPACING) * scale], dy: 0,
-    text: p.name, style: 'station', anchor: 'start', alpha: 0.6,
-  })), [points, signs, scale])
+  // The bridge of a policy sits on the name of the airport, about 2 km east of it, under the name of 內湖區: so the name
+  // of the airport goes to the top left of its sign, out of the way of the sign of the bridge (author's choice).
+  const names = useMemo(() => points.map(p => [p, signsOf(p, signs).length] as const).filter(([, n]) => n > 0).map(([p, n]): Text => {
+    const right = p.xy[0] + (R + 3 + (n - 1) * SPACING) * scale, top = p.xy[1] + (-R - 1 + (n - 1) * SPACING) * scale
+    const text = { text: p.name, style: 'station', dy: 0, alpha: 0.6 } as const
+    if (p.kinds.includes('airport')) return { ...text, xy: [p.xy[0] - (R + 3) * scale, top], anchor: 'end' }
+    return { ...text, xy: [right, top], anchor: 'start' }
+  }), [points, signs, scale])
 
   const byTown = new Map<string, number>()
   // A cell with no node (-1) counts as empty.

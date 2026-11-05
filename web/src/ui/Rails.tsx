@@ -6,10 +6,13 @@ import { COVER, DASHED, rgb, strips } from './lines.ts'
 import type { Transit } from './HeatMap.tsx'
 
 // The look the SVG had, in map units, so a line grows with the zoom as an SVG stroke did: an MRT line is wider, a 台鐵
-// line is dashed. Lines are for orientation, so they are faint and the eye follows the area colours.
-const OPACITY = 0.35
-const KINDS = ['mrt', 'lrt', 'tra', 'hsr'] as const
-const STYLES = { mrt: { width: 1.8, dash: [0, 0] }, lrt: { width: 1.5, dash: [0, 0] }, tra: { width: 1.5, dash: [6, 3] }, hsr: { width: 1.5, dash: [0, 0] } }
+// line is dashed. Lines are for orientation, so they are faint and the eye follows the area colours. A bridge of a
+// policy (kind bike) is the change that the viewer made, so it is not faint; it is as thin as a road (Traffic.tsx).
+const KINDS = ['mrt', 'lrt', 'tra', 'hsr', 'bike'] as const
+const STYLES = {
+  mrt: { width: 1.8, dash: [0, 0], opacity: 0.35 }, lrt: { width: 1.5, dash: [0, 0], opacity: 0.35 }, tra: { width: 1.5, dash: [6, 3], opacity: 0.35 },
+  hsr: { width: 1.5, dash: [0, 0], opacity: 0.35 }, bike: { width: 0.8, dash: [0, 0], opacity: 1 },
+}
 // Segment values sit in a texture of this width, as one row of a texel per segment can be wider than a GPU allows.
 const ROW = 1024
 
@@ -19,10 +22,10 @@ const ROW = 1024
 const VS = `#version 300 es
 in vec2 xy; in vec2 normal; in float across; in float along; in vec3 colour; in float seg; in float width; in vec2 dashes;
 in float kind;
-uniform vec4 view; uniform vec2 devicePx; uniform float pxPerUnit; uniform float shown[${KINDS.length}]; uniform sampler2D segments;
-out float d; out float s; out vec3 c; flat out float w; flat out vec2 dash;
+uniform vec4 view; uniform vec2 devicePx; uniform float pxPerUnit; uniform float shown[${KINDS.length}]; uniform float opacity[${KINDS.length}]; uniform sampler2D segments;
+out float d; out float s; out vec3 c; flat out float w; flat out vec2 dash; flat out float alpha;
 void main() {
-  w = width * pxPerUnit; dash = dashes;
+  w = width * pxPerUnit; dash = dashes; alpha = opacity[int(kind)];
   float reach = w * 0.5 + 1.0;
   d = across * reach; s = along;
   // A segment takes the colour of its texel by the share in alpha: 0 keeps the colour of its line.
@@ -33,11 +36,11 @@ void main() {
 }`
 const FS = `#version 300 es
 precision highp float;
-in float d; in float s; in vec3 c; flat in float w; flat in vec2 dash; uniform float pxPerUnit; out vec4 o;
+in float d; in float s; in vec3 c; flat in float w; flat in vec2 dash; flat in float alpha; uniform float pxPerUnit; out vec4 o;
 ${COVER}
 ${DASHED}
 void main() {
-  float a = ${OPACITY.toFixed(2)} * coverOf(d, w) * dashCover(s, dash, pxPerUnit);
+  float a = alpha * coverOf(d, w) * dashCover(s, dash, pxPerUnit);
   if (a <= 0.0) discard;
   o = vec4(c * a, a);
 }`
@@ -59,7 +62,7 @@ export function Rails({ lines, proj, show, segments }: Props) {
   show$.current = show; segments$.current = segments
   useLayer(LAYER.rails, gl => {
     const prog = program(gl, VS, FS)
-    const at = Object.fromEntries(['view', 'devicePx', 'pxPerUnit', 'shown', 'segments'].map(n => [n, gl.getUniformLocation(prog, n)]))
+    const at = Object.fromEntries(['view', 'devicePx', 'pxPerUnit', 'shown', 'opacity', 'segments'].map(n => [n, gl.getUniformLocation(prog, n)]))
     const attrs = {
       xy: [] as number[], normal: [] as number[], across: [] as number[], along: [] as number[], colour: [] as number[],
       seg: [] as number[], width: [] as number[], dashes: [] as number[], kind: [] as number[],
@@ -102,6 +105,7 @@ export function Rails({ lines, proj, show, segments }: Props) {
         gl.uniform1i(at.segments, 0)
         gl.uniform4fv(at.view, clip); gl.uniform2f(at.devicePx, 2 / width, 2 / height); gl.uniform1f(at.pxPerUnit, pxPerUnit)
         gl.uniform1fv(at.shown, KINDS.map(k => show$.current.has(k) ? 1 : 0))
+        gl.uniform1fv(at.opacity, KINDS.map(k => STYLES[k].opacity))
         gl.drawArrays(gl.TRIANGLES, 0, count)
         shown = [...show$.current].sort().join()
       },

@@ -1,11 +1,12 @@
 import { getJson, getOptional } from '../load.ts'
-import { init, advance, counts, now, PLAY, STAY, WORK, type World } from './core.ts'
+import { init, advance, counts, now, repolicy, PLAY, STAY, WORK, type World } from './core.ts'
 import { kindAt, WORKDAY, type Calendar } from './calendar.ts'
 import { drawNames, nameOf, type People } from './people.ts'
 import { evenPick, type Mood, type SimEvent } from './events.ts'
 import { mulberry32 } from './rng.ts'
 import { FPS, clockAt, respeed, stepsTo, type Clock } from './pace.ts'
-import { cityFrom, MODES, SCOOTER, type Village } from './city.ts'
+import { cityFrom, MODES, SCOOTER, BIKE, EBIKE, type Village } from './city.ts'
+import { ON_BRIDGE, type Policies } from './policy.ts'
 import { networks, readRoutes, ROAD_MODES, roadNode, tripPaths, wayBack, type Batch, type Routes } from './paths.ts'
 import { directions, sampler, type SparkPath } from './sparks.ts'
 import type { GraphJson } from './route.ts'
@@ -16,9 +17,12 @@ export type ToWorker =
   // startDay: index into calendar.json of day 0. start: an id that the first frame of the run gives back.
   // at: as in speed. The clock of the new run stands at minute 0 from that time until the page sends a speed.
   | { type: 'init'; perAgent: number; seed: number; startDay: number; start: number; at: number }
+  // The page sends the settings before its first init and at each change; they reach the run that goes on.
+  // redraw: the number of the change, for the page to know the trips of its latest change (FromWorker redraw)
+  | { type: 'policies'; policies: Policies; redraw: number }
   // minute: the clock of the page at at (performance.timeOrigin + performance.now() of the change), so both clocks agree.
   | { type: 'speed'; hoursPerSec: number; minute: number; at: number }
-  | { type: 'sample'; every: number } // the run goes on; only the agents drawn as dots change
+  | { type: 'sample'; every: number; redraw: number } // the run goes on; only the agents drawn as dots change
   | { type: 'traffic'; on: boolean } // the traffic layer is shown; the worker sends the levels only then
 /**
  * Sampled agents' current plans (minutes since 00:00 of day 0), for the renderer to interpolate.
@@ -42,6 +46,8 @@ export type FromWorker = {
   since: number // the `at` of the change of speed that the clock uses; the page takes the clock only from its latest change
   routing: boolean // the road paths of the run are not all found yet, so the run must not start (traffic.ts roadUse)
   roads: number // the share of the road paths found, 0 to 1, while routing
+  dotsBusy: boolean // the paths of the latest dots are not all sent yet
+  redraw?: number // with trips: the latest change of the page (ToWorker redraw) that these trips include
 }
 
 const EVENTS_PER_DAY = 48
@@ -49,12 +55,15 @@ const EVENTS_PER_DAY = 48
 // ones (out on a day off, away from the two cities), as the user asked. Indexed by dest (WORK, PLAY, GONE, STAY).
 // ponytail: weights by eye; an accident, when it comes, is shown every time.
 const SHOWN = [0.25, 1, 3, 0.05]
+// ponytail: the plans to work of the agents that a policy changed, shown a day on top of the others, so a policy can be
+// seen in the stream; by eye.
+const POLICY_EVENTS_PER_DAY = 12, BRIDGE_EVENTS_PER_DAY = 4
 let w: World | undefined
 let every = 20
 let hoursPerSec = 0, lastHours = 0 // lastHours: the last speed that was not a pause
 const clock: Clock = { minute: 0, at: performance.now(), perMs: 0 }
 let since = 0, owed = false // owed: the page has no frame yet with the clock of the latest change of speed
-let extra: Pick<FromWorker, 'start' | 'nodes' | 'districts' | 'homes' | 'coords' | 'trips' | 'replans' | 'traffic' | 'cells' | 'cellKeys'> = {}
+let extra: Pick<FromWorker, 'start' | 'nodes' | 'districts' | 'homes' | 'coords' | 'trips' | 'replans' | 'traffic' | 'cells' | 'cellKeys' | 'redraw'> = {}
 let pending: Generator<Batch | void> | undefined
 // Finds the paths of the road load (traffic.ts roadUse) in the time that the paths of the dots leave.
 let warming: Generator<number> | undefined, roads = 0 // roads: the share of the road paths found
@@ -76,14 +85,31 @@ let trafficOn = false, lastCells = new Uint8Array(0), jamRng = mulberry32(0)
 // same step), whatever the speed, so a seed gives the same run at any speed: the run starts only when the road paths are found. One take costs 7 to 26 ms at the morning peak in Node on an i7-7700 (2026-10-27), so at 8x (16 takes a second) it is the main cost.
 const JAM_MINUTES = 15
 // A jam event comes from a road traveller on an edge at least this slow (traffic.ts levels: 1 + 254 x the colour level
-// of levelsOf; red from 0.43, 2 times the free time; angry from 0.75, 2.75 times). ponytail: at most one jam event a take, and one a day for each character; by eye.
+// of levelsOf; red from 0.43, 2 times the free time; angry from 0.75, 2.75 times). ponytail: at most one jam event a take, at
+// JAM_SHOWN of the takes (the user found them too many on 2026-11-05), and one a day for each character; by eye.
+const JAM_SHOWN = 1 / 3
 // The temper of a character, 0 to 1, fixed by its index.
 const temperOf = (i: number) => Math.imul(i + 1, 2654435761) / 2 ** 32 + 0.5
 const JAM_FROM = 1 + Math.round(0.43 * 254), ANGRY_FROM = 1 + Math.round(0.75 * 254)
 let onJam: ((agent: number, edge: number, level: number) => void) | undefined
 // After each take: moves the shown way home of a character that a jam made late to work.
 let onLate: (() => void) | undefined
-const data = Promise.all(['od2.json', 'villages2.json', 'signal.json', 'road-graph.json', 'mrt-graph.json', 'night.json', 'calendar.json', 'people.json', 'road-names.json'].map(getJson))
+// The crossing of the river on the way of a bicycle dot, from the city of the run.
+let bikeVia: ((mode: number, home: number, work: number) => number[]) | undefined
+// The latest settings, and the city of the run that puts them on its world. web/spec/WorkerRuns.tla (LatestPolicies):
+// 'init' reads them after its await, so a change while it loads is not lost.
+let policies: Policies = {}, city: ReturnType<typeof cityFrom> | undefined
+// The plans to work of the agents that a policy reached get a share of the stream of their own (POLICY_EVENTS_PER_DAY).
+let pickPolicy: ((kind: number) => boolean) | undefined
+let redraw = 0 // the latest change of the page that asked for new dots
+// The riders of the new bridge are few (a handful of agents), so they have a share of their own: each of their trips
+// to work shows, up to BRIDGE_EVENTS_PER_DAY a day. Kind 0 is every other reached agent, kind 1 a rider of the bridge.
+const policyPicker = (world: World, seed: number) => {
+  let reached = 0, bridge = 0
+  for (const p of world.policy) if (p & ON_BRIDGE) bridge++; else if (p) reached++
+  return reached || bridge ? evenPick([POLICY_EVENTS_PER_DAY / Math.max(1, reached), Math.min(1, BRIDGE_EVENTS_PER_DAY / Math.max(1, bridge))], mulberry32(seed + 4)) : undefined
+}
+const data = Promise.all(['od2.json', 'villages2.json', 'signal.json', 'road-graph.json', 'mrt-graph.json', 'night.json', 'calendar.json', 'people.json', 'road-names.json', 'river.json'].map(getJson))
 /** The name of each road edge, from scripts/names.py: edge[e] indexes names, or is -1. */
 type RoadNames = { names: string[]; edge: number[] }
 const net = data.then(([, , , road, mrt]) => networks(road, mrt))
@@ -111,7 +137,7 @@ const sample = (w: World): Trips => {
   for (let i = 0; i < w.home.length; i += every) if (w.home[i] !== w.work[i] || w.home[i] !== w.play[i]) picked.push(i)
   idx = Uint32Array.from(picked)
   sentDep = take(w.dep, idx, Int32Array); sentDur1 = take(w.dur1, idx, Uint16Array); sentDur2 = take(w.dur2, idx, Uint16Array)
-  return { home: take(w.home, idx, Uint16Array), work: take(w.work, idx, Uint16Array), mode: take(w.mode, idx, Uint8Array),
+  return { home: take(w.home, idx, Uint16Array), work: take(w.work, idx, Uint16Array), mode: take(w.choice, idx, Uint8Array),
     play: take(w.play, idx, Uint16Array), playMode: take(w.playMode, idx, Uint8Array), dest: take(w.dest, idx, Uint8Array),
     dep: take(w.dep, idx, Int32Array), dur1: take(w.dur1, idx, Uint16Array), ret: take(w.ret, idx, Int32Array), dur2: take(w.dur2, idx, Uint16Array) }
 }
@@ -135,8 +161,8 @@ const replans = (w: World): Replans | undefined => {
 // no road path; then the road paths of the dots are found in a batch (routes.fill), much faster than one at a time.
 function* bothPaths(trips: Trips, coords: [number, number][], graphs: Awaited<typeof net>, known?: Routes): Generator<Batch | void> {
   const n = trips.home.length
-  const work = tripPaths(trips, coords, graphs, known)
-  const play = tripPaths({ home: trips.home, work: trips.play, mode: trips.playMode }, coords, graphs, known)
+  const work = tripPaths(trips, coords, graphs, known, bikeVia)
+  const play = tripPaths({ home: trips.home, work: trips.play, mode: trips.playMode }, coords, graphs, known, bikeVia)
   const a0 = work.next(), b0 = play.next()
   if (!a0.done) yield a0.value
   if (!b0.done) yield { ...b0.value, ks: b0.value.ks.map(k => k + n) }
@@ -172,7 +198,7 @@ const takeTrafficNow = (world: World) => {
   const stuck: number[] = []
   for (let k = 0; k < onRoad.length; k += 2) if (next[onRoad[k + 1]] >= JAM_FROM) stuck.push(k)
   onLate?.()
-  if (stuck.length && onJam) { const k = stuck[Math.floor(jamRng() * stuck.length)]; onJam(onRoad[k], onRoad[k + 1], next[onRoad[k + 1]]) }
+  if (stuck.length && onJam && jamRng() < JAM_SHOWN) { const k = stuck[Math.floor(jamRng() * stuck.length)]; onJam(onRoad[k], onRoad[k + 1], next[onRoad[k + 1]]) }
 }
 
 const frame = () => {
@@ -209,7 +235,7 @@ const frame = () => {
     else if (b.value) paths.push(b.value)
   }
   const found = sparks.take().map(edges => ({ edges, back: directions(edges, edgeEnds) }))
-  const msg: FromWorker = { ...extra, ...(found.length ? { sparks: found } : {}), paths, routing, roads, minute: w.minute, day: w.day, counts: c.nodes, road: c.road, away: c.away, ms, events: newEvents, clock: clock.minute, at: performance.timeOrigin + t, since }
+  const msg: FromWorker = { ...extra, ...(found.length ? { sparks: found } : {}), paths, routing, roads, dotsBusy: !!pending, minute: w.minute, day: w.day, counts: c.nodes, road: c.road, away: c.away, ms, events: newEvents, clock: clock.minute, at: performance.timeOrigin + t, since }
   newEvents = []
   owed = false
   postMessage(msg)
@@ -258,7 +284,15 @@ onmessage = async (e: MessageEvent<ToWorker>) => {
   }
   // Showing the layer sends the traffic of the last take; it never adds a take, so the run does not depend on the toggle.
   if (m.type === 'traffic') { trafficOn = m.on; if (trafficOn && jam.length) { extra.traffic = jam; extra.cells = lastCells }; return }
-  if (m.type === 'sample') { every = m.every; if (w) net.then(g => { if (w) extra = { ...extra, trips: draw(w, g) } }); return }
+  if (m.type === 'policies') {
+    policies = m.policies; redraw = m.redraw
+    if (w && city) {
+      city.setPolicies(policies); repolicy(w); pickPolicy = policyPicker(w, w.seed)
+      net.then(g => { if (w) extra = { ...extra, trips: draw(w, g), redraw } })
+    }
+    return
+  }
+  if (m.type === 'sample') { every = m.every; redraw = m.redraw; if (w) net.then(g => { if (w) extra = { ...extra, trips: draw(w, g), redraw } }); return }
   // The old world stops now. The clock of the new run stands at minute 0 until the page is ready for it and sends a
   // speed, as the clock of the page does.
   w = undefined
@@ -267,10 +301,12 @@ onmessage = async (e: MessageEvent<ToWorker>) => {
   // Any failure while starting (loading, building the city, sampling) goes to the page.
   // The async handler would otherwise reject without a message, and onerror does not see a rejection.
   try {
-    const [[od2, villages, signal, roadJson, , night, cal, people, roadNames], graphs] = await Promise.all([data, net])
+    const [[od2, villages, signal, roadJson, , night, cal, people, roadNames, river], graphs] = await Promise.all([data, net])
     onJam = undefined; onLate = undefined; jamRng = mulberry32(m.seed + 3)
     // The run is always at village level; the page adds the villages up into districts for the district level.
-    const c = cityFrom({ ...od2, villages, signal, night }, m.perAgent, day => kindAt(cal as Calendar, m.startDay + day))
+    const c = cityFrom({ ...od2, villages, signal, night, river }, m.perAgent, day => kindAt(cal as Calendar, m.startDay + day), policies)
+    city = c
+    bikeVia = (mode, a, b) => (mode === BIKE || mode === EBIKE ? c.bike(a, b).via ?? [] : [])
     w = init(c.city, m.seed)
     const world = w, districtOf = Array.from(w.home, h => villages[h].town)
     const ids = drawNames(people as People, districtOf, m.seed + 1), pickRng = mulberry32(m.seed + 2)
@@ -280,6 +316,7 @@ onmessage = async (e: MessageEvent<ToWorker>) => {
     newEvents = []
     eventId = 0
     const pick = evenPick(SHOWN.map(s => keep * s), pickRng)
+    pickPolicy = policyPicker(w, m.seed)
     w.onPlan = i => {
       backs.delete(i)
       const dest = world.dest[i]
@@ -289,9 +326,9 @@ onmessage = async (e: MessageEvent<ToWorker>) => {
       // A day at home has no departure. ponytail: it shows at 09:00 of that day, a time chosen by eye.
       const t = dest === STAY ? world.dep[i] - 15 * 60 : world.dep[i]
       if (t < 0) return // a night shift that left on day -1
-      if (!pick(dest)) return
+      if (!pick(dest) && !(dest === WORK && world.policy[i] && pickPolicy?.(world.policy[i] & ON_BRIDGE ? 1 : 0))) return
       const e = { t, kind: 'personal' as const, name: nameOf(ids, i), home: world.home[i], to: play ? world.play[i] : world.work[i],
-        dest, mode: play ? world.playMode[i] : world.mode[i], group }
+        dest, mode: play ? world.playMode[i] : world.mode[i], group, policy: world.policy[i] || undefined }
       newEvents.push({ ...e, id: `a${++eventId}` })
       // A shown trip also shows its way home, so the stream follows one character through the day.
       if (dest === WORK || play) { const b = { ...e, id: `a${++eventId}`, t: world.ret[i], back: true }; newEvents.push(b); backs.set(i, b); planned.set(i, b.t) }
@@ -335,7 +372,7 @@ onmessage = async (e: MessageEvent<ToWorker>) => {
     for (const i of w.movers) w.onPlan(i)
     coords = c.coords
     traffic(w, graphs, roadJson, roadNames as RoadNames)
-    extra = { start: m.start, nodes: c.nodes, districts: (villages as Village[]).map(v => v.town), homes: Uint32Array.from(c.city.homes), coords: c.coords, trips: draw(w, graphs) }
+    extra = { start: m.start, nodes: c.nodes, districts: (villages as Village[]).map(v => v.town), homes: Uint32Array.from(c.city.homes), coords: c.coords, trips: draw(w, graphs), redraw }
   } catch (err) {
     w = undefined
     postMessage({ error: String(err), start: m.start } satisfies WorkerError)

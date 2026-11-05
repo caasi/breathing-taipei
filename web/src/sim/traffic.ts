@@ -12,7 +12,7 @@ import { freeTime, type GraphJson } from './route.ts'
 const ALPHA = 0.15, BETA = 1
 // ponytail: one capacity for every cell, in passenger car units (PCU) per km of road, fitted so that the morning peak of 台北市 has the
 // TomTom congestion level (scripts/traffic.ts, DATA.md "Figures in the code"). Real roads differ in lanes.
-export const CAPACITY = 10.9
+export const CAPACITY = 11.1
 // ponytail: the road load is taken over cells of CELL degrees (about 500 m) and the PCU per km of road in a cell stand
 // in for the flow of BPR. Per edge (measured on 2026-10-26, when every trip took one shortest path) only a few edges
 // carried any load, with a travel time up to 25 times the free time; a cell spreads it over the roads nearby. The
@@ -32,7 +32,7 @@ const NAV = 0.6
 // ponytail: the road space of one traveller of each mode (city.ts MODES), in PCU: a vehicle's PCU over the people in it.
 // A bus is 2 PCU with 20 riders, a scooter 0.4 PCU with 1.2 riders, a car 1 PCU with 1.4 riders; all guesses. So a
 // move from car to bus frees road space.
-export const PCU = [0, 2 / 20, 0.4 / 1.2, 1 / 1.4, 0, 0]
+export const PCU = [0, 2 / 20, 0.4 / 1.2, 1 / 1.4, 0, 0, 0]
 
 /**
  * The road paths of each mover j (its index in w.movers), with their cumulative free time (route.ts freeTime, which
@@ -67,7 +67,8 @@ export const roadUse = (w: World, routes: Routes, ends: (agent: number, leg: num
     const legs: [number, number, number, number][] = [] // mover index, leg, from, to
     for (let j = 0; j < n; j++) {
       const i = w.movers[j]
-      if (ROAD_MODES.has(w.mode[i])) legs.push([j, 0, ...ends(i, 0)])
+      // The mode that init drew: a policy can move an agent off the road and back while the run goes on.
+      if (ROAD_MODES.has(w.base.choice[i])) legs.push([j, 0, ...ends(i, 0)])
       if (ROAD_MODES.has(w.playMode[i])) legs.push([j, 1, ...ends(i, 1)])
       if (j % 20000 === 19999) yield 0.05 * j / n
     }
@@ -141,6 +142,7 @@ export const loadNow = (w: World, use: RoadUse, out: Float32Array, onRoad?: (age
     const i = w.movers[j]
     // A trip out of the two cities has no path on the map (its plan goes from home to home).
     if (w.dest[i] === GONE || where(w, i, t) !== ROAD) continue
+    if (!ROAD_MODES.has(w.dest[i] === PLAY ? w.playMode[i] : w.mode[i])) continue // walking, cycling, or a policy moved it off the road
     const out1 = t < w.dep[i] + w.dur1[i], start = out1 ? w.dep[i] : w.ret[i], leg = w.dest[i] === PLAY ? 1 : 0
     const base = ((2 * j + leg) * 2 + (out1 ? 0 : 1)) * VARIANTS
     if (use.since[j] !== start) {

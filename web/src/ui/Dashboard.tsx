@@ -1,8 +1,9 @@
 import { memo } from 'react'
+import { KEY } from '../sim/policy.ts'
 import { useQuery, bool, fromBool, onSteps } from '../query.ts'
 import { hhmm, H2 } from './format.ts'
 
-import { actionOf, jamOf, type PlaceOf, type SimEvent } from '../sim/events.ts'
+import { actionOf, jamOf, notesOf, type PlaceOf, type SimEvent } from '../sim/events.ts'
 
 // The kind of an event shows by the colour of its text, not by a label; a bad event (an accident) gets its own colour when it comes.
 const COLOUR = { personal: '#eee', public: '#c9a7ff', jam: '#ff8a65' } as const
@@ -10,16 +11,30 @@ const COLOUR = { personal: '#eee', public: '#c9a7ff', jam: '#ff8a65' } as const
 // (no official colour per district was found). ponytail: chosen by eye.
 export const PLACE = { town: '#8ecae6', village: '#b9dcee' } as const
 
-type Policy = { id: string; label: string } & ({ type: 'toggle' } | { type: 'range'; min: number; max: number; step: number; unit: string; start: number })
-// ponytail: placeholder policies for the layout only; nothing here reaches the simulation yet.
-// Grouped by the HEART idea of puma.taipei, as the user set.
+// `who` is the candidate whose platform has the policy; the page shows it as a tag after the name (docs/platforms/).
+type Policy = { id: string; label: string; who: string } & ({ type: 'toggle' } | { type: 'range'; min: number; max: number; step: number; unit: string; start: number })
+// Grouped by the HEART idea of puma.taipei, as the user set. The ids are the keys of policy.ts (KEY).
+const SHEN = '沈伯洋'
 const POLICIES: [string, Policy[]][] = [
-  ['空間', [{ id: 'bus-lane', label: '公車專用道延伸', type: 'toggle' }, { id: 'sidewalk', label: '人行道拓寬', type: 'toggle' }]],
-  ['機會', [{ id: 'flex', label: '彈性上班比例', type: 'range', min: 0, max: 50, step: 5, unit: '%', start: 10 }]],
-  ['陪伴', [{ id: 'meals', label: '社區共餐據點', type: 'toggle' }]],
-  ['韌性', [{ id: 'headway', label: '捷運尖峰班距', type: 'range', min: 2, max: 8, step: 0.5, unit: ' 分', start: 4 }, { id: 'rain-off', label: '大雨時停班停課', type: 'toggle' }]],
-  ['時間', [{ id: 'stagger', label: '錯峰上班（提早）', type: 'range', min: 0, max: 60, step: 15, unit: ' 分', start: 0 }]],
+  ['空間', [
+    { id: KEY.bridge, label: '迎風—港墘自行車橋', who: SHEN, type: 'toggle' },
+    { id: KEY.straight, label: '河濱進內科取直', who: SHEN, type: 'toggle' },
+    { id: KEY.hub, label: '運動驛站', who: SHEN, type: 'toggle' },
+    // Not a policy: a what-if of how many people the bridge moves to the bicycle; it needs the bridge.
+    { id: KEY.bikeShift, label: '過橋改騎自行車（需開橋）', who: '假設', type: 'range', min: 0, max: 100, step: 10, unit: '%', start: 0 },
+  ]],
+  ['時間', [
+    { id: KEY.stagger, label: '內科錯峰分流', who: SHEN, type: 'range', min: 0, max: 50, step: 10, unit: '%', start: 0 },
+    { id: KEY.ebike, label: 'YouBike 2.0E 尖峰免費', who: SHEN, type: 'toggle' },
+  ]],
 ]
+// A note under an event that a policy changed: the words of the platform, the candidate and a link to the page. The
+// credit of CC BY 4.0 for the words is in the info panel (App.tsx), with the other sources.
+const Note = ({ note }: { note: ReturnType<typeof notesOf>[number] }) =>
+  <p style={{ margin: '4px 0 0 44px', padding: '2px 8px', borderLeft: '2px solid #6a4a3d', fontSize: 12, color: '#bbb' }}>
+    {note.quote}<Who who={note.who} /> <a href={note.url} target="_blank" rel="noopener noreferrer" style={{ color: '#e8c9b8' }}>{note.page}</a></p>
+const Who = ({ who }: { who: string }) =>
+  <span style={{ fontSize: 11, color: '#e8c9b8', border: '1px solid #6a4a3d', borderRadius: 3, padding: '0 4px', marginLeft: 6, whiteSpace: 'nowrap' }}>{who}</span>
 const ALL_POLICIES = POLICIES.flatMap(([, ps]) => ps)
 
 export type PolicyValues = { values: Map<string, number>; set: (id: string, value: number) => void }
@@ -57,7 +72,8 @@ export const Events = memo(function Events({ events, now, dayLabel, placeOf }: E
         {(i === 0 || dayOf(happened[i - 1]) !== dayOf(e)) && <p style={{ margin: '0 0 6px', fontSize: 12, color: '#888' }}>{dayLabel(dayOf(e))}</p>}
         <div style={{ display: 'flex', gap: 8 }}>
           <span style={{ fontVariantNumeric: 'tabular-nums', color: '#aaa' }}>{hhmm(e.t % 1440)}</span>
-          <span style={{ color: COLOUR[e.kind] }}>{e.kind === 'public' ? e.text : <><span style={{ color: PLACE.town }}>{placeOf(e.home).town}</span><span style={{ color: PLACE.village }}>{placeOf(e.home).village}</span>的<span style={{ color: '#ffd9a0' }}>{e.name}</span>{e.kind === 'jam' ? jamOf(e, placeOf) : actionOf(e, placeOf)}</>}</span></div></li>)}
+          <span style={{ color: COLOUR[e.kind] }}>{e.kind === 'public' ? e.text : <><span style={{ color: PLACE.town }}>{placeOf(e.home).town}</span><span style={{ color: PLACE.village }}>{placeOf(e.home).village}</span>的<span style={{ color: '#ffd9a0' }}>{e.name}</span>{e.kind === 'jam' ? jamOf(e, placeOf) : actionOf(e, placeOf)}</>}</span></div>
+        {notesOf(e).map(n => <Note key={n.quote} note={n} />)}</li>)}
     </ol> : <p style={{ fontSize: 14, color: '#aaa' }}>還沒有事件。</p>}
   </>
 })
@@ -65,13 +81,13 @@ export const Events = memo(function Events({ events, now, dayLabel, placeOf }: E
 export function Policies({ values, set }: PolicyValues) {
   return <>
     <h2 style={H2}>政策</h2>
-    <p style={NOTE}>示意資料，調整後不會改變模擬。</p>
+    <p style={NOTE}>調整後從每個人的下一趟通勤開始生效。標籤是提出政策的候選人；數字多半是推估，見 DATA.md。</p>
     {POLICIES.map(([group, ps]) => <fieldset key={group} style={{ border: 0, borderTop: '1px solid #3a3333', margin: 0, padding: '6px 0' }}>
       <legend style={{ fontSize: 13, color: '#db6a41', padding: 0 }}>{group}</legend>
       {ps.map(p => p.type === 'toggle'
         ? <label key={p.label} style={{ display: 'block', fontSize: 14, margin: '4px 0' }}>
-          <input type="checkbox" checked={values.get(p.id) === 1} onChange={e => set(p.id, e.target.checked ? 1 : 0)} />{p.label}</label>
-        : <label key={p.label} style={{ display: 'block', fontSize: 14, margin: '4px 0' }}>{p.label}
+          <input type="checkbox" checked={values.get(p.id) === 1} onChange={e => set(p.id, e.target.checked ? 1 : 0)} />{p.label}<Who who={p.who} /></label>
+        : <label key={p.label} style={{ display: 'block', fontSize: 14, margin: '4px 0' }}>{p.label}<Who who={p.who} />
           <span style={{ float: 'right', fontVariantNumeric: 'tabular-nums' }}>{values.get(p.id)}{p.unit}</span>
           <input type="range" min={p.min} max={p.max} step={p.step} value={values.get(p.id)} onChange={e => set(p.id, Number(e.target.value))}
             style={{ display: 'block', width: '100%', accentColor: '#db6a41' }} /></label>)}

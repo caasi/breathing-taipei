@@ -1,6 +1,7 @@
-import { GONE, PLAY, STAY } from './core.ts'
+import { GONE, PLAY, STAY, WORK } from './core.ts'
 import { isoAt, kindAt, type Calendar } from './calendar.ts'
 import { BUS, SCOOTER } from './city.ts'
+import { STAGGERED, EBIKE_FREE, ON_BRIDGE, WASHED, TO_BIKE, STRAIGHT, inFree } from './policy.ts'
 
 /**
  * One event: t in minutes since 00:00 of day 0. A personal event follows one agent (a character: 10 people at the
@@ -9,8 +10,9 @@ import { BUS, SCOOTER } from './city.ts'
  */
 export type SimEvent =
   // back: the way home of the same plan, at the minute the character leaves work or the day-off place. late: the
-  // minutes that a jam on the way there moved it, with how the character takes it (angry or blank).
-  | { id: string; t: number; kind: 'personal'; name: string; home: number; to: number; dest: number; mode: number; group: string; back?: boolean; late?: number; mood?: Mood }
+  // minutes that a jam on the way there moved it, with how the character takes it (angry or blank). policy: the bits of
+  // World.policy (policy.ts), the policies that changed the character.
+  | { id: string; t: number; kind: 'personal'; name: string; home: number; to: number; dest: number; mode: number; group: string; back?: boolean; late?: number; mood?: Mood; policy?: number }
   | { id: string; t: number; kind: 'public'; text: string }
   // A character stuck on a slow road: the road by name, or else the node nearest to it; how it takes the jam.
   | { id: string; t: number; kind: 'jam'; name: string; home: number; mode: number; road?: string; near: number; mood: Mood }
@@ -22,7 +24,7 @@ export type Mood = 'angry' | 'stuck' | 'blank' | 'work' | 'leave'
 export type PlaceOf = (node: number) => { town: string; village: string }
 
 // How a character travels, in the order of MODES in city.ts.
-const BY = ['搭捷運', '搭公車', '騎機車', '開車', '走路', '騎自行車']
+const BY = ['搭捷運', '搭公車', '騎機車', '開車', '走路', '騎自行車', '騎 YouBike 2.0E ']
 // What the night-time groups and short trips go out for (the kind names of city.ts).
 const PURPOSE: Record<string, string> = {
   short: '出門辦事', early: '去早餐店上早班', evening: '去餐廳上晚班', overnight: '去上大夜班', nightlife: '去夜店上班',
@@ -37,12 +39,40 @@ export const actionOf = (e: Extract<SimEvent, { kind: 'personal' }>, placeOf: Pl
     const home = e.dest === PLAY ? `從${place}回家` : e.group ? '回家' : '下班回家'
     return e.mood === 'angry' ? `路上塞車晚到，晚了${e.late}分鐘才${by}${home}，一肚子火` : `路上塞車晚到，晚了${e.late}分鐘才${by}${home}，算了，明天早點出門`
   }
+  const p = policyOf(e)
+  // A trip of a policy: the ride (and the bridge) first, then what the policies add. The e-bike is free only when the
+  // trip starts in a free hour, which can be the way there, the way home or both.
+  const ride = `${by}${p & ON_BRIDGE ? '經迎風—港墘橋' : ''}`
+  const after = `${p & EBIKE_FREE && inFree(e.t % 1440) ? '，尖峰時段前 30 分鐘免費' : ''}${p & STRAIGHT ? '，河濱和內科之間不用再繞路' : ''}`
+  if (e.back && p) return `${p & STAGGERED ? `公司錯峰，${ride}提早或延後半小時下班回家，避開尖峰` : `${ride}下班回家`}${after}`
   if (e.back) return e.dest === PLAY ? `${by}從${place}回家` : e.group ? `${by}回家` : `${by}下班回家`
   if (e.dest === STAY) return '今天在家休息'
   if (e.dest === GONE) return '今天出遠門，離開雙北'
   if (e.dest === PLAY) return `${by}去${place}走走`
   if (e.group) return `${by}${PURPOSE[e.group] ?? '出門'}`
+  if (p) return `${p & STAGGERED ? '公司錯峰，' : ''}${p & TO_BIKE ? '改' : ''}${ride}到${place}上班${after}${p & WASHED ? '，在運動驛站沖完澡才進公司' : ''}`
   return `${by}到${place}上班`
+}
+
+/** The policy bits that an event tells of: only a trip to work (and its way home), as the policies are for work. */
+export const policyOf = (e: Extract<SimEvent, { kind: 'personal' }>) => (e.dest === WORK && !e.group ? e.policy ?? 0 : 0)
+
+const SHEN = '沈伯洋', TRANSPORT = 'https://puma.taipei/policies/%E4%BA%A4%E9%80%9A%E6%94%BF%E7%AD%96'
+// The words of the platform, quoted from the page of each policy (CC BY 4.0, docs/platforms/shen.md), for the note of an
+// event that a policy changed. 內科錯峰分流 is not on the pages: its words are from a news report of 沈伯洋's post, a
+// short quote. 河濱進內科取直 is not on the pages either: its words are from an interview of 沈伯洋 in a news report, a short
+// quote (docs/platforms/shen.md).
+const NOTES: [number, { who: string; quote: string; page: string; url: string }][] = [
+  [STAGGERED, { who: SHEN, quote: '鼓勵企業錯開上下班時間', page: 'ETtoday 2026-06-17', url: 'https://www.ettoday.net/news/20260617/3185438.htm' }],
+  [ON_BRIDGE, { who: SHEN, quote: '興建迎風—港墘跨基隆河自行車專用橋，直接銜接民生社區與內湖科技園區。', page: '交通政策', url: TRANSPORT }],
+  [EBIKE_FREE, { who: SHEN, quote: '提供 YouBike 2.0E 尖峰時段（08:00-10:00 / 17:00-19:00）前 30 分鐘免費', page: '交通政策', url: TRANSPORT }],
+  [WASHED, { who: SHEN, quote: '設置「運動驛站」提供盥洗、置物與租借服務', page: '交通政策', url: TRANSPORT }],
+  [STRAIGHT, { who: SHEN, quote: '如果要從河濱進到內科其實需要繞路，「乾脆把它取直」', page: '三立新聞網 2026-09-02', url: 'https://www.setn.com/news/1898889' }],
+]
+/** The notes of an event: one for each policy that changed the character, in the order of NOTES. */
+export const notesOf = (e: SimEvent) => {
+  const p = e.kind === 'personal' ? policyOf(e) : 0
+  return NOTES.filter(([bit]) => p & bit).map(([, note]) => note)
 }
 
 /** The sentence after the name for a jam (kind 'jam'). */

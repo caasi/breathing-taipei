@@ -19,6 +19,7 @@ fi
 python3 scripts/atlas.py "$D/atlas/towns-10t.json" "$D/atlas/villages-10t.json" "$P"
 python3 scripts/telecom.py "$D/signal/segis_112Y11M_town.zip" "$P/signal.json"
 python3 scripts/transit.py "$D/osm/rail.json" "$D/osm/stations.json" "$D/osm/airport.json" "$P/transit.json"
+python3 scripts/river.py "$D/osm/keelung.json" "$P/river.json"
 python3 scripts/graphs.py "$D/bus/tpe_GetBusShape.gz" "$D/ntpc-transit/ntpc_GetBusShape.gz" "$D/osm/rail.json" "$D/dt/exits.csv" "$D/osm-hw/highways.json" "$D/osm/streets.json" "$P"
 python3 scripts/names.py "$D/osm/streets.json" "$P"
 python3 scripts/days.py "$D/calendar/office-115.csv" "$D/calendar/office-116.csv" "$D/calendar/cwa-A-A0087-001.csv" "$D/calendar/cwa-A-A0087-003.csv" "$P/calendar.json"

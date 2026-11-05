@@ -1,4 +1,5 @@
-import type { City, DaysOff, Kind } from './core.ts'
+import type { City, DaysOff, Kind, World } from './core.ts'
+import { applyBundle, bikeWay, KEY, NEW_BRIDGE, type Policies, type River } from './policy.ts'
 
 // jobs: known employees in the village (scripts/villages.py: 內湖科技園區 only), 0 elsewhere.
 export type Village = { code: string; town: string; pop: number; arrivals: number; jobs?: number; lon: number; lat: number }
@@ -6,19 +7,21 @@ export type Signal = Record<string, { day: number; night: number }> // weekday 0
 /** Businesses per village (villages2.json order) for each name in kinds; built by scripts/night.py. */
 export type Night = { date: string; kinds: string[]; counts: number[][] }
 /** od2.json: MRT trips [hour][from][to] on a workday (od), a Saturday off with no holiday, and a Sunday or holiday (scripts/od.py). */
-export type Data = { od: number[][][]; saturday?: number[][][]; holiday?: number[][][]; districts: string[]; villages: Village[]; signal: Signal; night?: Night }
+export type Data = { od: number[][][]; saturday?: number[][][]; holiday?: number[][][]; districts: string[]; villages: Village[]; signal: Signal; night?: Night; river?: River }
 
-export const MODES = ['捷運', '公車', '機車', '汽車', '步行', '自行車'] as const
+export const MODES = ['捷運', '公車', '機車', '汽車', '步行', '自行車', '電輔車'] as const
 export const MRT = 0
-export const BUS = 1, SCOOTER = 2, WALK = 4, BIKE = 5
+export const BUS = 1, SCOOTER = 2, CAR = 3, WALK = 4, BIKE = 5, EBIKE = 6
 // Mode share of Taipei residents, 2024 (DATA.md, "Figures in the code"). New Taipei uses the same split until its own figures are found.
-const OTHER = [0, 13.7, 16.3, 20.1, 20.8, 3.8], MRT_SHARE = 16.0
+// The e-bike (EBIKE) has no share: only a policy moves people to it.
+const OTHER = [0, 13.7, 16.3, 20.1, 20.8, 3.8, 0], MRT_SHARE = 16.0
 // ponytail: assumed door-to-door speeds (km/h) and access minutes; calibrate with TDX travel times later.
 // The free speeds: the traffic model (traffic.ts) makes a road trip slower in a jam, so there is no peak speed here.
-const SPEED = [30, 14, 26, 22, 4.5, 12]
+// ponytail: the e-bike speed (18 km/h) is a guess too.
+const SPEED = [30, 14, 26, 22, 4.5, 12, 18]
 // The minutes of a trip off the road: walking, waiting, parking; traffic.ts retime does not slow them.
-export const ACCESS = [12, 12, 3, 6, 0, 2]
-export const MAX_KM = [Infinity, Infinity, Infinity, Infinity, 2.5, 6] // walk and bike only within these distances
+export const ACCESS = [12, 12, 3, 6, 0, 2, 2]
+export const MAX_KM = [Infinity, Infinity, Infinity, Infinity, 2.5, 6, Infinity] // walk and bike only within these distances
 // Short-trip rates from the mode share and the YouBike rentals (DATA.md, "Figures in the code"); one person rents
 // twice (there and back). New Taipei uses Taipei's rates until its own figures are found.
 const WALK_PER_MRT = 20.8 / 16.0, YOUBIKE_RENTALS = 234_000
@@ -118,8 +121,16 @@ const daysOff = (mrt: number[][][], days: number[][][][], od: number[][][], kind
   }
 }
 
-export const cityFrom = ({ od: mrt, saturday, holiday, districts, villages, signal, night }: Data, perAgent: number,
-  kindOf?: (day: number) => number) => {
+// ponytail: 取直 (KEY.straight) takes this much off a bicycle way that crosses the river into 內科; a guess, the source gives no length.
+const STRAIGHT_KM = 0.5
+const DETOUR = 1.3 // a trip on the ground over the straight distance
+
+export const cityFrom = ({ od: mrt, saturday, holiday, districts, villages, signal, night, river }: Data, perAgent: number,
+  kindOf?: (day: number) => number, initial: Policies = {}) => {
+  // The settings that the ways of the bicycles use. They change only in city.adjust, that is in core.ts repolicy: init
+  // draws the work hours of the baseline before it, so a run that starts with a setting and a run that turns it on
+  // later have the same baseline.
+  let policies: Policies = {}
   const g = villages.map(v => districts.indexOf(v.town))
   const popD = new Array(districts.length).fill(0), lon = [...popD], lat = [...popD]
   villages.forEach((v, i) => { popD[g[i]] += v.pop; lon[g[i]] += v.lon * v.pop; lat[g[i]] += v.lat * v.pop })
@@ -150,8 +161,16 @@ export const cityFrom = ({ od: mrt, saturday, holiday, districts, villages, sign
     const d = g[i]
     return known[d] * (jobsD[d] ? (v.jobs ?? 0) / jobsD[d] : 0) + (1 - known[d]) * spread[i]
   })
+  const jobs = (v: number) => (villages[v].jobs ?? 0) > 0
+  const ways = river ? [bikeWay(river, [], km), bikeWay(river, [NEW_BRIDGE], km)] : undefined
+  /** The way of a bicycle from node a to node b: its km on the ground and the crossing of the river, if any. */
+  const bike = (a: number, b: number) => {
+    const w = ways?.[policies[KEY.bridge] ? 1 : 0](coords[a], coords[b]) ?? { km: km(coords[a], coords[b]) }
+    const straight = policies[KEY.straight] && w.via && (jobs(a) || jobs(b)) ? STRAIGHT_KM : 0
+    return { km: Math.max(0, DETOUR * w.km - straight), via: w.via }
+  }
   const minutes = (a: number, b: number, mode: number, hour: number) =>
-    ACCESS[mode] + 60 * 1.3 * km(coords[a], coords[b]) / SPEED[mode]
+    ACCESS[mode] + 60 * (mode === BIKE || mode === EBIKE ? bike(a, b).km : DETOUR * km(coords[a], coords[b])) / SPEED[mode]
 
   const homes = villages.map(v => Math.round(v.pop / perAgent))
   // Short trips stay inside the home district: the cross-district flows are already calibrated to the
@@ -161,7 +180,37 @@ export const cityFrom = ({ od: mrt, saturday, holiday, districts, villages, sign
   const kinds = [local, ...nightKinds]
   const off = kindOf && saturday && holiday ? daysOff(mrt, [saturday, holiday], od, kindOf) : undefined
   const city: City = { od, group: g, homes, to, toPlay: spread, perAgent, modeOf, minutes, kinds, off }
-  return { city, nodes: villages.map(v => v.code), coords, target }
+  // The agents whose way by bicycle crosses the new bridge, found once for each world: a search over every agent takes
+  // about 1.3 s (Node, 2026-11-05), too slow for each change of a setting. Their homes and work places never change.
+  const riders = new WeakMap<World, Uint8Array>()
+  const bridgeRiders = (w: World) => {
+    let r = riders.get(w)
+    if (r) return r
+    const crossing = ways?.[1]
+    r = new Uint8Array(w.home.length)
+    if (crossing) for (let i = 0; i < r.length; i++) {
+      if (!w.kind[i] && w.work[i] !== w.home[i] && crossing(coords[w.home[i]], coords[w.work[i]]).via?.[0] === NEW_BRIDGE.lon) r[i] = 1
+    }
+    riders.set(w, r)
+    return r
+  }
+  /** Changes the settings of the city at the next core.ts repolicy, for the ways of the bicycles and for the agents. */
+  const setPolicies = (p: Policies) => {
+    const bundle = p[KEY.stagger] || p[KEY.ebike] || p[KEY.bridge] || p[KEY.straight] ? applyBundle({
+      // The stagger setting is a percent in the query string.
+      stagger: (p[KEY.stagger] ?? 0) / 100, ebike: !!p[KEY.ebike], hub: !!p[KEY.hub], bridge: !!p[KEY.bridge], bikeShift: (p[KEY.bikeShift] ?? 0) / 100, straight: !!p[KEY.straight], jobs, perAgent, EBIKE_MODE: EBIKE, BIKE_MODE: BIKE, bridgeRiders,
+      bikeMinutes: (h, w) => minutes(h, w, BIKE, 8),
+      straightens: (h, w) => (jobs(h) || jobs(w)) && bike(h, w).via !== undefined,
+      taipei: v => villages[v].town.startsWith('台北市'),
+      ebikeMinutes: (h, w) => minutes(h, w, EBIKE, 8),
+      onNewBridge: (h, w) => bike(h, w).via?.[0] === NEW_BRIDGE.lon,
+      isMotor: m => m === BUS || m === SCOOTER || m === CAR,
+      isBike: m => m === BIKE || m === EBIKE,
+    }) : undefined
+    city.adjust = (w, rng) => { policies = p; bundle?.(w, rng) }
+  }
+  setPolicies(initial)
+  return { city, nodes: villages.map(v => v.code), coords, target, bike, setPolicies }
 }
 
 /**

@@ -8,8 +8,8 @@ import { RAMP } from './Traffic.tsx'
 import { program } from './gl.ts'
 import { LAYER, useLayer } from './GLMap.tsx'
 
-// Mode colours, in MODES order (捷運, 公車, 機車, 汽車, 步行, 自行車); kept apart from the 洋流橘 heat scale.
-export const MODE_COLOURS = ['#f5f0e8', '#7ec8a5', '#ffd166', '#9ad0ff', '#c9a7ff', '#a0e060']
+// Mode colours, in MODES order (捷運, 公車, 機車, 汽車, 步行, 自行車, 電輔車); kept apart from the 洋流橘 heat scale.
+export const MODE_COLOURS = ['#f5f0e8', '#7ec8a5', '#ffd166', '#9ad0ff', '#c9a7ff', '#a0e060', '#5fe0d0']
 
 /** A trip's path in map space with cumulative lengths, for placing a dot at any progress, and the traffic cell of each point. */
 export type Track = { xy: Float32Array; len: Float32Array; cell: Int32Array }

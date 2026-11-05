@@ -5,7 +5,8 @@ import { HeatMap, Land, SEA, projectionFor, taipeiIn, type Transit } from './ui/
 import { Sparks, SPARK_MS, type Spark } from './ui/Sparks.tsx'
 import { Travellers, MODE_COLOURS, addBatches, type CellTraffic, type Track } from './ui/Travellers.tsx'
 import type { RoadLines } from './ui/Traffic.tsx'
-import { MODES } from './sim/city.ts'
+import { BIKE, MODES } from './sim/city.ts'
+import { KEY, NEW_BRIDGE } from './sim/policy.ts'
 import type { FromWorker, WorkerError, ToWorker, Trips } from './sim/worker.ts'
 import { getJson } from './load.ts'
 import type { Batch } from './sim/paths.ts'
@@ -106,6 +107,13 @@ export function App() {
   const [s, setS] = useState<FromWorker>()
   // Display settings belong to this viewer, so they stay in this browser; the policies (usePolicies) are in the URL.
   const policies = usePolicies()
+  // A change of a policy reaches the run that goes on (worker.ts 'policies'); the key keeps the effect from a new Map each render.
+  const policyKey = JSON.stringify([...policies.values])
+  const bridgeOn = policies.values.get(KEY.bridge) === 1
+  const mapTransit = useMemo(() => transit && bridgeOn
+    ? { lines: [...transit.lines, { kind: 'bike', name: NEW_BRIDGE.name, colour: MODE_COLOURS[BIKE], coords: NEW_BRIDGE.ends }],
+      points: [...transit.points, { kind: 'bridge', name: NEW_BRIDGE.name, lon: NEW_BRIDGE.ends[1][0], lat: NEW_BRIDGE.ends[1][1] }] }
+    : transit, [transit, bridgeOn])
   const [speed, setSpeed] = useStored('speed', 1, oneOf(SPEEDS))
   // Apart from the speed, and not stored: a viewer who comes back to a stopped page at 00:00 would see nothing move.
   const [paused, setPaused] = useState(false)
@@ -136,8 +144,9 @@ export function App() {
   // The worker can post a frame with levels after the layer is turned off; the handler of its messages reads this.
   const trafficOnRef = useRef(trafficOn)
   trafficOnRef.current = trafficOn
-  const layers = useMemo(() => (trafficOn ? new Set([...show, 'traffic']) : show), [show, trafficOn])
-  const signs = useMemo(() => new Set(stations ? [...show, 'airport'] : []), [show, stations])
+  // The bridge of a policy is a line of its own kind, always shown while its setting is on.
+  const layers = useMemo(() => new Set([...show, 'bike', ...(trafficOn ? ['traffic'] : [])]), [show, trafficOn])
+  const signs = useMemo(() => new Set(stations ? [...show, 'airport', 'bridge'] : []), [show, stations])
   const worker = useRef<Worker>()
   const started = useRef(0), shown = useRef(0) // the latest start posted, and the start of the frames on the page
   // The routing of the latest frame on the page. A ref set with `shown`, not read from `s`: a render between the message
@@ -147,6 +156,9 @@ export function App() {
   // The start of a new run whose clock stands until the page is ready: state for the icon, a ref for the logic, so a
   // click between a start and its render does not read an old value. deadline: when the run starts anyway.
   const [waiting, setWaiting] = useState<number>()
+  // A change that draws new dots: its number, and whether its trips arrived; then the spinner waits for their paths.
+  const redrawing = useRef({ id: 0, trips: false, done: true }), [redrawBusy, setRedrawBusy] = useState(false)
+  const redraw = () => { const r = redrawing.current; r.id++; r.trips = false; r.done = false; setRedrawBusy(true); return r.id }
   const waitRef = useRef<number>(), deadline = useRef(0), speedRef = useRef(paused ? 0 : speed)
   // The clock of the dots (pace.ts), the model minute of the last message, and the change of speed that the clock uses.
   const last = useRef<Clock & { model: number; since: number }>({ minute: 0, at: 0, perMs: 0, model: 0, since: 0 })
@@ -176,6 +188,12 @@ export function App() {
       // page; a setting that starts the run again (for example a policy, #8) needs this.
       if (m.start !== undefined) { if (m.start !== started.current) return; shown.current = m.start; setOnScreen(next.current) }
       else if (shown.current !== started.current) return
+      // New dots (a change of a policy or of the density) block the page while it places their paths; the spinner
+      // shows from the change until the worker has sent the last path of the new dots.
+      // Trips of an older change can arrive after a newer change; only the latest one ends the wait.
+      const wait = redrawing.current
+      if (m.trips && m.redraw === wait.id) wait.trips = true
+      if (wait.trips && !wait.done && !m.dotsBusy) { wait.done = true; setRedrawBusy(false) }
       shownRouting.current = m.routing
       if (m.nodes) setNodes(m.nodes)
       if (m.districts) setDistrictOf(m.districts)
@@ -215,11 +233,13 @@ export function App() {
     return () => w.terminate()
   }, [])
   // Declared before the start, so the first start draws with the stored density.
-  useEffect(() => post({ type: 'sample', every }), [every])
+  useEffect(() => post({ type: 'sample', every, redraw: redraw() }), [every])
   useEffect(() => {
     if (!trafficOn) cellTraffic.current = undefined
     post({ type: 'traffic', on: trafficOn })
   }, [trafficOn])
+  // Declared before the start, so the first init reads these settings.
+  useEffect(() => post({ type: 'policies', policies: Object.fromEntries(JSON.parse(policyKey)), redraw: redraw() }), [policyKey])
   useEffect(() => {
     if (runStart === undefined) return
     // The new world starts at minute 0, and both clocks stand there until the page has drawn the first frame. The page
@@ -351,7 +371,7 @@ export function App() {
       {colourBy === 'rate' && <span style={{ marginLeft: 8 }}>變化區間：{WINDOWS.map(v => <button key={v} onClick={() => setRateWindow(v)}
         style={{ marginRight: 4, fontWeight: v === rateWindow ? 'bold' : 'normal' }}>{v} 分</button>)}</span>}</p>
     <p role="group" aria-label="路網">路網：{LAYER_BOXES.map(([k, label]) => <label key={k} style={{ marginLeft: 8 }}><input type="checkbox" checked={layers.has(k)} onChange={() => (k === 'traffic' ? setTrafficOn(on => !on) : toggle(k))} />{label}</label>)}</p>
-    <p role="group" aria-label="標示">標示：<label style={{ marginLeft: 8 }}><input type="checkbox" checked={stations} onChange={() => setStations(on => !on)} />車站與機場</label>
+    <p role="group" aria-label="標示">標示：<label style={{ marginLeft: 8 }}><input type="checkbox" checked={stations} onChange={() => setStations(on => !on)} />交通地標</label>
       <label style={{ marginLeft: 8 }}><input type="checkbox" checked={districtLabels} onChange={() => setDistrictLabels(on => !on)} />區名與人數</label></p>
     <h2 style={H2}>模擬</h2>
     <div style={{ fontVariantNumeric: 'tabular-nums' }}>
@@ -372,6 +392,7 @@ export function App() {
       地圖資料：© <a href="https://www.openstreetmap.org/copyright" style={{ color: '#ccc' }}>OpenStreetMap contributors</a>（ODbL）；
       臺北捷運、臺北市政府、內政部等機關的政府開放資料（政府資料開放授權條款）；
       邊界來自 <a href={`${import.meta.env.BASE_URL}licenses/taiwan-atlas-MIT.txt`} style={{ color: '#ccc' }}>taiwan-atlas</a>（MIT，© 2020 Daniel Kao）。
+      事件下引用的政見文字來自 <a href="https://puma.taipei/policies" style={{ color: '#ccc' }}>沈伯洋台北市長競選總部</a>（CC BY 4.0）；錯峰分流的文字引自 ETtoday 的報導，河濱進內科取直的文字引自三立新聞網的報導。
       完整來源見 <a href="https://github.com/caasi/breathing-taipei/blob/main/DATA.md" style={{ color: '#ccc' }}>DATA.md</a>。</p>
     <p style={{ fontSize: 12, color: '#888' }}>v{__VERSION__} <a href={`https://github.com/caasi/breathing-taipei/commit/${__COMMIT__}`} style={{ color: '#aaa' }}>{__COMMIT__.slice(0, 7)}</a></p>
   </>
@@ -398,14 +419,14 @@ export function App() {
       {towns && projection && <Land towns={towns} proj={projection} />}
       {/* Only while the map loads, and not with reduced motion: they run and flicker. */}
       {!revealed && roads && projection && !matchMedia('(prefers-reduced-motion: reduce)').matches && <Sparks sparks={sparks} lines={roads} proj={projection} />}
-      {towns && villages && projection && <HeatMap towns={towns} villages={villages} level={byDistrict ? 'district' : ready ? 'village' : level} nodes={byDistrict?.names ?? nodes} counts={ready ? shownCounts : undefined} pop={pop} perAgent={PER_AGENT} proj={projection} transit={transit} show={layers} signs={signs} districtLabels={districtLabels} rate={rate} roads={roads} traffic={traffic} speed={paused || waiting !== undefined ? 0 : speed * HOURS_AT_1X} view={view} />}
+      {towns && villages && projection && <HeatMap towns={towns} villages={villages} level={byDistrict ? 'district' : ready ? 'village' : level} nodes={byDistrict?.names ?? nodes} counts={ready ? shownCounts : undefined} pop={pop} perAgent={PER_AGENT} proj={projection} transit={mapTransit} show={layers} signs={signs} districtLabels={districtLabels} rate={rate} roads={roads} traffic={traffic} speed={paused || waiting !== undefined ? 0 : speed * HOURS_AT_1X} view={view} />}
       {ready && dots && dotTrips && <Travellers tracks={dotRun!.tracks} trips={dotTrips} clock={clock} byMode={byMode} traffic={cellTraffic} />}
       </GLMap>
       {/* Always there, so a screen reader reads the change. */}
       {/* In the bottom right of the map, left of the panels on a desktop. It shows from the first paint until the
           run of the selected day is on the screen and started, also in the paint right after a new run starts. */}
       <div role="status" style={{ position: 'absolute', right: box.w - fit.x - fit.w + 16, bottom: 16, color: '#fff', pointerEvents: 'none' }}>
-        {(waiting !== undefined || onScreen !== runStart) && !runError && !loadError && <>
+        {(waiting !== undefined || onScreen !== runStart || redrawBusy) && !runError && !loadError && <>
           {/* The share of the road paths found; the run starts at 100%. Not read out: it changes every frame. Left of the
               spinner, with digits of one width, so the spinner on the right edge stays still as the share grows. */}
           {routing && s && shown.current === waiting && <span aria-hidden style={{ marginRight: 6, fontSize: 12, fontVariantNumeric: 'tabular-nums' }}>路網 {Math.floor(100 * s.roads)}%</span>}
