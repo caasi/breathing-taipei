@@ -7,10 +7,12 @@ export type Policies = Record<string, number>
 export type River = { river: [number, number][][]; crossings: { name: string; lon: number; lat: number }[] }
 
 // Bits of World.policy: the policies that changed an agent, for its events.
-export const STAGGERED = 1, EBIKE_FREE = 2, ON_BRIDGE = 4, WASHED = 8
+export const STAGGERED = 1, EBIKE_FREE = 2, ON_BRIDGE = 4, WASHED = 8, TO_BIKE = 16
 
 // The policies of the 內湖 bundle of 沈伯洋 (docs/platforms/shen.md).
-export const KEY = { stagger: 'neihu-stagger', ebike: 'ebike-free', bridge: 'bike-bridge', straight: 'riverside-straight', hub: 'bike-hub' } as const
+// bikeShift is not a policy of the platform: it is a what-if of the user, the share of the commuters that the bridge
+// carries who move to the bicycle.
+export const KEY = { stagger: 'neihu-stagger', ebike: 'ebike-free', bridge: 'bike-bridge', straight: 'riverside-straight', hub: 'bike-hub', bikeShift: 'bridge-bike-shift' } as const
 
 // The platform PDF (docs/platforms/shen.md) draws the bridge across the bend of the river west of the end of 港墘路 (p14),
 // 120 m over 堤頂大道 and 220 m over the river (p15). The east end is the corner of 港墘路 and 舊宗路 (OSM). ponytail:
@@ -44,19 +46,24 @@ export const bikeWay = (river: River, extra: River['crossings'], km: (a: Point, 
  * - stagger (0 to 1): the share of the workers of 內科 whose firm takes the reward to stagger its hours. ponytail: such
  *   a worker starts and ends work 30 minutes earlier or later, half each way; a guess, there is no figure.
  * - bridge: marks the cyclists whose way crosses the new bridge, for their events. The way itself is in city.ts.
+ * - bikeShift (0 to 1, with the bridge): the share of the other commuters whose way by bicycle crosses the new bridge,
+ *   in at most MAX_BIKE minutes, who move to the bicycle. A what-if of the user, with no source.
  * - ebike: in the free hours (08:00 to 10:00, 17:00 to 19:00), a commuter by bus, scooter or car whose trip by e-bike
  *   takes at most the free 30 minutes, with both ends in 台北市, rides a YouBike 2.0E with probability SWITCH (hub
  *   adds HUB_MORE), up to the e-bikes that the fleet has.
  */
 export type Bundle = {
-  stagger: number; ebike: boolean; hub: boolean; bridge: boolean
+  stagger: number; ebike: boolean; hub: boolean; bridge: boolean; bikeShift: number
   jobs: (node: number) => boolean // a village of 內科
   taipei: (node: number) => boolean
   ebikeMinutes: (home: number, work: number) => number
   onNewBridge: (home: number, work: number) => boolean
+  bridgeRiders: (w: World) => Uint8Array // 1 for each agent whose way by bicycle crosses the new bridge
+  bikeMinutes: (home: number, work: number) => number
   isMotor: (mode: number) => boolean
   isBike: (mode: number) => boolean // a bicycle or an e-bike
   EBIKE_MODE: number
+  BIKE_MODE: number
   perAgent: number
 }
 
@@ -65,14 +72,16 @@ export type Bundle = {
 // of 臺北市, from a plan reported in 2024 (4,500 by the end of 2026, not checked against the fleet now); TURNS: rides
 // of one e-bike in one free window.
 const SWITCH = 0.1, HUB_MORE = 0.5, FLEET = 4500, TURNS = 2, SHIFT = 30
+// ponytail: the longest ride to work that a what-if rider takes, a guess (DATA.md, "Figures in the code").
+const MAX_BIKE = 60
 const FREE: [number, number][] = [[8 * 60, 10 * 60], [17 * 60, 19 * 60]]
 const inFree = (m: number) => FREE.some(([a, b]) => m >= a && m < b)
 const mod = (t: number) => ((t % 1440) + 1440) % 1440
 
 export const applyBundle = (b: Bundle) => (w: World, rng: () => number) => {
-  const reach: number[] = []
+  const reach: number[] = [], riders = b.bridge ? b.bridgeRiders(w) : undefined
   for (let i = 0; i < w.home.length; i++) {
-    const r1 = rng(), r2 = rng(), r3 = rng()
+    const r1 = rng(), r2 = rng(), r3 = rng(), r4 = rng()
     if (w.kind[i] || w.work[i] === w.home[i]) continue
     const h = w.home[i], k = w.work[i]
     if (b.jobs(k) && r1 < b.stagger) {
@@ -80,7 +89,8 @@ export const applyBundle = (b: Bundle) => (w: World, rng: () => number) => {
       w.hours[2 * i] = mod(w.hours[2 * i] + s); w.hours[2 * i + 1] = mod(w.hours[2 * i + 1] + s)
       w.policy[i] |= STAGGERED
     }
-    if (b.bridge && b.isBike(w.choice[i]) && b.onNewBridge(h, k)) w.policy[i] |= ON_BRIDGE
+    if (riders?.[i] && b.isBike(w.choice[i])) w.policy[i] |= ON_BRIDGE
+    else if (riders?.[i] && r4 < b.bikeShift && b.bikeMinutes(h, k) <= MAX_BIKE) { w.choice[i] = b.BIKE_MODE; w.policy[i] |= ON_BRIDGE | TO_BIKE; continue }
     if (!b.ebike || !b.isMotor(w.choice[i]) || !b.taipei(h) || !b.taipei(k)) continue
     const minutes = b.ebikeMinutes(h, k)
     if (minutes > 30 || !(inFree(mod(w.hours[2 * i] - minutes)) || inFree(w.hours[2 * i + 1]))) continue

@@ -32,6 +32,15 @@ Source: https://puma.taipei/policies/交通政策, published 2026-09-16, changed
 
 The timeline of the page: 「第一階段（短期）：1–2 年 啟動記名TPASS共享機車前10 分鐘免費3 個月試辦；……開辦YouBike 2.0E尖峰免費試辦。」 「第二階段（中期）：3–4 年 完工啟用迎風—港墘跨基隆河自行車專用橋」
 
+### News reports
+
+The pages do not have this policy. Its words come from two news reports. Their license is not known, so this list gives short quotes only.
+
+| id | Source | Quote | In the simulation |
+|----|--------|-------|-------------------|
+| `neihu-stagger` | ETtoday, 2026-06-17, https://www.ettoday.net/news/20260617/3185438.htm (a report of a post of 沈伯洋) | 「一、鼓勵企業錯開上下班時間；二、推動友善彈性工時」 | Yes: 內科錯峰分流. The share of the firms is the setting; the 30 minutes are a guess. |
+| `neihu-stagger` | 今周刊, an interview, https://www.businesstoday.com.tw/article/category/183027/post/202608240037/ (the page gives `article:published_time` 2026-11-03; the number in the URL starts with 20260824) | 「內科交通分流應先從獎勵做起，將通勤時段錯開分流」 | The same setting: the reward is why a firm staggers its hours. |
+
 ### Other pages that touch the traffic
 
 | id | Source | Quote | In the simulation |

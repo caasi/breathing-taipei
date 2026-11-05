@@ -1,7 +1,7 @@
 import { GONE, PLAY, STAY } from './core.ts'
 import { isoAt, kindAt, type Calendar } from './calendar.ts'
 import { BUS, SCOOTER } from './city.ts'
-import { STAGGERED, EBIKE_FREE, ON_BRIDGE, WASHED } from './policy.ts'
+import { STAGGERED, EBIKE_FREE, ON_BRIDGE, WASHED, TO_BIKE } from './policy.ts'
 
 /**
  * One event: t in minutes since 00:00 of day 0. A personal event follows one agent (a character: 10 people at the
@@ -51,7 +51,7 @@ export const actionOf = (e: Extract<SimEvent, { kind: 'personal' }>, placeOf: Pl
   if (e.group) return `${by}${PURPOSE[e.group] ?? '出門'}`
   if (p) {
     const free = p & EBIKE_FREE ? '，尖峰前 30 分鐘免費' : '', wash = p & WASHED ? '，在運動驛站沖完澡才進公司' : ''
-    return `${p & STAGGERED ? '公司錯峰，' : ''}${by}${p & ON_BRIDGE ? '經迎風—港墘橋' : ''}到${place}上班${free}${wash}`
+    return `${p & STAGGERED ? '公司錯峰，' : ''}${p & TO_BIKE ? '改' : ''}${by}${p & ON_BRIDGE ? '經迎風—港墘橋' : ''}到${place}上班${free}${wash}`
   }
   return `${by}到${place}上班`
 }
@@ -61,9 +61,10 @@ export const policyOf = (e: Extract<SimEvent, { kind: 'personal' }>) => (e.dest 
 
 const SHEN = '沈伯洋', TRANSPORT = 'https://puma.taipei/policies/%E4%BA%A4%E9%80%9A%E6%94%BF%E7%AD%96'
 // The words of the platform, quoted from the page of each policy (CC BY 4.0, docs/platforms/shen.md), for the note of an
-// event that a policy changed. The page gives no source for 內科錯峰分流 itself: the nearest words are on AI政策.
+// event that a policy changed. 內科錯峰分流 is not on the pages: its words are from a news report of 沈伯洋's post, a
+// short quote (docs/platforms/shen.md).
 const NOTES: [number, { who: string; quote: string; page: string; url: string }][] = [
-  [STAGGERED, { who: SHEN, quote: '以園區為中心，規劃捷運路網、接駁巴士、舒適人行動線、自行車專用道與彈性上下班制度', page: 'AI政策', url: 'https://puma.taipei/policies/AI%E6%94%BF%E7%AD%96' }],
+  [STAGGERED, { who: SHEN, quote: '鼓勵企業錯開上下班時間', page: 'ETtoday 2026-06-17', url: 'https://www.ettoday.net/news/20260617/3185438.htm' }],
   [ON_BRIDGE, { who: SHEN, quote: '興建迎風—港墘跨基隆河自行車專用橋，直接銜接民生社區與內湖科技園區。', page: '交通政策', url: TRANSPORT }],
   [EBIKE_FREE, { who: SHEN, quote: '提供 YouBike 2.0E 尖峰時段（08:00-10:00 / 17:00-19:00）前 30 分鐘免費', page: '交通政策', url: TRANSPORT }],
   [WASHED, { who: SHEN, quote: '設置「運動驛站」提供盥洗、置物與租借服務', page: '交通政策', url: TRANSPORT }],

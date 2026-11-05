@@ -1,4 +1,4 @@
-import type { City, DaysOff, Kind } from './core.ts'
+import type { City, DaysOff, Kind, World } from './core.ts'
 import { applyBundle, bikeWay, KEY, NEW_BRIDGE, type Policies, type River } from './policy.ts'
 
 // jobs: known employees in the village (scripts/villages.py: 內湖科技園區 only), 0 elsewhere.
@@ -177,12 +177,27 @@ export const cityFrom = ({ od: mrt, saturday, holiday, districts, villages, sign
   const kinds = [local, ...nightKinds]
   const off = kindOf && saturday && holiday ? daysOff(mrt, [saturday, holiday], od, kindOf) : undefined
   const city: City = { od, group: g, homes, to, toPlay: spread, perAgent, modeOf, minutes, kinds, off }
+  // The agents whose way by bicycle crosses the new bridge, found once for each world: a search over every agent takes
+  // about 1.3 s (Node, 2026-11-05), too slow for each change of a setting. Their homes and work places never change.
+  const riders = new WeakMap<World, Uint8Array>()
+  const bridgeRiders = (w: World) => {
+    let r = riders.get(w)
+    if (r) return r
+    const crossing = ways?.[1]
+    r = new Uint8Array(w.home.length)
+    if (crossing) for (let i = 0; i < r.length; i++) {
+      if (!w.kind[i] && w.work[i] !== w.home[i] && crossing(coords[w.home[i]], coords[w.work[i]]).via?.[0] === NEW_BRIDGE.lon) r[i] = 1
+    }
+    riders.set(w, r)
+    return r
+  }
   /** Changes the settings of the city: the ways of the bicycles at once, the agents through core.ts repolicy. */
   const setPolicies = (p: Policies) => {
     policies = p
     city.adjust = p[KEY.stagger] || p[KEY.ebike] || p[KEY.bridge] ? applyBundle({
       // The stagger setting is a percent in the query string.
-      stagger: (p[KEY.stagger] ?? 0) / 100, ebike: !!p[KEY.ebike], hub: !!p[KEY.hub], bridge: !!p[KEY.bridge], jobs, perAgent, EBIKE_MODE: EBIKE,
+      stagger: (p[KEY.stagger] ?? 0) / 100, ebike: !!p[KEY.ebike], hub: !!p[KEY.hub], bridge: !!p[KEY.bridge], bikeShift: (p[KEY.bikeShift] ?? 0) / 100, jobs, perAgent, EBIKE_MODE: EBIKE, BIKE_MODE: BIKE, bridgeRiders,
+      bikeMinutes: (h, w) => minutes(h, w, BIKE, 8),
       taipei: v => villages[v].town.startsWith('台北市'),
       ebikeMinutes: (h, w) => minutes(h, w, EBIKE, 8),
       onNewBridge: (h, w) => bike(h, w).via?.[0] === NEW_BRIDGE.lon,

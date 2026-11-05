@@ -20,6 +20,8 @@ const POLICIES: [string, Policy[]][] = [
     { id: KEY.bridge, label: '迎風—港墘自行車橋', who: SHEN, type: 'toggle' },
     { id: KEY.straight, label: '河濱進內科取直', who: SHEN, type: 'toggle' },
     { id: KEY.hub, label: '運動驛站', who: SHEN, type: 'toggle' },
+    // Not a policy: a what-if of how many people the bridge moves to the bicycle; it needs the bridge.
+    { id: KEY.bikeShift, label: '過橋改騎自行車（需開橋）', who: '假設', type: 'range', min: 0, max: 100, step: 10, unit: '%', start: 0 },
   ]],
   ['時間', [
     { id: KEY.stagger, label: '內科錯峰分流', who: SHEN, type: 'range', min: 0, max: 50, step: 10, unit: '%', start: 0 },

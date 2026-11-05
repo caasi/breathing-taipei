@@ -79,6 +79,7 @@ Policy settings. A change reaches the run that goes on, as in a simulation game:
 | `neihu-stagger` | 內科錯峰分流 (沈伯洋): this share of the workers of 內科 start and end work 30 minutes earlier or later | `0` to `50` percent, in steps of `10` | `0` |
 | `ebike-free` | YouBike 2.0E 尖峰免費 (沈伯洋): some bus, scooter and car commuters inside 台北市 ride an e-bike when the trip fits in the free 30 minutes | `1` on, `0` off | `0` |
 | `bike-bridge` | 迎風—港墘自行車橋 (沈伯洋): a new crossing of the 基隆河 for bicycles | `1` on, `0` off | `0` |
+| `bridge-bike-shift` | 過橋改騎自行車 (a what-if, not a policy): with `bike-bridge`, this share of the commuters whose way by bicycle crosses the new bridge, in at most 60 minutes, move to the bicycle | `0` to `100` percent, in steps of `10` | `0` |
 | `riverside-straight` | 河濱進內科取直 (沈伯洋): a shorter bicycle way from the river into 內科 | `1` on, `0` off | `0` |
 | `bike-hub` | 運動驛站 (沈伯洋): showers make more commuters take the e-bike | `1` on, `0` off | `0` |
 

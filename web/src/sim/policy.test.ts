@@ -1,8 +1,8 @@
 import { expect, test } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { init, hoursOf, repolicy, advance, now } from './core.ts'
-import { cityFrom, km, EBIKE, BUS, SCOOTER, CAR } from './city.ts'
-import { bikeWay, KEY, NEW_BRIDGE, STAGGERED, EBIKE_FREE, ON_BRIDGE, type River } from './policy.ts'
+import { cityFrom, km, EBIKE, BIKE, BUS, SCOOTER, CAR } from './city.ts'
+import { bikeWay, KEY, NEW_BRIDGE, STAGGERED, EBIKE_FREE, ON_BRIDGE, TO_BIKE, type River } from './policy.ts'
 
 const pub = (f: string) => JSON.parse(readFileSync(new URL(`../../public/${f}`, import.meta.url), 'utf8'))
 const river: River = pub('river.json')
@@ -62,9 +62,14 @@ test('a bicycle crosses the 基隆河 on a bridge, and the new bridge is a cross
   expect(way(a, [121.5650, 25.0690]).via).toBeUndefined() // same side
 })
 
-test('the bridge marks the e-bike riders whose way it carries', () => {
-  const { w } = run({ [KEY.ebike]: 1, [KEY.bridge]: 1 })
-  expect(w.policy.some(p => (p & ON_BRIDGE) !== 0)).toBe(true)
+test('the bridge marks exactly the e-bike riders whose way it carries', () => {
+  const { c, w } = run({ [KEY.ebike]: 1, [KEY.bridge]: 1, [KEY.straight]: 1, [KEY.hub]: 1 })
+  const bad: number[] = []
+  for (let i = 0; i < w.home.length; i++) {
+    if (!(w.policy[i] & EBIKE_FREE)) continue
+    if (((w.policy[i] & ON_BRIDGE) !== 0) !== (c.bike(w.home[i], w.work[i]).via?.[0] === NEW_BRIDGE.lon)) bad.push(i)
+  }
+  expect(bad).toEqual([])
 }, 60_000)
 
 test('a change of the settings in a run: off gives the baseline back, on again gives the same agents, and a plan under way keeps its mode', () => {
@@ -87,4 +92,19 @@ test('a change of the settings in a run: off gives the baseline back, on again g
   for (let i = 0; i < w.home.length; i++) if (w.policy[i] & EBIKE_FREE && w.dep[i] >= t - 24 * 60 && w.dep[i] <= t) (w.mode[i] === EBIKE ? rode++ : wrong++)
   expect(wrong).toBe(0)
   expect(rode).toBeGreaterThan(0)
+}, 120_000)
+
+test('the what-if moves commuters whose bicycle way crosses the new bridge to the bicycle, only with the bridge', () => {
+  const { c, w } = run({ [KEY.bridge]: 1, [KEY.bikeShift]: 100 })
+  let moved = 0
+  for (let i = 0; i < w.home.length; i++) {
+    if (!(w.policy[i] & TO_BIKE)) continue
+    moved++
+    expect(w.mode[i]).toBe(BIKE)
+    expect(c.bike(w.home[i], w.work[i]).via?.[0]).toBe(NEW_BRIDGE.lon)
+    expect(c.city.minutes(w.home[i], w.work[i], BIKE, 8)).toBeLessThanOrEqual(60)
+  }
+  expect(moved).toBeGreaterThan(100)
+  const { w: off } = run({ [KEY.bikeShift]: 100 })
+  expect(off.policy.some(p => (p & TO_BIKE) !== 0)).toBe(false)
 }, 120_000)

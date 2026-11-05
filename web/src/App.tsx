@@ -392,7 +392,7 @@ export function App() {
       地圖資料：© <a href="https://www.openstreetmap.org/copyright" style={{ color: '#ccc' }}>OpenStreetMap contributors</a>（ODbL）；
       臺北捷運、臺北市政府、內政部等機關的政府開放資料（政府資料開放授權條款）；
       邊界來自 <a href={`${import.meta.env.BASE_URL}licenses/taiwan-atlas-MIT.txt`} style={{ color: '#ccc' }}>taiwan-atlas</a>（MIT，© 2020 Daniel Kao）。
-      事件下引用的政見文字來自 <a href="https://puma.taipei/policies" style={{ color: '#ccc' }}>沈伯洋台北市長競選總部</a>（CC BY 4.0）。
+      事件下引用的政見文字來自 <a href="https://puma.taipei/policies" style={{ color: '#ccc' }}>沈伯洋台北市長競選總部</a>（CC BY 4.0），錯峰分流的文字引自 ETtoday 的報導。
       完整來源見 <a href="https://github.com/caasi/breathing-taipei/blob/main/DATA.md" style={{ color: '#ccc' }}>DATA.md</a>。</p>
     <p style={{ fontSize: 12, color: '#888' }}>v{__VERSION__} <a href={`https://github.com/caasi/breathing-taipei/commit/${__COMMIT__}`} style={{ color: '#aaa' }}>{__COMMIT__.slice(0, 7)}</a></p>
   </>
