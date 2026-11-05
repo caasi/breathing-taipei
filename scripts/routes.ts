@@ -1,5 +1,5 @@
 /**
- * Make the road paths ahead of time: one contraction hierarchy (web/src/sim/ch.ts) for each variant of paths.ts, so
+ * Make the road paths of today ahead of time: one contraction hierarchy (web/src/sim/ch.ts) for each variant of paths.ts, so
  * the page finds the exact shortest path between any two road nodes without routing the whole graph.
  *
  * Usage (from the repository root, Node 24):

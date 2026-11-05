@@ -59,8 +59,12 @@ const originals = (g: Graph, slotW: ArrayLike<number>) => {
 // would have found unneeded: the paths stay exact, the file grows (all three weightings about 1 MB at 200, 2026-10-27).
 const WITNESS_LIMIT = 200
 
-/** The node order and the shortcuts, as [left arc, right arc] pairs in the order they were added. For scripts/routes.ts. */
-export const contract = (g: Graph, slotW: ArrayLike<number>) => {
+/**
+ * The node order and the shortcuts, as [left arc, right arc] pairs in the order they were added. With `order` (the rank
+ * of each node), the nodes are contracted in that order; the paths stay exact for any order, and the order of one
+ * weighting gives about as many shortcuts for a weighting that changes a few roads (a scenario, paths.ts readRoutes).
+ */
+export const contract = (g: Graph, slotW: ArrayLike<number>, order?: ArrayLike<number>) => {
   const n = g.lon.length, from: number[] = [], to: number[] = [], w: number[] = [], shortcuts: number[] = []
   const out: number[][] = Array.from({ length: n }, () => []), into: number[][] = Array.from({ length: n }, () => [])
   const add = (a: number, b: number, d: number) => { out[a].push(from.length); into[b].push(from.length); from.push(a); to.push(b); w.push(d) }
@@ -106,13 +110,16 @@ export const contract = (g: Graph, slotW: ArrayLike<number>) => {
   // The edge difference plus the deleted neighbours (Geisberger et al. 2008, section 3), with equal weights; the paper
   // weights them 190:120 and also recomputes the neighbours of a contracted node. `removed` counts arcs, not neighbours.
   const priority = (v: number) => { const { pairs, degree } = needed(v); return pairs.length - degree + removed[v] }
+  // The priority is checked again when a node comes to the top of the queue, as contracting its neighbours changed it.
   const queue = new Heap()
-  for (let v = 0; v < n; v++) queue.push(v, priority(v))
+  for (let v = 0; v < n; v++) queue.push(v, order ? order[v] : priority(v))
   for (let r = 0; queue.size;) {
     const v = queue.top
     queue.pop()
-    const p = priority(v)
-    if (queue.size && p > queue.key) { queue.push(v, p); continue }
+    if (!order) {
+      const p = priority(v)
+      if (queue.size && p > queue.key) { queue.push(v, p); continue }
+    }
     for (const [ai, ao] of needed(v).pairs) { shortcuts.push(ai, ao); add(from[ai], to[ao], w[ai] + w[ao]) }
     done[v] = 1; rank[v] = r++
     for (const a of out[v]) removed[to[a]]++

@@ -5,7 +5,7 @@ import { cityFrom } from './city.ts'
 import { finish, KNOWN_BATCH, networks, readRoutes, ROAD_MODES, roadNode, tripPaths, variantWeights, wayBack, writeRoutes, type Batch, type Routes } from './paths.ts'
 import { contract } from './ch.ts'
 import { SCOOTER } from './city.ts'
-import { tree } from './route.ts'
+import { FUTURE, PROFILES, tree } from './route.ts'
 import { mulberry32 } from './rng.ts'
 
 const pub = (f: string) => JSON.parse(readFileSync(new URL(`../../public/${f}`, import.meta.url), 'utf8'))
@@ -134,3 +134,30 @@ test.skipIf(!existsSync(bin))('the routes file in web/public is the one that scr
   const b = readFileSync(bin)
   expect(new Uint16Array(b.buffer, b.byteOffset, b.byteLength / 2)).toEqual(built().file)
 }, 120_000)
+
+test('a scenario contracts its own weights in the order of the routes file: the paths stay exact (real data)', () => {
+  const { file } = built(), rng = mulberry32(5)
+  for (const p of [PROFILES.works, PROFILES.future]) {
+    const gp = networks(road, pub('mrt-graph.json'), p).road, routes = readRoutes(file, g, gp)!
+    const streets = Array.from({ length: gp.lon.length }, (_, v) => v).filter(v => gp.street[v])
+    variantWeights(gp).forEach((slotW, v) => {
+      for (let q = 0; q < 50; q++) {
+        const a = streets[Math.floor(rng() * streets.length)], b = streets[Math.floor(rng() * streets.length)]
+        const want = tree(gp, a, slotW).dist[b], es = routes.path(a, b, v)
+        if (a === b || !Number.isFinite(want)) expect(es).toBeUndefined()
+        else expect(costOf(a, b, es!, slotW)).toBeCloseTo(want, 6)
+      }
+    })
+  }
+}, 120_000)
+
+test('in each profile, one street node reaches every street node, and each new street node reaches it back (real data)', () => {
+  for (const p of Object.values(PROFILES)) {
+    const gp = networks(road, pub('mrt-graph.json'), p).road
+    const streets = Array.from({ length: gp.lon.length }, (_, v) => v).filter(v => gp.street[v]), d = tree(gp, streets[0]).dist
+    expect(streets.filter(v => !Number.isFinite(d[v]))).toEqual([])
+    const fresh = new Set<number>()
+    for (let k = 0; k < gp.to.length; k++) if (gp.tags[gp.edge[k]] & FUTURE && gp.street[gp.owner[k]]) fresh.add(gp.owner[k])
+    for (const v of fresh) expect(tree(gp, v).dist[streets[0]]).toBeLessThan(Infinity)
+  }
+})
