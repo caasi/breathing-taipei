@@ -10,8 +10,9 @@ import { ICONS, type Kind } from './icons.ts'
 // A station of two kinds (臺北, 南港) stacks the badges of its shown kinds as cards, from the top left to the bottom
 // right, SPACING apart on each axis, in the order of KINDS; the first one is at the station, and each next one draws
 // over the one before. The stack hints that the two stations are one building (author's choice).
-const KINDS: Kind[] = ['hsr', 'tra', 'airport']
-const COLOURS = { hsr: '#f47321', tra: '#cccccc', airport: '#ffffff' }
+// bridge: the bridge of a policy, in the colour of the bicycle dots (MODE_COLOURS in Travellers.tsx).
+const KINDS: Kind[] = ['hsr', 'tra', 'airport', 'bridge']
+const COLOURS = { hsr: '#f47321', tra: '#cccccc', airport: '#ffffff', bridge: '#a0e060' }
 // The half side of a badge, in map units, for every kind.
 export const R = 5
 export const SPACING = 4

@@ -12,9 +12,11 @@ export const STAGGERED = 1, EBIKE_FREE = 2, ON_BRIDGE = 4, WASHED = 8
 // The policies of the 內湖 bundle of 沈伯洋 (docs/platforms/shen.md).
 export const KEY = { stagger: 'neihu-stagger', ebike: 'ebike-free', bridge: 'bike-bridge', straight: 'riverside-straight', hub: 'bike-hub' } as const
 
-// ponytail: the point where 迎風河濱公園 meets the end of 港墘路 is a guess; the platform names the two ends only, and the
-// news gives a length of about 340 m (DATA.md, "Figures in the code").
-export const NEW_BRIDGE = { name: '迎風—港墘橋', lon: 121.5713, lat: 25.0741 }
+// The platform PDF (docs/platforms/shen.md) draws the bridge across the bend of the river west of the end of 港墘路 (p14),
+// 120 m over 堤頂大道 and 220 m over the river (p15). The east end is the corner of 港墘路 and 舊宗路 (OSM). ponytail:
+// the west end is 340 m west of it and the crossing is where that line meets the river, both measured on the drawing
+// by eye; a bicycle uses the crossing only, so the ends are for the map.
+export const NEW_BRIDGE = { name: '迎風—港墘橋', lon: 121.5713, lat: 25.0741, ends: [[121.5694, 25.0740], [121.5728, 25.0742]] as [number, number][] }
 
 type Point = [number, number]
 const side = (a: Point, b: Point, c: Point) => (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0])
@@ -41,17 +43,19 @@ export const bikeWay = (river: River, extra: River['crossings'], km: (a: Point, 
  * the settings, from a stream of its own, so at the start of a run a policy changes only the agents it reaches.
  * - stagger (0 to 1): the share of the workers of 內科 whose firm takes the reward to stagger its hours. ponytail: such
  *   a worker starts and ends work 30 minutes earlier or later, half each way; a guess, there is no figure.
+ * - bridge: marks the cyclists whose way crosses the new bridge, for their events. The way itself is in city.ts.
  * - ebike: in the free hours (08:00 to 10:00, 17:00 to 19:00), a commuter by bus, scooter or car whose trip by e-bike
  *   takes at most the free 30 minutes, with both ends in 台北市, rides a YouBike 2.0E with probability SWITCH (hub
  *   adds HUB_MORE), up to the e-bikes that the fleet has.
  */
 export type Bundle = {
-  stagger: number; ebike: boolean; hub: boolean
+  stagger: number; ebike: boolean; hub: boolean; bridge: boolean
   jobs: (node: number) => boolean // a village of 內科
   taipei: (node: number) => boolean
   ebikeMinutes: (home: number, work: number) => number
   onNewBridge: (home: number, work: number) => boolean
   isMotor: (mode: number) => boolean
+  isBike: (mode: number) => boolean // a bicycle or an e-bike
   EBIKE_MODE: number
   perAgent: number
 }
@@ -76,6 +80,7 @@ export const applyBundle = (b: Bundle) => (w: World, rng: () => number) => {
       w.hours[2 * i] = mod(w.hours[2 * i] + s); w.hours[2 * i + 1] = mod(w.hours[2 * i + 1] + s)
       w.policy[i] |= STAGGERED
     }
+    if (b.bridge && b.isBike(w.choice[i]) && b.onNewBridge(h, k)) w.policy[i] |= ON_BRIDGE
     if (!b.ebike || !b.isMotor(w.choice[i]) || !b.taipei(h) || !b.taipei(k)) continue
     const minutes = b.ebikeMinutes(h, k)
     if (minutes > 30 || !(inFree(mod(w.hours[2 * i] - minutes)) || inFree(w.hours[2 * i + 1]))) continue

@@ -6,7 +6,7 @@ import { LAYER, useLayer } from './GLMap.tsx'
  * One line of text on the map, as the SVG had it: `xy` and `dy` in map units, `dy` down to the baseline; `middle` centres
  * the line on xy, `start` begins it there.
  */
-export type Text = { xy: [number, number]; dy: number; text: string; style: keyof typeof STYLES; anchor: 'middle' | 'start'; alpha: number }
+export type Text = { xy: [number, number]; dy: number; text: string; style: keyof typeof STYLES; anchor: 'middle' | 'start' | 'end'; alpha: number }
 
 // The look of the SVG text, in map units: the size of the font and the width of the halo (an SVG stroke, under the fill,
 // with the miter joins and the miter limit 4 of SVG).
@@ -142,7 +142,7 @@ export function Labels({ texts }: { texts: Text[] }) {
             const lineW = pieces.reduce((w, piece) => w + (glyphs.get(`${t.style} ${parts[0]} ${piece}`)?.advance ?? 0), 0)
             const anchor = [t.xy[0], t.xy[1] + t.dy]
             for (const part of parts) {
-              let pen = t.anchor === 'middle' ? -lineW / 2 : 0
+              let pen = t.anchor === 'middle' ? -lineW / 2 : t.anchor === 'end' ? -lineW : 0
               for (const piece of pieces) {
                 const g = glyphs.get(`${t.style} ${part} ${piece}`)
                 if (!g) continue

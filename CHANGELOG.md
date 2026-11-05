@@ -4,6 +4,17 @@ This file lists the changes that a user of the site can see, for each version. T
 
 ## [Unreleased]
 
+### Added
+
+- Policy settings of 沈伯洋 for 內湖 (#11): 內科錯峰分流, YouBike 2.0E 尖峰免費, 迎風—港墘自行車橋, 河濱進內科取直 and 運動驛站. Each setting has the tag of its candidate. A change applies to the run that goes on, from the next trip to work of each person.
+- While the setting 迎風—港墘自行車橋 is on, the map draws the bridge as a thin green line with a bridge badge and its name. The events show the riders who cross it.
+- A spinner shows while the page draws new dots after a change of a policy or of the dot density.
+
+### Changed
+
+- The setting 車站與機場 is now 交通地標, as it also shows the bridge of a policy. The name of the airport is at the top left of its badge.
+- Jam events show at one third of the takes of the traffic, not at each take.
+
 ### Fixed
 
 - The clock of a run can no longer start before the routing of the run ends. This needed a render (for example after a click or a key press) at the moment the first frame of the run came, after a load of more than 5 s. Found with a TLA+ model; not seen on a device.

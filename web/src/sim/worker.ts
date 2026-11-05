@@ -6,7 +6,7 @@ import { evenPick, type Mood, type SimEvent } from './events.ts'
 import { mulberry32 } from './rng.ts'
 import { FPS, clockAt, respeed, stepsTo, type Clock } from './pace.ts'
 import { cityFrom, MODES, SCOOTER, BIKE, EBIKE, type Village } from './city.ts'
-import type { Policies } from './policy.ts'
+import { ON_BRIDGE, type Policies } from './policy.ts'
 import { networks, readRoutes, ROAD_MODES, roadNode, tripPaths, wayBack, type Batch, type Routes } from './paths.ts'
 import { directions, sampler, type SparkPath } from './sparks.ts'
 import type { GraphJson } from './route.ts'
@@ -18,10 +18,11 @@ export type ToWorker =
   // at: as in speed. The clock of the new run stands at minute 0 from that time until the page sends a speed.
   | { type: 'init'; perAgent: number; seed: number; startDay: number; start: number; at: number }
   // The page sends the settings before its first init and at each change; they reach the run that goes on.
-  | { type: 'policies'; policies: Policies }
+  // redraw: the number of the change, for the page to know the trips of its latest change (FromWorker redraw)
+  | { type: 'policies'; policies: Policies; redraw: number }
   // minute: the clock of the page at at (performance.timeOrigin + performance.now() of the change), so both clocks agree.
   | { type: 'speed'; hoursPerSec: number; minute: number; at: number }
-  | { type: 'sample'; every: number } // the run goes on; only the agents drawn as dots change
+  | { type: 'sample'; every: number; redraw: number } // the run goes on; only the agents drawn as dots change
   | { type: 'traffic'; on: boolean } // the traffic layer is shown; the worker sends the levels only then
 /**
  * Sampled agents' current plans (minutes since 00:00 of day 0), for the renderer to interpolate.
@@ -45,6 +46,8 @@ export type FromWorker = {
   since: number // the `at` of the change of speed that the clock uses; the page takes the clock only from its latest change
   routing: boolean // the road paths of the run are not all found yet, so the run must not start (traffic.ts roadUse)
   roads: number // the share of the road paths found, 0 to 1, while routing
+  dotsBusy: boolean // the paths of the latest dots are not all sent yet
+  redraw?: number // with trips: the latest change of the page (ToWorker redraw) that these trips include
 }
 
 const EVENTS_PER_DAY = 48
@@ -54,13 +57,13 @@ const EVENTS_PER_DAY = 48
 const SHOWN = [0.25, 1, 3, 0.05]
 // ponytail: the plans to work of the agents that a policy changed, shown a day on top of the others, so a policy can be
 // seen in the stream; by eye.
-const POLICY_EVENTS_PER_DAY = 12
+const POLICY_EVENTS_PER_DAY = 12, BRIDGE_EVENTS_PER_DAY = 4
 let w: World | undefined
 let every = 20
 let hoursPerSec = 0, lastHours = 0 // lastHours: the last speed that was not a pause
 const clock: Clock = { minute: 0, at: performance.now(), perMs: 0 }
 let since = 0, owed = false // owed: the page has no frame yet with the clock of the latest change of speed
-let extra: Pick<FromWorker, 'start' | 'nodes' | 'districts' | 'homes' | 'coords' | 'trips' | 'replans' | 'traffic' | 'cells' | 'cellKeys'> = {}
+let extra: Pick<FromWorker, 'start' | 'nodes' | 'districts' | 'homes' | 'coords' | 'trips' | 'replans' | 'traffic' | 'cells' | 'cellKeys' | 'redraw'> = {}
 let pending: Generator<Batch | void> | undefined
 // Finds the paths of the road load (traffic.ts roadUse) in the time that the paths of the dots leave.
 let warming: Generator<number> | undefined, roads = 0 // roads: the share of the road paths found
@@ -98,9 +101,13 @@ let bikeVia: ((mode: number, home: number, work: number) => number[]) | undefine
 let policies: Policies = {}, city: ReturnType<typeof cityFrom> | undefined
 // The plans to work of the agents that a policy reached get a share of the stream of their own (POLICY_EVENTS_PER_DAY).
 let pickPolicy: ((kind: number) => boolean) | undefined
+let redraw = 0 // the latest change of the page that asked for new dots
+// The riders of the new bridge are few (a handful of agents), so they have a share of their own: each of their trips
+// to work shows, up to BRIDGE_EVENTS_PER_DAY a day. Kind 0 is every other reached agent, kind 1 a rider of the bridge.
 const policyPicker = (world: World, seed: number) => {
-  const reached = world.policy.reduce((n, p) => n + (p ? 1 : 0), 0)
-  return reached ? evenPick([POLICY_EVENTS_PER_DAY / reached], mulberry32(seed + 4)) : undefined
+  let reached = 0, bridge = 0
+  for (const p of world.policy) if (p & ON_BRIDGE) bridge++; else if (p) reached++
+  return reached || bridge ? evenPick([POLICY_EVENTS_PER_DAY / Math.max(1, reached), Math.min(1, BRIDGE_EVENTS_PER_DAY / Math.max(1, bridge))], mulberry32(seed + 4)) : undefined
 }
 const data = Promise.all(['od2.json', 'villages2.json', 'signal.json', 'road-graph.json', 'mrt-graph.json', 'night.json', 'calendar.json', 'people.json', 'road-names.json', 'river.json'].map(getJson))
 /** The name of each road edge, from scripts/names.py: edge[e] indexes names, or is -1. */
@@ -228,7 +235,7 @@ const frame = () => {
     else if (b.value) paths.push(b.value)
   }
   const found = sparks.take().map(edges => ({ edges, back: directions(edges, edgeEnds) }))
-  const msg: FromWorker = { ...extra, ...(found.length ? { sparks: found } : {}), paths, routing, roads, minute: w.minute, day: w.day, counts: c.nodes, road: c.road, away: c.away, ms, events: newEvents, clock: clock.minute, at: performance.timeOrigin + t, since }
+  const msg: FromWorker = { ...extra, ...(found.length ? { sparks: found } : {}), paths, routing, roads, dotsBusy: !!pending, minute: w.minute, day: w.day, counts: c.nodes, road: c.road, away: c.away, ms, events: newEvents, clock: clock.minute, at: performance.timeOrigin + t, since }
   newEvents = []
   owed = false
   postMessage(msg)
@@ -278,14 +285,14 @@ onmessage = async (e: MessageEvent<ToWorker>) => {
   // Showing the layer sends the traffic of the last take; it never adds a take, so the run does not depend on the toggle.
   if (m.type === 'traffic') { trafficOn = m.on; if (trafficOn && jam.length) { extra.traffic = jam; extra.cells = lastCells }; return }
   if (m.type === 'policies') {
-    policies = m.policies
+    policies = m.policies; redraw = m.redraw
     if (w && city) {
       city.setPolicies(policies); repolicy(w); pickPolicy = policyPicker(w, w.seed)
-      net.then(g => { if (w) extra = { ...extra, trips: draw(w, g) } })
+      net.then(g => { if (w) extra = { ...extra, trips: draw(w, g), redraw } })
     }
     return
   }
-  if (m.type === 'sample') { every = m.every; if (w) net.then(g => { if (w) extra = { ...extra, trips: draw(w, g) } }); return }
+  if (m.type === 'sample') { every = m.every; redraw = m.redraw; if (w) net.then(g => { if (w) extra = { ...extra, trips: draw(w, g), redraw } }); return }
   // The old world stops now. The clock of the new run stands at minute 0 until the page is ready for it and sends a
   // speed, as the clock of the page does.
   w = undefined
@@ -319,7 +326,7 @@ onmessage = async (e: MessageEvent<ToWorker>) => {
       // A day at home has no departure. ponytail: it shows at 09:00 of that day, a time chosen by eye.
       const t = dest === STAY ? world.dep[i] - 15 * 60 : world.dep[i]
       if (t < 0) return // a night shift that left on day -1
-      if (!pick(dest) && !(dest === WORK && world.policy[i] && pickPolicy?.(0))) return
+      if (!pick(dest) && !(dest === WORK && world.policy[i] && pickPolicy?.(world.policy[i] & ON_BRIDGE ? 1 : 0))) return
       const e = { t, kind: 'personal' as const, name: nameOf(ids, i), home: world.home[i], to: play ? world.play[i] : world.work[i],
         dest, mode: play ? world.playMode[i] : world.mode[i], group, policy: world.policy[i] || undefined }
       newEvents.push({ ...e, id: `a${++eventId}` })
@@ -365,7 +372,7 @@ onmessage = async (e: MessageEvent<ToWorker>) => {
     for (const i of w.movers) w.onPlan(i)
     coords = c.coords
     traffic(w, graphs, roadJson, roadNames as RoadNames)
-    extra = { start: m.start, nodes: c.nodes, districts: (villages as Village[]).map(v => v.town), homes: Uint32Array.from(c.city.homes), coords: c.coords, trips: draw(w, graphs) }
+    extra = { start: m.start, nodes: c.nodes, districts: (villages as Village[]).map(v => v.town), homes: Uint32Array.from(c.city.homes), coords: c.coords, trips: draw(w, graphs), redraw }
   } catch (err) {
     w = undefined
     postMessage({ error: String(err), start: m.start } satisfies WorkerError)

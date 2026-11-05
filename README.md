@@ -68,7 +68,7 @@ Display settings:
 | `dots` | `1` shows the dots, `0` hides them | `1` |
 | `mode` | `1` colors the dots by mode | `0` |
 | `layers` | Comma list of `mrt`, `lrt`, `tra`, `hsr`: the lines shown (路網). Unknown names are ignored (`highway` too: the 國道 and 快速道路 are now in `traffic`), and a list with no known name goes back to the default. `airport` is left out: it was a layer before the airport moved to `stations`, so a list of only `airport` hides all lines. An empty list hides all lines | All |
-| `stations` | `1` shows the badges and names of the stations and the airport (車站與機場). A badge of 台鐵 or 高鐵 also needs its line in `layers`. `0` hides them | `1` |
+| `stations` | `1` shows the badges and names of the stations, the airport and the bridge of a policy (交通地標). A badge of 台鐵 or 高鐵 also needs its line in `layers`. `0` hides them | `1` |
 | `labels` | `1` shows the district names and their counts (區名與人數). `0` hides them | `1` |
 | `traffic` | `1` shows the road network with the slow roads in colour, and colours the bus, scooter and car dots on slow roads. `0` hides it. The simulation takes the traffic in both cases, so the jams, their events and the slower trips go on while it is hidden | `1` |
 

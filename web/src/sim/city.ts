@@ -180,13 +180,14 @@ export const cityFrom = ({ od: mrt, saturday, holiday, districts, villages, sign
   /** Changes the settings of the city: the ways of the bicycles at once, the agents through core.ts repolicy. */
   const setPolicies = (p: Policies) => {
     policies = p
-    city.adjust = p[KEY.stagger] || p[KEY.ebike] ? applyBundle({
+    city.adjust = p[KEY.stagger] || p[KEY.ebike] || p[KEY.bridge] ? applyBundle({
       // The stagger setting is a percent in the query string.
-      stagger: (p[KEY.stagger] ?? 0) / 100, ebike: !!p[KEY.ebike], hub: !!p[KEY.hub], jobs, perAgent, EBIKE_MODE: EBIKE,
+      stagger: (p[KEY.stagger] ?? 0) / 100, ebike: !!p[KEY.ebike], hub: !!p[KEY.hub], bridge: !!p[KEY.bridge], jobs, perAgent, EBIKE_MODE: EBIKE,
       taipei: v => villages[v].town.startsWith('台北市'),
       ebikeMinutes: (h, w) => minutes(h, w, EBIKE, 8),
       onNewBridge: (h, w) => bike(h, w).via?.[0] === NEW_BRIDGE.lon,
       isMotor: m => m === BUS || m === SCOOTER || m === CAR,
+      isBike: m => m === BIKE || m === EBIKE,
     }) : undefined
   }
   setPolicies(initial)

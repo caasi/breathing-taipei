@@ -40,7 +40,10 @@ export const actionOf = (e: Extract<SimEvent, { kind: 'personal' }>, placeOf: Pl
     return e.mood === 'angry' ? `路上塞車晚到，晚了${e.late}分鐘才${by}${home}，一肚子火` : `路上塞車晚到，晚了${e.late}分鐘才${by}${home}，算了，明天早點出門`
   }
   const p = e.dest === PLAY || e.group ? 0 : e.policy ?? 0
-  if (e.back && p & STAGGERED) return `公司錯峰，${by}提早或延後半小時下班回家，避開尖峰`
+  if (e.back && p & (STAGGERED | ON_BRIDGE)) {
+    const bridge = p & ON_BRIDGE ? '經迎風—港墘橋' : ''
+    return p & STAGGERED ? `公司錯峰，${by}${bridge}提早或延後半小時下班回家，避開尖峰` : `${by}${bridge}下班回家`
+  }
   if (e.back) return e.dest === PLAY ? `${by}從${place}回家` : e.group ? `${by}回家` : `${by}下班回家`
   if (e.dest === STAY) return '今天在家休息'
   if (e.dest === GONE) return '今天出遠門，離開雙北'
