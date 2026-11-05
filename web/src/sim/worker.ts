@@ -322,7 +322,8 @@ onmessage = async (e: MessageEvent<ToWorker>) => {
   if (m.type === 'sample') { every = m.every; redraw = m.redraw; if (w && scene) extra = { ...extra, trips: draw(w, scene), redraw }; return }
   // The old world stops now. The clock of the new run stands at minute 0 until the page is ready for it and sends a
   // speed, as the clock of the page does.
-  w = undefined
+  // use: the old run's road use must not reach the plans that init passes to onPlan before traffic() clears it.
+  w = undefined; use = undefined
   const me = ++inits
   respeed(clock, 0, 0, m.at - performance.timeOrigin, 0)
   since = m.at
