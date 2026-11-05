@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { expect, test } from 'vitest'
 import fc from 'fast-check'
-import { actionOf, evenPick, jamOf, publicEvents, withPublic, type Mood, type SimEvent } from './events.ts'
+import { actionOf, evenPick, jamOf, notesOf, publicEvents, withPublic, type Mood, type SimEvent } from './events.ts'
 import { mulberry32 } from './rng.ts'
 import { indexOf, type Calendar } from './calendar.ts'
 import { GONE, PLAY, STAY, WORK } from './core.ts'
@@ -42,6 +42,10 @@ test('a personal event says where the character goes and how', () => {
   expect(actionOf({ ...e(WORK, 2, 5), policy: 4, back: true }, at)).toBe('騎自行車經迎風—港墘橋下班回家')
   expect(actionOf({ ...e(WORK, 2, 6), policy: 1 | 4, back: true }, at)).toBe('公司錯峰，騎 YouBike 2.0E 經迎風—港墘橋提早或延後半小時下班回家，避開尖峰')
   expect(actionOf({ ...e(PLAY, 2, 3), policy: 1 }, at)).toBe('開車去中山區走走') // a day off: the policy of work says nothing
+  // The notes quote the platform, one for each policy bit, and none for a day off.
+  expect(notesOf({ ...e(WORK, 2, 6), policy: 2 | 4 }).map(n => n.page)).toEqual(['交通政策', '交通政策'])
+  expect(notesOf({ ...e(WORK, 2, 6), policy: 1 })[0].url).toBe('https://puma.taipei/policies/AI%E6%94%BF%E7%AD%96')
+  expect(notesOf({ ...e(PLAY, 2, 6), policy: 2 })).toEqual([])
 })
 
 test('greetings follow the kind of day', () => {

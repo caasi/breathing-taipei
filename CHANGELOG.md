@@ -8,6 +8,7 @@ This file lists the changes that a user of the site can see, for each version. T
 
 - Policy settings of 沈伯洋 for 內湖 (#11): 內科錯峰分流, YouBike 2.0E 尖峰免費, 迎風—港墘自行車橋, 河濱進內科取直 and 運動驛站. Each setting has the tag of its candidate. A change applies to the run that goes on, from the next trip to work of each person.
 - While the setting 迎風—港墘自行車橋 is on, the map draws the bridge as a thin green line with a bridge badge and its name. The events show the riders who cross it.
+- An event of a person that a policy changed has a note under it: the words of the platform, the candidate and a link to the page of the policy. The info panel credits the words (CC BY 4.0).
 - A spinner shows while the page draws new dots after a change of a policy or of the dot density.
 
 ### Changed

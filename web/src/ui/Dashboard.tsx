@@ -3,7 +3,7 @@ import { KEY } from '../sim/policy.ts'
 import { useQuery, bool, fromBool, onSteps } from '../query.ts'
 import { hhmm, H2 } from './format.ts'
 
-import { actionOf, jamOf, type PlaceOf, type SimEvent } from '../sim/events.ts'
+import { actionOf, jamOf, notesOf, type PlaceOf, type SimEvent } from '../sim/events.ts'
 
 // The kind of an event shows by the colour of its text, not by a label; a bad event (an accident) gets its own colour when it comes.
 const COLOUR = { personal: '#eee', public: '#c9a7ff', jam: '#ff8a65' } as const
@@ -26,6 +26,11 @@ const POLICIES: [string, Policy[]][] = [
     { id: KEY.ebike, label: 'YouBike 2.0E 尖峰免費', who: SHEN, type: 'toggle' },
   ]],
 ]
+// A note under an event that a policy changed: the words of the platform, the candidate and a link to the page. The
+// credit of CC BY 4.0 for the words is in the info panel (App.tsx), with the other sources.
+const Note = ({ note }: { note: ReturnType<typeof notesOf>[number] }) =>
+  <p style={{ margin: '4px 0 0 44px', padding: '2px 8px', borderLeft: '2px solid #6a4a3d', fontSize: 12, color: '#bbb' }}>
+    {note.quote}<Who who={note.who} /> <a href={note.url} target="_blank" rel="noopener noreferrer" style={{ color: '#e8c9b8' }}>{note.page}</a></p>
 const Who = ({ who }: { who: string }) =>
   <span style={{ fontSize: 11, color: '#e8c9b8', border: '1px solid #6a4a3d', borderRadius: 3, padding: '0 4px', marginLeft: 6, whiteSpace: 'nowrap' }}>{who}</span>
 const ALL_POLICIES = POLICIES.flatMap(([, ps]) => ps)
@@ -65,7 +70,8 @@ export const Events = memo(function Events({ events, now, dayLabel, placeOf }: E
         {(i === 0 || dayOf(happened[i - 1]) !== dayOf(e)) && <p style={{ margin: '0 0 6px', fontSize: 12, color: '#888' }}>{dayLabel(dayOf(e))}</p>}
         <div style={{ display: 'flex', gap: 8 }}>
           <span style={{ fontVariantNumeric: 'tabular-nums', color: '#aaa' }}>{hhmm(e.t % 1440)}</span>
-          <span style={{ color: COLOUR[e.kind] }}>{e.kind === 'public' ? e.text : <><span style={{ color: PLACE.town }}>{placeOf(e.home).town}</span><span style={{ color: PLACE.village }}>{placeOf(e.home).village}</span>的<span style={{ color: '#ffd9a0' }}>{e.name}</span>{e.kind === 'jam' ? jamOf(e, placeOf) : actionOf(e, placeOf)}</>}</span></div></li>)}
+          <span style={{ color: COLOUR[e.kind] }}>{e.kind === 'public' ? e.text : <><span style={{ color: PLACE.town }}>{placeOf(e.home).town}</span><span style={{ color: PLACE.village }}>{placeOf(e.home).village}</span>的<span style={{ color: '#ffd9a0' }}>{e.name}</span>{e.kind === 'jam' ? jamOf(e, placeOf) : actionOf(e, placeOf)}</>}</span></div>
+        {notesOf(e).map(n => <Note key={n.quote} note={n} />)}</li>)}
     </ol> : <p style={{ fontSize: 14, color: '#aaa' }}>還沒有事件。</p>}
   </>
 })
