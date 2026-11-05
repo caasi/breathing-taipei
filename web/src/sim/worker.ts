@@ -9,7 +9,7 @@ import { cityFrom, MODES, SCOOTER, BIKE, EBIKE, type Village } from './city.ts'
 import { ON_BRIDGE, type Policies } from './policy.ts'
 import { networks, readRoutes, ROAD_MODES, roadNode, tripPaths, wayBack, type Batch, type Routes } from './paths.ts'
 import { directions, sampler, type SparkPath } from './sparks.ts'
-import { PROFILES, type GraphJson, type Scenario } from './route.ts'
+import { freeTime, PROFILES, type GraphJson, type Scenario } from './route.ts'
 import { workNodes } from './jobs.ts'
 import { cellMax, gridOf, levels, liveOf, roadUse, stepper, take as takeTraffic, type Grid, type Live, type RoadUse } from './traffic.ts'
 
@@ -273,9 +273,14 @@ const draw = (world: World, { graphs, routes }: Scene) => {
 // Every road traveller of the run, on the paths of the routes file. Without the file there is no traffic.
 const traffic = (world: World, { scenario, graphs, routes }: Scene, roadJson: GraphJson, roadNames: RoadNames) => {
   use = undefined; warming = undefined; routing = true; roads = 0; jam = new Uint8Array(0); lastCells = new Uint8Array(0); stepWithTraffic = stepper(JAM_MINUTES, takeTrafficNow)
-  routes.then(known => {
+  // Another scenario compares its paths with those of today (traffic.ts RoadUse factor).
+  const todays = scenario === 'now' ? Promise.resolve(undefined) : sceneOf('now').then(s => s.routes)
+  Promise.all([routes, todays]).then(([known, todayRoutes]) => {
     if (world !== w) return
     if (!known) { doneRouting(); return }
+    // Its paths are not paths of this run, so they are not sparks.
+    if (todayRoutes) { todayRoutes.clear(); todayRoutes.onFound = undefined }
+    const today = todayRoutes && { routes: todayRoutes, time: freeTime(roadJson, true) }
     known.clear() // the paths of an earlier run
     // Set for each run; it samples only while the run routes, the dots' paths too, as they share these routes.
     edgeEnds = e => [roadJson.edges[e][0], roadJson.edges[e][1]]
@@ -284,7 +289,7 @@ const traffic = (world: World, { scenario, graphs, routes }: Scene, roadJson: Gr
     const metres = Float32Array.from(roadJson.edges, e => e[2])
     load = new Float32Array(metres.length); grid = gridOf(roadJson, roadNames.edge); live = liveOf(roadJson, grid, PROFILES[scenario]); extra.cellKeys = grid.keys
     const workAt = workNodes(graphs, coords)
-    const found = roadUse(world, known, (i, leg) => [at(world.home[i]), leg ? at(world.play[i]) : workAt(i, world.work[i])], live.time)
+    const found = roadUse(world, known, (i, leg) => [at(world.home[i]), leg ? at(world.play[i]) : workAt(i, world.work[i])], live.time, today)
     warming = (function* () {
       try { yield* found.filling; if (world === w) use = found.use } finally { if (world === w) doneRouting() }
     })()

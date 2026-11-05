@@ -46,11 +46,17 @@ export const PCU = [0, 2 / 20, 0.4 / 1.2, 1 / 1.4, 0, 0, 0]
  * - path: the index of its path in paths.
  * - at: the edge it is on at the last take. left: the share of that edge still to drive.
  * on: the movers on the road at the last take.
+ * factor: per path, its free time over the free time of the same variant of today between the same nodes (1 today). The
+ * minutes of a trip come from its distance (city.ts), so this ratio is how the roads of a scenario make it longer or
+ * shorter: the works, or a new road.
  */
 export type RoadUse = {
   paths: (Uint16Array | undefined)[]; cum: Map<Uint16Array, Float32Array>
   pick: Int8Array; since: Int32Array; free: Float32Array; path: Int32Array; at: Int32Array; left: Float32Array; on: number[]
+  factor: Float32Array
 }
+/** The routes and the free times of today, for the paths of another scenario to compare with (RoadUse factor). */
+export type Today = { routes: Routes; time: ArrayLike<number> }
 
 /**
  * ends gives the road nodes of agent i's trip (leg 0 to work, 1 to its day-off place); the way home is the path from
@@ -58,11 +64,12 @@ export type RoadUse = {
  * worker can spread it over frames. The run waits for it (worker.ts), so the traffic of a seed does not depend on how
  * fast the device finds the paths.
  */
-export const roadUse = (w: World, routes: Routes, ends: (agent: number, leg: number) => [number, number], time: ArrayLike<number>) => {
+export const roadUse = (w: World, routes: Routes, ends: (agent: number, leg: number) => [number, number], time: ArrayLike<number>, today?: Today) => {
   const cum = new Map<Uint16Array, Float32Array>(), n = w.movers.length, paths: (Uint16Array | undefined)[] = new Array(4 * n * VARIANTS)
-  const use: RoadUse = { paths, cum, pick: new Int8Array(n), since: new Int32Array(n).fill(-(2 ** 31)), free: new Float32Array(n), path: new Int32Array(n), at: new Int32Array(n), left: new Float32Array(n), on: [] }
+  const factor = new Float32Array(4 * n * VARIANTS).fill(1)
+  const use: RoadUse = { paths, cum, factor, pick: new Int8Array(n), since: new Int32Array(n).fill(-(2 ** 31)), free: new Float32Array(n), path: new Int32Array(n), at: new Int32Array(n), left: new Float32Array(n), on: [] }
   const add = (es: Uint16Array) => { if (!cum.has(es)) { const c = new Float32Array(es.length); let s = 0; es.forEach((e, j) => (c[j] = s += time[e])); cum.set(es, c) } }
-  // Yields the share done: the legs 5%, the paths 85%, putting them in 10%.
+  // Yields the share done: the legs 5%, the paths 85% (with today, 60% and 25% for those of today), putting them in 10%.
   function* filling(): Generator<number> {
     const legs: [number, number, number, number][] = [] // mover index, leg, from, to
     for (let j = 0; j < n; j++) {
@@ -72,14 +79,23 @@ export const roadUse = (w: World, routes: Routes, ends: (agent: number, leg: num
       if (ROAD_MODES.has(w.playMode[i])) legs.push([j, 1, ...ends(i, 1)])
       if (j % 20000 === 19999) yield 0.05 * j / n
     }
-    for (const done of routes.fill(legs.flatMap(([, , a, b]) => [[a, b], [b, a]] as [number, number][]))) yield 0.05 + 0.85 * done
+    const pairs = legs.flatMap(([, , a, b]) => [[a, b], [b, a]] as [number, number][]), share = today ? 0.6 : 0.85
+    for (const done of routes.fill(pairs)) yield 0.05 + share * done
+    if (today) for (const done of today.routes.fill(pairs)) yield 0.65 + 0.25 * done
     for (let k = 0; k < legs.length; k++) {
       const [j, leg, a, b] = legs[k]
       // A variant with no path (a pair that the streets alone do not connect) drives the variant before it.
       ;[[a, b], [b, a]].forEach(([x, y], back) => {
-        for (let v = 0, last: Uint16Array | undefined; v < VARIANTS; v++) {
-          const es = routes.path(x, y, v) ?? last
-          if (es) { add(es); paths[((2 * j + leg) * 2 + back) * VARIANTS + v] = es; last = es }
+        for (let v = 0, last: Uint16Array | undefined, was: Uint16Array | undefined; v < VARIANTS; v++) {
+          const es = routes.path(x, y, v) ?? last, p = ((2 * j + leg) * 2 + back) * VARIANTS + v
+          if (!es) continue
+          add(es); paths[p] = es; last = es
+          // A variant with no path today drives the variant before it, as here.
+          const then = today && (today.routes.path(x, y, v) ?? was)
+          was = then
+          let base = 0
+          if (then) for (let k = 0; k < then.length; k++) base += today!.time[then[k]]
+          if (base) factor[p] = cum.get(es)!.at(-1)! / base
         }
       })
       if (k % 500 === 499) yield 0.9 + 0.1 * k / legs.length
@@ -269,7 +285,7 @@ const retime = (w: World, use: RoadUse, live: Live) => {
     const i = w.movers[j], out1 = t < w.dep[i] + w.dur1[i], start = out1 ? w.dep[i] : w.ret[i], dur = out1 ? w.dur1[i] : w.dur2[i]
     const free = use.free[j], off = Math.min(free, ACCESS[w.dest[i] === PLAY ? w.playMode[i] : w.mode[i]])
     const slow = slowerOn(use.paths[use.path[j]]!, use.at[j], live, use.left[j])
-    stretch(w, i, t + (1 - (t - start) / dur) * (off + (free - off) * slow))
+    stretch(w, i, t + (1 - (t - start) / dur) * (off + (free - off) * slow * use.factor[use.path[j]]))
     use.since[j] = out1 ? w.dep[i] : w.ret[i]
   }
 }

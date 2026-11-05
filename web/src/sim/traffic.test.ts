@@ -7,7 +7,7 @@ import { networks, readRoutes, roadNode, VARIANTS, type Routes } from './paths.t
 import { SCOOTER } from './city.ts'
 import { workNodes } from './jobs.ts'
 import { cellKey, cellMax, extraTime, MOST, gridOf, levels, liveOf, fullRoadUse, slowerOn, stepper, take, type Live } from './traffic.ts'
-import type { GraphJson } from './route.ts'
+import { PROFILES, type GraphJson, type Profile } from './route.ts'
 
 const pub = (f: string) => JSON.parse(readFileSync(new URL(`../../public/${f}`, import.meta.url), 'utf8'))
 // A world with no agents: the stepper only needs its clock.
@@ -96,14 +96,15 @@ test('a variant with no path drives the variant before it, so a scooter whose st
 
 // The app's run on the real data, with its routes file (made by `pnpm routes`, not in git).
 const bin = new URL('../../public/road-routes.bin', import.meta.url)
-const appRun = () => {
+const appRun = (p?: Profile) => {
   const data = { ...pub('od2.json'), villages: pub('villages2.json'), signal: pub('signal.json'), night: pub('night.json') }
   const c = cityFrom(data, 10, () => 0), w = init(c.city, 42), road: GraphJson = pub('road-graph.json')
-  const net = networks(road, pub('mrt-graph.json')), b = readFileSync(bin)
-  const routes = readRoutes(new Uint16Array(b.buffer, b.byteOffset, b.byteLength / 2), net.road)!
+  const now = networks(road, pub('mrt-graph.json')), net = p ? networks(road, pub('mrt-graph.json'), p) : now, b = readFileSync(bin)
+  const file = new Uint16Array(b.buffer, b.byteOffset, b.byteLength / 2), routes = readRoutes(file, now.road, net.road)!
   const node = new Map<number, number>(), at = (v: number) => node.get(v) ?? node.set(v, roadNode(net, c.coords, v)).get(v)!
-  const workAt = workNodes(net, c.coords), grid = gridOf(road, pub('road-names.json').edge), live = liveOf(road, grid)
-  const use = fullRoadUse(w, routes, (i, leg) => [at(w.home[i]), leg ? at(w.play[i]) : workAt(i, w.work[i])], live.time)
+  const workAt = workNodes(net, c.coords), grid = gridOf(road, pub('road-names.json').edge), live = liveOf(road, grid, p)
+  const today = p && { routes: readRoutes(file, now.road)!, time: liveOf(road, grid).time }
+  const use = fullRoadUse(w, routes, (i, leg) => [at(w.home[i]), leg ? at(w.play[i]) : workAt(i, w.work[i])], live.time, today)
   return { w, use, live, load: new Float32Array(road.edges.length) }
 }
 const plans = (w: World) => [Int32Array.from(w.dep), Uint16Array.from(w.dur1), Int32Array.from(w.ret), Uint16Array.from(w.dur2)]
@@ -138,3 +139,12 @@ test.skipIf(!existsSync(bin))('in a jam, a take keeps each traveller where it is
   // The morning is jammed somewhere, or the test checks nothing.
   expect(Math.max(...live.slower)).toBeGreaterThan(2)
 }, 120_000)
+
+test.skipIf(!existsSync(bin))('a path of a scenario is longer or shorter than today by its free time over that of the same variant today (real data)', () => {
+  const factors = (p: Profile) => { const { use } = appRun(p); return use.paths.flatMap((es, k) => (es && k % VARIANTS === 0 ? [use.factor[k]] : [])) }
+  const works = factors(PROFILES.works), later = factors(PROFILES.future)
+  // The works only slow roads down, so no fastest path of the works is faster than the fastest path of today.
+  expect(works.filter(f => f < 1 - 1e-6)).toEqual([])
+  expect(works.filter(f => f > 1.05).length).toBeGreaterThan(0)
+  expect(later.filter(f => f < 0.95).length).toBeGreaterThan(0)
+}, 300_000)
