@@ -26,7 +26,7 @@ Source: https://puma.taipei/policies/交通政策, published 2026-09-16, changed
 | `transport-bus` | 「精算各站運量，推動公車與捷運分工，低運量路段改以 DRTS 或小型巴士替代」 | Partly. The bus routes are fixed data. A change of the network needs a source for the new routes. |
 | `transport-bridge` | 「興建迎風—港墘跨基隆河自行車專用橋，直接銜接民生社區與內湖科技園區。」 | Yes. A bicycle way that crosses the river goes through the crossing that makes it shortest, and the bridge is one more crossing. The PDF draws the bridge on page 14 and gives its size on page 15: 「跨河約220M+跨越堤頂大道120M；總長340M」, 8 m wide, 「工程經費：9.57億」, 「工期：1年10個月」, with a 鐵馬驛站 (lift and bicycle service) at the 內湖 end. |
 | `transport-bike` | 「提供 YouBike 2.0E 尖峰時段（08:00-10:00 / 17:00-19:00）前 30 分鐘免費」 | Yes. More bicycle trips in the two peak windows, and fewer road trips. See "Candidates". |
-| `transport-hub` | 「設置「運動驛站」提供盥洗、置物與租借服務，並以綠建築與容積獎勵鼓勵大樓增設淋浴設施。」 | No. It can raise the share of bicycle trips, but no figure for that was found. |
+| `transport-hub` | 「設置「運動驛站」提供盥洗、置物與租借服務，並以綠建築與容積獎勵鼓勵大樓增設淋浴設施。」 | Yes, with a guess: with the free e-bike, the showers raise the share of the reached commuters who move to it by half (`HUB_MORE` in DATA.md). No figure was found. |
 | `transport-scooter` | 「持記名 TPASS 市民享每日前 10 分鐘免費（市府出資試辦 3 個月，後續與中央協商常態化）。」「媒合公有（含委外）及私人路外停車場提供定型化契約，引導共享機車離開路邊格位。」 | Partly. The model has no shared scooters and no parking. |
 | `transport-maintain` | 「以鋪面平整度、標線、照明、指標與越堤動線 5 項指標每季評分公開，維護預算與評分連動。」 | No. |
 
@@ -61,6 +61,7 @@ The PDF has figures that can change the simulation or start events later. They a
 - Page 6: 「6,539 上午7-9點死傷人數，全日最高峰(2024年)」, from the 臺北市交通局 statistics office (《臺北市道路交通事故分析》), and 「全市150多所國小，市府做了4個通學區」.
 - Page 9: the bus accidents for which the driver is at fault, 「公車有責肇事率(件/百萬公里)」, 2.15 and 4.02, for 2024 and 2025.
 - Page 12: YouBike rides grew 55%, and the bicycle network grew less than 5%. The targets are 2,000 stations and 27,500 bicycles.
+- Page 14: the map gives two reasons for the bridge: 「基隆河濱銜接內科園區困難」 and 「自行車道缺乏快速通過空間」. The setting 河濱進內科取直 (`riverside-straight`) comes from the first one and from a news report (三立, 2026-09-02, in DATA.md): the way from the riverside into 內科 makes a detour. The 0.5 km that it takes off is a guess.
 
 ## Candidates
 
