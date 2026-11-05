@@ -187,13 +187,13 @@ export function App() {
       // a second new run replaced); their day and nodes would be read with the new start. Today a run starts once per
       // page; a setting that starts the run again (for example a policy, #8) needs this.
       if (m.start !== undefined) { if (m.start !== started.current) return; shown.current = m.start; setOnScreen(next.current) }
+      else if (shown.current !== started.current) return
       // New dots (a change of a policy or of the density) block the page while it places their paths; the spinner
       // shows from the change until the worker has sent the last path of the new dots.
       // Trips of an older change can arrive after a newer change; only the latest one ends the wait.
       const wait = redrawing.current
       if (m.trips && m.redraw === wait.id) wait.trips = true
       if (wait.trips && !wait.done && !m.dotsBusy) { wait.done = true; setRedrawBusy(false) }
-      else if (shown.current !== started.current) return
       shownRouting.current = m.routing
       if (m.nodes) setNodes(m.nodes)
       if (m.districts) setDistrictOf(m.districts)
