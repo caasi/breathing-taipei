@@ -82,9 +82,9 @@ export const inFree = (m: number) => FREE.some(([a, b]) => m >= a && m < b)
 const mod = (t: number) => ((t % 1440) + 1440) % 1440
 
 export const applyBundle = (b: Bundle) => (w: World, rng: () => number) => {
-  const reach: number[] = [], riders = b.bridge ? b.bridgeRiders(w) : undefined
+  const reach: [number, number][] = [], riders = b.bridge ? b.bridgeRiders(w) : undefined
   for (let i = 0; i < w.home.length; i++) {
-    const r1 = rng(), r2 = rng(), r3 = rng(), r4 = rng()
+    const r1 = rng(), r2 = rng(), r3 = rng(), r4 = rng(), r5 = rng()
     if (w.kind[i] || w.work[i] === w.home[i]) continue
     const h = w.home[i], k = w.work[i]
     if (b.jobs(k) && r1 < b.stagger) {
@@ -97,12 +97,14 @@ export const applyBundle = (b: Bundle) => (w: World, rng: () => number) => {
     if (!b.ebike || !b.isMotor(w.choice[i]) || !b.taipei(h) || !b.taipei(k)) continue
     const minutes = b.ebikeMinutes(h, k)
     if (minutes > 30 || !(inFree(mod(w.hours[2 * i] - minutes)) || inFree(w.hours[2 * i + 1]))) continue
-    if (r3 < SWITCH * (b.hub ? 1 + HUB_MORE : 1)) reach.push(i)
+    if (r3 < SWITCH * (b.hub ? 1 + HUB_MORE : 1)) reach.push([i, r5])
   }
-  // The fleet caps the riders: when more are reached than the e-bikes can carry, each reached one rides with the same chance.
+  // The fleet caps the riders: when more are reached than the e-bikes can carry, each reached one rides with the same
+  // chance, by its own draw r5. ponytail: with SWITCH and FLEET as they are, the reached are about a fifth of the room,
+  // at any density (both scale with 1 / perAgent), so the cap takes no one; it matters when SWITCH grows.
   const room = FLEET * TURNS / b.perAgent, keep = Math.min(1, room / Math.max(1, reach.length))
-  for (const i of reach) {
-    if (rng() >= keep) continue
+  for (const [i, r] of reach) {
+    if (r >= keep) continue
     w.choice[i] = b.EBIKE_MODE
     w.policy[i] |= EBIKE_FREE | (b.onNewBridge(w.home[i], w.work[i]) ? ON_BRIDGE : 0) | (b.hub ? WASHED : 0)
   }
