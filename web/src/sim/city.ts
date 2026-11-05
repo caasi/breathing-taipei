@@ -127,7 +127,10 @@ const DETOUR = 1.3 // a trip on the ground over the straight distance
 
 export const cityFrom = ({ od: mrt, saturday, holiday, districts, villages, signal, night, river }: Data, perAgent: number,
   kindOf?: (day: number) => number, initial: Policies = {}) => {
-  let policies = initial
+  // The settings that the ways of the bicycles use. They change only in city.adjust, that is in core.ts repolicy: init
+  // draws the work hours of the baseline before it, so a run that starts with a setting and a run that turns it on
+  // later have the same baseline.
+  let policies: Policies = {}
   const g = villages.map(v => districts.indexOf(v.town))
   const popD = new Array(districts.length).fill(0), lon = [...popD], lat = [...popD]
   villages.forEach((v, i) => { popD[g[i]] += v.pop; lon[g[i]] += v.lon * v.pop; lat[g[i]] += v.lat * v.pop })
@@ -191,10 +194,9 @@ export const cityFrom = ({ od: mrt, saturday, holiday, districts, villages, sign
     riders.set(w, r)
     return r
   }
-  /** Changes the settings of the city: the ways of the bicycles at once, the agents through core.ts repolicy. */
+  /** Changes the settings of the city at the next core.ts repolicy, for the ways of the bicycles and for the agents. */
   const setPolicies = (p: Policies) => {
-    policies = p
-    city.adjust = p[KEY.stagger] || p[KEY.ebike] || p[KEY.bridge] || p[KEY.straight] ? applyBundle({
+    const bundle = p[KEY.stagger] || p[KEY.ebike] || p[KEY.bridge] || p[KEY.straight] ? applyBundle({
       // The stagger setting is a percent in the query string.
       stagger: (p[KEY.stagger] ?? 0) / 100, ebike: !!p[KEY.ebike], hub: !!p[KEY.hub], bridge: !!p[KEY.bridge], bikeShift: (p[KEY.bikeShift] ?? 0) / 100, straight: !!p[KEY.straight], jobs, perAgent, EBIKE_MODE: EBIKE, BIKE_MODE: BIKE, bridgeRiders,
       bikeMinutes: (h, w) => minutes(h, w, BIKE, 8),
@@ -205,6 +207,7 @@ export const cityFrom = ({ od: mrt, saturday, holiday, districts, villages, sign
       isMotor: m => m === BUS || m === SCOOTER || m === CAR,
       isBike: m => m === BIKE || m === EBIKE,
     }) : undefined
+    city.adjust = (w, rng) => { policies = p; bundle?.(w, rng) }
   }
   setPolicies(initial)
   return { city, nodes: villages.map(v => v.code), coords, target, bike, setPolicies }

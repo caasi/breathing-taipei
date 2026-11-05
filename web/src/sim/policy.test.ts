@@ -123,3 +123,13 @@ test('取直 marks exactly the cyclists whose way it shortens: across the river,
   expect(bad).toEqual([])
   expect(marked).toBeGreaterThan(0)
 }, 120_000)
+
+test('a run that starts with the settings equals a run that turns them on later: the baseline hours use no policy', () => {
+  const p = { [KEY.bridge]: 1, [KEY.straight]: 1, [KEY.ebike]: 1, [KEY.bikeShift]: 50 }
+  const { w: atStart } = run(p)
+  const { c, w: later } = run()
+  c.setPolicies(p); repolicy(later)
+  const same = (a: ArrayLike<number>, b: ArrayLike<number>) => a.length === b.length && Array.prototype.every.call(a, (x: number, k: number) => x === b[k])
+  expect(same(atStart.base.hours, later.base.hours)).toBe(true)
+  expect(same(atStart.hours, later.hours) && same(atStart.choice, later.choice) && same(atStart.policy, later.policy)).toBe(true)
+}, 120_000)
