@@ -21,7 +21,7 @@ The author did not register for the event, so this is not an entry.
   - People who walk or ride a bicycle move in a straight line.
 - **The clock.** It shows the 民國 date and the time, then the lunar date, the solar term, a holiday (orange) and the days that are commemorated but not off (blue).
 - **The event panel.** It shows the newest 100 events: a few of the characters' plans, and the public events of each day. On a phone it is below or beside the map.
-- **The policy panel.** It holds placeholder policy settings; they do not change the simulation yet. On a phone it opens from the third icon.
+- **The policy panel.** It holds the policy settings of the candidates, each with the name of its candidate as a tag. A change starts a new run. On a phone it opens from the third icon.
 - **The info and settings panels.** The ⓘ icon opens the project text, the credits and the version. The gear opens the display settings and the figures of the run: the people of each city, on the road and away, and the frame time and frame rate.
 
 ## Run it
@@ -51,7 +51,7 @@ pnpm spec
 There are two kinds of settings:
 
 - **Display settings** belong to one viewer and one device. The browser keeps them (local storage), so they are not in a shared link. When the browser cannot keep them (for example in a private window), they go back to the defaults when the page loads again.
-- **Policy settings** are the scenario. A setting that you change goes into the query string, so a link shows the same scenario. A setting that you did not change stays out of the link. The policy panel is a placeholder for now: its settings do not change the simulation.
+- **Policy settings** are the scenario. A setting that you change goes into the query string, so a link shows the same scenario. A setting that you did not change stays out of the link.
 
 An unknown value goes back to the default.
 
@@ -72,16 +72,17 @@ Display settings:
 | `labels` | `1` shows the district names and their counts (區名與人數). `0` hides them | `1` |
 | `traffic` | `1` shows the road network with the slow roads in colour, and colours the bus, scooter and car dots on slow roads. `0` hides it. The simulation takes the traffic in both cases, so the jams, their events and the slower trips go on while it is hidden | `1` |
 
-Policy settings (placeholders):
+Policy settings. Each one starts a new run. The tag after the name in the panel is the candidate whose platform has the policy (`docs/platforms/`). DATA.md ("Figures in the code") gives the figures and the guesses of each one.
 
-| Key | Values | Default |
-|---|---|---|
-| `bus-lane`, `sidewalk`, `meals`, `rain-off` | `1` on, `0` off | `0` |
-| `flex` | `0` to `50` percent, in steps of `5` | `10` |
-| `headway` | `2` to `8` minutes, in steps of `0.5` | `4` |
-| `stagger` | `0` to `60` minutes, in steps of `15` | `0` |
+| Key | Policy | Values | Default |
+|---|---|---|---|
+| `neihu-stagger` | 內科錯峰分流 (沈伯洋): this share of the workers of 內科 start and end work 30 minutes earlier or later | `0` to `50` percent, in steps of `10` | `0` |
+| `ebike-free` | YouBike 2.0E 尖峰免費 (沈伯洋): some bus, scooter and car commuters inside 台北市 ride an e-bike when the trip fits in the free 30 minutes | `1` on, `0` off | `0` |
+| `bike-bridge` | 迎風—港墘自行車橋 (沈伯洋): a new crossing of the 基隆河 for bicycles | `1` on, `0` off | `0` |
+| `riverside-straight` | 河濱進內科取直 (沈伯洋): a shorter bicycle way from the river into 內科 | `1` on, `0` off | `0` |
+| `bike-hub` | 運動驛站 (沈伯洋): showers make more commuters take the e-bike | `1` on, `0` off | `0` |
 
-Example: `?flex=20&headway=3&bus-lane=1`
+The three bicycle settings change the bicycle and e-bike trips; without `ebike-free`, `bike-hub` changes nothing. Example: `?neihu-stagger=30&ebike-free=1&bike-bridge=1`
 
 ## How the model works
 
@@ -171,7 +172,7 @@ The tests with real data:
 ## Known gaps
 
 - `web/public/` holds the data that the app uses. These build steps are scripts: `scripts/graphs.py` builds the road and MRT graphs and the shapes of the roads (`road-lines.json`), `scripts/names.py` builds `road-names.json`, `scripts/night.py` builds `night.json`, `scripts/od.py` builds `od2.json`, `scripts/days.py` builds `calendar.json`, `scripts/people.py` builds `people.json`, `scripts/atlas.py` builds `towns.json` and `villages2-topo.json`, `scripts/villages.py` builds `villages2.json`, `scripts/telecom.py` builds `signal.json`, `scripts/transit.py` builds `transit.json` (their docstrings give the inputs), and `scripts/routes.ts` builds `road-routes.bin`. `pnpm data` runs all of them except `routes.ts`, in the order of their dependencies (DATA.md, "Dependencies"). `pnpm dev` and `pnpm build` run `pnpm routes` first. Without the file, the page routes the road trips of the dots itself, and there is no traffic. The file holds contraction hierarchies of about 1 MB (DATA.md). A run starts when the page has found the road paths of every road trip; the page shows 路網 N% meanwhile. In headless Chromium on the dev server (2026-10-27), the clock started 12.3 s after the page opened. It was not measured on a phone.
-- The events narrate the plans of the model and the calendar. A jam changes a plan: the trip takes longer, and the character can leave work later. The policy settings are placeholders.
+- The events narrate the plans of the model and the calendar. A jam changes a plan: the trip takes longer, and the character can leave work later. A policy setting changes the agents that it reaches before the run starts.
 
 ## License
 

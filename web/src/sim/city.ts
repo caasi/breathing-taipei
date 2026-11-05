@@ -177,7 +177,8 @@ export const cityFrom = ({ od: mrt, saturday, holiday, districts, villages, sign
   const off = kindOf && saturday && holiday ? daysOff(mrt, [saturday, holiday], od, kindOf) : undefined
   const city: City = { od, group: g, homes, to, toPlay: spread, perAgent, modeOf, minutes, kinds, off }
   if (policies[KEY.stagger] || policies[KEY.ebike]) city.adjust = applyBundle({
-    stagger: policies[KEY.stagger] ?? 0, ebike: !!policies[KEY.ebike], hub: !!policies[KEY.hub], jobs, perAgent, EBIKE_MODE: EBIKE,
+    // The stagger setting is a percent in the query string.
+    stagger: (policies[KEY.stagger] ?? 0) / 100, ebike: !!policies[KEY.ebike], hub: !!policies[KEY.hub], jobs, perAgent, EBIKE_MODE: EBIKE,
     taipei: v => villages[v].town.startsWith('台北市'),
     ebikeMinutes: (h, w) => minutes(h, w, EBIKE, 8),
     onNewBridge: (h, w) => bike(h, w).via?.[0] === NEW_BRIDGE.lon,

@@ -5,7 +5,8 @@ import { drawNames, nameOf, type People } from './people.ts'
 import { evenPick, type Mood, type SimEvent } from './events.ts'
 import { mulberry32 } from './rng.ts'
 import { FPS, clockAt, respeed, stepsTo, type Clock } from './pace.ts'
-import { cityFrom, MODES, SCOOTER, type Village } from './city.ts'
+import { cityFrom, MODES, SCOOTER, BIKE, EBIKE, type Village } from './city.ts'
+import type { Policies } from './policy.ts'
 import { networks, readRoutes, ROAD_MODES, roadNode, tripPaths, wayBack, type Batch, type Routes } from './paths.ts'
 import { directions, sampler, type SparkPath } from './sparks.ts'
 import type { GraphJson } from './route.ts'
@@ -15,7 +16,7 @@ import { cellMax, gridOf, levels, liveOf, roadUse, stepper, take as takeTraffic,
 export type ToWorker =
   // startDay: index into calendar.json of day 0. start: an id that the first frame of the run gives back.
   // at: as in speed. The clock of the new run stands at minute 0 from that time until the page sends a speed.
-  | { type: 'init'; perAgent: number; seed: number; startDay: number; start: number; at: number }
+  | { type: 'init'; perAgent: number; seed: number; startDay: number; start: number; at: number; policies: Policies }
   // minute: the clock of the page at at (performance.timeOrigin + performance.now() of the change), so both clocks agree.
   | { type: 'speed'; hoursPerSec: number; minute: number; at: number }
   | { type: 'sample'; every: number } // the run goes on; only the agents drawn as dots change
@@ -49,6 +50,9 @@ const EVENTS_PER_DAY = 48
 // ones (out on a day off, away from the two cities), as the user asked. Indexed by dest (WORK, PLAY, GONE, STAY).
 // ponytail: weights by eye; an accident, when it comes, is shown every time.
 const SHOWN = [0.25, 1, 3, 0.05]
+// ponytail: the plans to work of the agents that a policy changed, shown a day on top of the others, so a policy can be
+// seen in the stream; by eye.
+const POLICY_EVENTS_PER_DAY = 12
 let w: World | undefined
 let every = 20
 let hoursPerSec = 0, lastHours = 0 // lastHours: the last speed that was not a pause
@@ -83,7 +87,9 @@ const JAM_FROM = 1 + Math.round(0.43 * 254), ANGRY_FROM = 1 + Math.round(0.75 * 
 let onJam: ((agent: number, edge: number, level: number) => void) | undefined
 // After each take: moves the shown way home of a character that a jam made late to work.
 let onLate: (() => void) | undefined
-const data = Promise.all(['od2.json', 'villages2.json', 'signal.json', 'road-graph.json', 'mrt-graph.json', 'night.json', 'calendar.json', 'people.json', 'road-names.json'].map(getJson))
+// The crossing of the river on the way of a bicycle dot, from the city of the run.
+let bikeVia: ((mode: number, home: number, work: number) => number[]) | undefined
+const data = Promise.all(['od2.json', 'villages2.json', 'signal.json', 'road-graph.json', 'mrt-graph.json', 'night.json', 'calendar.json', 'people.json', 'road-names.json', 'river.json'].map(getJson))
 /** The name of each road edge, from scripts/names.py: edge[e] indexes names, or is -1. */
 type RoadNames = { names: string[]; edge: number[] }
 const net = data.then(([, , , road, mrt]) => networks(road, mrt))
@@ -135,8 +141,8 @@ const replans = (w: World): Replans | undefined => {
 // no road path; then the road paths of the dots are found in a batch (routes.fill), much faster than one at a time.
 function* bothPaths(trips: Trips, coords: [number, number][], graphs: Awaited<typeof net>, known?: Routes): Generator<Batch | void> {
   const n = trips.home.length
-  const work = tripPaths(trips, coords, graphs, known)
-  const play = tripPaths({ home: trips.home, work: trips.play, mode: trips.playMode }, coords, graphs, known)
+  const work = tripPaths(trips, coords, graphs, known, bikeVia)
+  const play = tripPaths({ home: trips.home, work: trips.play, mode: trips.playMode }, coords, graphs, known, bikeVia)
   const a0 = work.next(), b0 = play.next()
   if (!a0.done) yield a0.value
   if (!b0.done) yield { ...b0.value, ks: b0.value.ks.map(k => k + n) }
@@ -267,10 +273,11 @@ onmessage = async (e: MessageEvent<ToWorker>) => {
   // Any failure while starting (loading, building the city, sampling) goes to the page.
   // The async handler would otherwise reject without a message, and onerror does not see a rejection.
   try {
-    const [[od2, villages, signal, roadJson, , night, cal, people, roadNames], graphs] = await Promise.all([data, net])
+    const [[od2, villages, signal, roadJson, , night, cal, people, roadNames, river], graphs] = await Promise.all([data, net])
     onJam = undefined; onLate = undefined; jamRng = mulberry32(m.seed + 3)
     // The run is always at village level; the page adds the villages up into districts for the district level.
-    const c = cityFrom({ ...od2, villages, signal, night }, m.perAgent, day => kindAt(cal as Calendar, m.startDay + day))
+    const c = cityFrom({ ...od2, villages, signal, night, river }, m.perAgent, day => kindAt(cal as Calendar, m.startDay + day), m.policies)
+    bikeVia = (mode, a, b) => (mode === BIKE || mode === EBIKE ? c.bike(a, b).via ?? [] : [])
     w = init(c.city, m.seed)
     const world = w, districtOf = Array.from(w.home, h => villages[h].town)
     const ids = drawNames(people as People, districtOf, m.seed + 1), pickRng = mulberry32(m.seed + 2)
@@ -280,6 +287,9 @@ onmessage = async (e: MessageEvent<ToWorker>) => {
     newEvents = []
     eventId = 0
     const pick = evenPick(SHOWN.map(s => keep * s), pickRng)
+    // Made only when a policy reached someone: evenPick draws at its start, and the baseline must draw as before.
+    const reached = w.policy.reduce((n, p) => n + (p ? 1 : 0), 0)
+    const pickPolicy = reached ? evenPick([POLICY_EVENTS_PER_DAY / reached], pickRng) : undefined
     w.onPlan = i => {
       backs.delete(i)
       const dest = world.dest[i]
@@ -289,9 +299,9 @@ onmessage = async (e: MessageEvent<ToWorker>) => {
       // A day at home has no departure. ponytail: it shows at 09:00 of that day, a time chosen by eye.
       const t = dest === STAY ? world.dep[i] - 15 * 60 : world.dep[i]
       if (t < 0) return // a night shift that left on day -1
-      if (!pick(dest)) return
+      if (!pick(dest) && !(dest === WORK && world.policy[i] && pickPolicy?.(0))) return
       const e = { t, kind: 'personal' as const, name: nameOf(ids, i), home: world.home[i], to: play ? world.play[i] : world.work[i],
-        dest, mode: play ? world.playMode[i] : world.mode[i], group }
+        dest, mode: play ? world.playMode[i] : world.mode[i], group, policy: world.policy[i] || undefined }
       newEvents.push({ ...e, id: `a${++eventId}` })
       // A shown trip also shows its way home, so the stream follows one character through the day.
       if (dest === WORK || play) { const b = { ...e, id: `a${++eventId}`, t: world.ret[i], back: true }; newEvents.push(b); backs.set(i, b); planned.set(i, b.t) }

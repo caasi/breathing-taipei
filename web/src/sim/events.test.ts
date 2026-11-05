@@ -35,6 +35,11 @@ test('a personal event says where the character goes and how', () => {
   expect(actionOf({ ...e(WORK, 1, 2, 'early'), back: true }, at)).toBe('騎機車回家')
   expect(actionOf({ ...e(WORK, 2, 3), back: true, late: 25, mood: 'angry' }, at)).toBe('路上塞車晚到，晚了25分鐘才開車下班回家，一肚子火')
   expect(actionOf({ ...e(PLAY, 2, 3), back: true, late: 5, mood: 'blank' }, at)).toBe('路上塞車晚到，晚了5分鐘才開車從中山區回家，算了，明天早點出門')
+  // A policy that changed the character (policy.ts bits): staggered hours, the free e-bike over the new bridge, the showers.
+  expect(actionOf({ ...e(WORK, 2, 3), policy: 1 }, at)).toBe('公司錯峰，開車到中山區上班')
+  expect(actionOf({ ...e(WORK, 2, 6), policy: 2 | 4 | 8 }, at)).toBe('騎 YouBike 2.0E 經迎風—港墘橋到中山區上班，尖峰前 30 分鐘免費，在運動驛站沖完澡才進公司')
+  expect(actionOf({ ...e(WORK, 2, 3), policy: 1, back: true }, at)).toBe('公司錯峰，開車提早或延後半小時下班回家，避開尖峰')
+  expect(actionOf({ ...e(PLAY, 2, 3), policy: 1 }, at)).toBe('開車去中山區走走') // a day off: the policy of work says nothing
 })
 
 test('greetings follow the kind of day', () => {

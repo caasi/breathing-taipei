@@ -12,7 +12,7 @@ const run = (policies = {}) => { const c = cityFrom(data, 10, undefined, policie
 const base = run()
 
 test('a policy changes only the agents it reaches: every other agent is as in the baseline', () => {
-  const { w } = run({ [KEY.stagger]: 0.5, [KEY.ebike]: 1 })
+  const { w } = run({ [KEY.stagger]: 50, [KEY.ebike]: 1 })
   let reached = 0
   const bad: number[] = []
   for (let i = 0; i < w.home.length; i++) {
@@ -25,7 +25,7 @@ test('a policy changes only the agents it reaches: every other agent is as in th
 }, 60_000)
 
 test('staggered hours move 30 minutes, only for the workers of 內科', () => {
-  const { w } = run({ [KEY.stagger]: 0.5 })
+  const { w } = run({ [KEY.stagger]: 50 })
   const jobs = (v: number) => (data.villages[v].jobs ?? 0) > 0
   let n = 0
   for (let i = 0; i < w.home.length; i++) {

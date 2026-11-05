@@ -106,6 +106,8 @@ export function App() {
   const [s, setS] = useState<FromWorker>()
   // Display settings belong to this viewer, so they stay in this browser; the policies (usePolicies) are in the URL.
   const policies = usePolicies()
+  // A change of a policy starts a new run, as a new start day does; the key keeps the effect from a new Map each render.
+  const policyKey = JSON.stringify([...policies.values])
   const [speed, setSpeed] = useStored('speed', 1, oneOf(SPEEDS))
   // Apart from the speed, and not stored: a viewer who comes back to a stopped page at 00:00 would see nothing move.
   const [paused, setPaused] = useState(false)
@@ -233,8 +235,8 @@ export function App() {
     waitRef.current = ++started.current; deadline.current = now + READY_MS
     next.current = runStart
     setRunError(undefined); setWaiting(started.current)
-    post({ type: 'init', perAgent: PER_AGENT, seed: 42, startDay: runStart, start: started.current, at: since })
-  }, [runStart])
+    post({ type: 'init', perAgent: PER_AGENT, seed: 42, startDay: runStart, start: started.current, at: since, policies: Object.fromEntries(JSON.parse(policyKey)) })
+  }, [runStart, policyKey])
   // The page clock goes on at the speed from now, and the worker clock follows it from the same time.
   const startClock = (hours: number) => {
     const l = last.current, now = performance.now(), since = performance.timeOrigin + now

@@ -1,6 +1,7 @@
 import { GONE, PLAY, STAY } from './core.ts'
 import { isoAt, kindAt, type Calendar } from './calendar.ts'
 import { BUS, SCOOTER } from './city.ts'
+import { STAGGERED, EBIKE_FREE, ON_BRIDGE, WASHED } from './policy.ts'
 
 /**
  * One event: t in minutes since 00:00 of day 0. A personal event follows one agent (a character: 10 people at the
@@ -9,8 +10,9 @@ import { BUS, SCOOTER } from './city.ts'
  */
 export type SimEvent =
   // back: the way home of the same plan, at the minute the character leaves work or the day-off place. late: the
-  // minutes that a jam on the way there moved it, with how the character takes it (angry or blank).
-  | { id: string; t: number; kind: 'personal'; name: string; home: number; to: number; dest: number; mode: number; group: string; back?: boolean; late?: number; mood?: Mood }
+  // minutes that a jam on the way there moved it, with how the character takes it (angry or blank). policy: the bits of
+  // World.policy (policy.ts), the policies that changed the character.
+  | { id: string; t: number; kind: 'personal'; name: string; home: number; to: number; dest: number; mode: number; group: string; back?: boolean; late?: number; mood?: Mood; policy?: number }
   | { id: string; t: number; kind: 'public'; text: string }
   // A character stuck on a slow road: the road by name, or else the node nearest to it; how it takes the jam.
   | { id: string; t: number; kind: 'jam'; name: string; home: number; mode: number; road?: string; near: number; mood: Mood }
@@ -22,7 +24,7 @@ export type Mood = 'angry' | 'stuck' | 'blank' | 'work' | 'leave'
 export type PlaceOf = (node: number) => { town: string; village: string }
 
 // How a character travels, in the order of MODES in city.ts.
-const BY = ['搭捷運', '搭公車', '騎機車', '開車', '走路', '騎自行車', '騎 YouBike 2.0E']
+const BY = ['搭捷運', '搭公車', '騎機車', '開車', '走路', '騎自行車', '騎 YouBike 2.0E ']
 // What the night-time groups and short trips go out for (the kind names of city.ts).
 const PURPOSE: Record<string, string> = {
   short: '出門辦事', early: '去早餐店上早班', evening: '去餐廳上晚班', overnight: '去上大夜班', nightlife: '去夜店上班',
@@ -37,11 +39,17 @@ export const actionOf = (e: Extract<SimEvent, { kind: 'personal' }>, placeOf: Pl
     const home = e.dest === PLAY ? `從${place}回家` : e.group ? '回家' : '下班回家'
     return e.mood === 'angry' ? `路上塞車晚到，晚了${e.late}分鐘才${by}${home}，一肚子火` : `路上塞車晚到，晚了${e.late}分鐘才${by}${home}，算了，明天早點出門`
   }
+  const p = e.dest === PLAY || e.group ? 0 : e.policy ?? 0
+  if (e.back && p & STAGGERED) return `公司錯峰，${by}提早或延後半小時下班回家，避開尖峰`
   if (e.back) return e.dest === PLAY ? `${by}從${place}回家` : e.group ? `${by}回家` : `${by}下班回家`
   if (e.dest === STAY) return '今天在家休息'
   if (e.dest === GONE) return '今天出遠門，離開雙北'
   if (e.dest === PLAY) return `${by}去${place}走走`
   if (e.group) return `${by}${PURPOSE[e.group] ?? '出門'}`
+  if (p) {
+    const free = p & EBIKE_FREE ? '，尖峰前 30 分鐘免費' : '', wash = p & WASHED ? '，在運動驛站沖完澡才進公司' : ''
+    return `${p & STAGGERED ? '公司錯峰，' : ''}${by}${p & ON_BRIDGE ? '經迎風—港墘橋' : ''}到${place}上班${free}${wash}`
+  }
   return `${by}到${place}上班`
 }
 

@@ -159,7 +159,8 @@ const pack = (ks: number[], parts: number[][]): Batch => {
  * road trips found in `routes`, then one batch per road start node for the rest, so a caller can spread
  * the slow part over many frames.
  */
-export function* tripPaths(legs: Leg, coords: [number, number][], net: ReturnType<typeof networks>, routes?: Routes): Generator<Batch> {
+export function* tripPaths(legs: Leg, coords: [number, number][], net: ReturnType<typeof networks>, routes?: Routes,
+  via?: (mode: number, home: number, work: number) => number[]): Generator<Batch> {
   const n = legs.home.length
   const roadAt = new Map<number, number>(), stationAt = new Map<number, number>()
   const road = (v: number) => roadAt.get(v) ?? roadAt.set(v, roadNode(net, coords, v)).get(v)!
@@ -177,7 +178,7 @@ export function* tripPaths(legs: Leg, coords: [number, number][], net: ReturnTyp
     const into = (map: Map<number, number[]>, a: number) => (map.get(a) ?? map.set(a, []).get(a)!).push(k)
     if (m === MRT && station(h) !== station(w)) into(mrtFrom, station(h))
     else if (ROAD_MODES.has(m) && road(h) !== road(w)) onRoad.push(k)
-    else { first.push(k); firstParts.push(full(k, [])) }
+    else { first.push(k); firstParts.push(full(k, via?.(m, h, w) ?? [])) } // a bicycle crosses the river on a bridge (policy.ts bikeWay)
   }
   // The MRT graph is small (about 0.1 ms per start), so MRT trips go out with the first batch.
   for (const [a, ks] of mrtFrom) {
