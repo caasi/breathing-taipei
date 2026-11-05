@@ -80,7 +80,9 @@ let trafficOn = false, lastCells = new Uint8Array(0), jamRng = mulberry32(0)
 // same step), whatever the speed, so a seed gives the same run at any speed: the run starts only when the road paths are found. One take costs 7 to 26 ms at the morning peak in Node on an i7-7700 (2026-10-27), so at 8x (16 takes a second) it is the main cost.
 const JAM_MINUTES = 15
 // A jam event comes from a road traveller on an edge at least this slow (traffic.ts levels: 1 + 254 x the colour level
-// of levelsOf; red from 0.43, 2 times the free time; angry from 0.75, 2.75 times). ponytail: at most one jam event a take, and one a day for each character; by eye.
+// of levelsOf; red from 0.43, 2 times the free time; angry from 0.75, 2.75 times). ponytail: at most one jam event a take, at
+// JAM_SHOWN of the takes (the user found them too many on 2026-11-05), and one a day for each character; by eye.
+const JAM_SHOWN = 1 / 3
 // The temper of a character, 0 to 1, fixed by its index.
 const temperOf = (i: number) => Math.imul(i + 1, 2654435761) / 2 ** 32 + 0.5
 const JAM_FROM = 1 + Math.round(0.43 * 254), ANGRY_FROM = 1 + Math.round(0.75 * 254)
@@ -178,7 +180,7 @@ const takeTrafficNow = (world: World) => {
   const stuck: number[] = []
   for (let k = 0; k < onRoad.length; k += 2) if (next[onRoad[k + 1]] >= JAM_FROM) stuck.push(k)
   onLate?.()
-  if (stuck.length && onJam) { const k = stuck[Math.floor(jamRng() * stuck.length)]; onJam(onRoad[k], onRoad[k + 1], next[onRoad[k + 1]]) }
+  if (stuck.length && onJam && jamRng() < JAM_SHOWN) { const k = stuck[Math.floor(jamRng() * stuck.length)]; onJam(onRoad[k], onRoad[k + 1], next[onRoad[k + 1]]) }
 }
 
 const frame = () => {
