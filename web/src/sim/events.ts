@@ -1,4 +1,4 @@
-import { GONE, PLAY, STAY } from './core.ts'
+import { GONE, PLAY, STAY, WORK } from './core.ts'
 import { isoAt, kindAt, type Calendar } from './calendar.ts'
 import { BUS, SCOOTER } from './city.ts'
 import { STAGGERED, EBIKE_FREE, ON_BRIDGE, WASHED, TO_BIKE, STRAIGHT, inFree } from './policy.ts'
@@ -54,8 +54,8 @@ export const actionOf = (e: Extract<SimEvent, { kind: 'personal' }>, placeOf: Pl
   return `${by}到${place}上班`
 }
 
-/** The policy bits that an event tells of: a day off or a group trip tells of none, as the policies are for work. */
-export const policyOf = (e: Extract<SimEvent, { kind: 'personal' }>) => (e.dest === PLAY || e.group ? 0 : e.policy ?? 0)
+/** The policy bits that an event tells of: only a trip to work (and its way home), as the policies are for work. */
+export const policyOf = (e: Extract<SimEvent, { kind: 'personal' }>) => (e.dest === WORK && !e.group ? e.policy ?? 0 : 0)
 
 const SHEN = '沈伯洋', TRANSPORT = 'https://puma.taipei/policies/%E4%BA%A4%E9%80%9A%E6%94%BF%E7%AD%96'
 // The words of the platform, quoted from the page of each policy (CC BY 4.0, docs/platforms/shen.md), for the note of an
