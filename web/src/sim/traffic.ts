@@ -67,7 +67,8 @@ export const roadUse = (w: World, routes: Routes, ends: (agent: number, leg: num
     const legs: [number, number, number, number][] = [] // mover index, leg, from, to
     for (let j = 0; j < n; j++) {
       const i = w.movers[j]
-      if (ROAD_MODES.has(w.mode[i])) legs.push([j, 0, ...ends(i, 0)])
+      // The mode that init drew: a policy can move an agent off the road and back while the run goes on.
+      if (ROAD_MODES.has(w.base.choice[i])) legs.push([j, 0, ...ends(i, 0)])
       if (ROAD_MODES.has(w.playMode[i])) legs.push([j, 1, ...ends(i, 1)])
       if (j % 20000 === 19999) yield 0.05 * j / n
     }
@@ -141,6 +142,7 @@ export const loadNow = (w: World, use: RoadUse, out: Float32Array, onRoad?: (age
     const i = w.movers[j]
     // A trip out of the two cities has no path on the map (its plan goes from home to home).
     if (w.dest[i] === GONE || where(w, i, t) !== ROAD) continue
+    if (!ROAD_MODES.has(w.dest[i] === PLAY ? w.playMode[i] : w.mode[i])) continue // walking, cycling, or a policy moved it off the road
     const out1 = t < w.dep[i] + w.dur1[i], start = out1 ? w.dep[i] : w.ret[i], leg = w.dest[i] === PLAY ? 1 : 0
     const base = ((2 * j + leg) * 2 + (out1 ? 0 : 1)) * VARIANTS
     if (use.since[j] !== start) {

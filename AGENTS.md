@@ -32,17 +32,18 @@ A model is not the code. Each `.tla` file names the code that it models. When yo
 
 | Model | Code | Invariants |
 |-------|------|------------|
-| `WorkerRuns.tla` | the `init` handler and `traffic()` in `worker.ts` | `UseIsOfThisRun`: the road use of a run never serves another run. `LatestWins`: when every `init` has resumed, the world is the one of the latest `init`. The model has no `init` that fails: in the code, a failed `init` leaves no world, and the page shows the error. |
+| `WorkerRuns.tla` | the `init` and `policies` handlers and `traffic()` in `worker.ts` | `UseIsOfThisRun`: the road use of a run never serves another run. `LatestWins`: when every `init` has resumed, the world is the one of the latest `init`. `LatestPolicies`: a world always has the settings that the worker got last, also when they change while an `init` loads. The model has no `init` that fails: in the code, a failed `init` leaves no world, and the page shows the error. |
 | `SpeedClock.tla` | `startClock`, the `runStart` effect and the `m.since === l.since` check in `w.onmessage` in `App.tsx`; the `speed` and `init` messages and `frame()` in `worker.ts` | `OnlyLatestClock`: the page takes the clock only from a frame that the worker made after the latest change of the page. When each change has its own stamp, this follows from the stamps. So the passing check only keeps the stamp scheme, and the useful part of this model is the counterexample of `SpeedClockSameStamp.cfg`. |
 | `PageFrames.tla` | the `runStart` effect, `w.onmessage`, `shownRouting` and the effect that starts the clock in `App.tsx`; the `init` handler up to `traffic()`, `frame()` and `doneRouting()` in `worker.ts` | `FramesOfShownRun`: the page applies only frames of the run that it shows. `StartOfShownRun`: the start day on the screen is the one of the run on the screen. `ClockAfterRouting`: the clock of a run starts only after the routing of that run ended. `doneRouting()` ends it when the paths are found, and also when the routes file is missing, the routes file fails to load, or the fill of the road use fails. A throw in the setup before the fill does not end it (KNOWN-ISSUES.md). |
 
 The first version of `PageFrames.tla` started the clock in one step, and read the routing at the same time as `shown`. In the code these were two gaps: `go()` runs two animation frames after the check, and the routing came from the state `s`, which commits after the ref `shown`. With the gaps in the model, the checker found a way for the clock of a run to start before its routing ended (review of 2026-10-29). `go()` now checks `waitRef`, and the routing is the ref `shownRouting`. Model each gap between a check and its action, and each value that a render reads from state and from a ref.
 
-The models leave out the `sample` and `traffic` messages and the `drawn` counter of `draw()` in `worker.ts`. They do not change the run, `start`, `since` or the routing.
+The models leave out the `sample` and `traffic` messages and the `drawn` counter of `draw()` in `worker.ts`. They do not change the run, `start`, `since` or the routing. `PageFrames.tla` and `SpeedClock.tla` also leave out the `policies` message: it changes the agents of the run, but not `start`, `since` or the routing (the road use is built from the modes that init drew).
 
 Two models depend on an assumption. A second configuration file removes the assumption, and the checker then finds a counterexample:
 
 - `WorkerRunsAnyOrder.cfg`: if two `init` handlers resume in any order, an older run replaces the newer one. Today JavaScript resumes them in order, because both await the same promises (`data` and `net`). If an `init` gets an await of its own before `w = init(...)`, this order is not certain.
+- `WorkerRunsReadEarly.cfg`: if `init` reads the settings before its await, a change of the settings during the await is lost (Start, SetPolicies, Resume). Today it reads them after the await, in the same synchronous part that sets `w`.
 - `SpeedClockSameStamp.cfg`: if two changes get the same `since`, the page can take the clock of a frame of the older change. KNOWN-ISSUES.md ("Two changes of speed in the same tick of the timer") has this limit.
 
 To see the counterexamples, run these commands in `web/`. Each command prints the trace and exits with an error code. That is the expected result.
@@ -50,6 +51,7 @@ To see the counterexamples, run these commands in `web/`. Each command prints th
 ```sh
 pnpm exec tla-ts spec/WorkerRuns.tla -config spec/WorkerRunsAnyOrder.cfg
 pnpm exec tla-ts spec/SpeedClock.tla -config spec/SpeedClockSameStamp.cfg
+pnpm exec tla-ts spec/WorkerRuns.tla -config spec/WorkerRunsReadEarly.cfg
 ```
 
 On 2026-10-29, each invariant failed when its guard was removed from the model: the `world === w` check, the `since` check, the drop of a first frame of another run (`m.start !== started.current`), the drop of a later frame of another run (`shown.current !== started.current`), the routing check before the clock starts, and the `waitRef` check in `go()`. Until the review of 2026-10-29 added `StartOfShownRun`, no invariant failed without the first of the two drops. When you add an invariant, remove its guard once and make sure that the invariant fails. An invariant that cannot fail checks nothing.

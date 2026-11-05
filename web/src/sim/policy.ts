@@ -76,7 +76,7 @@ export const applyBundle = (b: Bundle) => (w: World, rng: () => number) => {
       w.hours[2 * i] = mod(w.hours[2 * i] + s); w.hours[2 * i + 1] = mod(w.hours[2 * i + 1] + s)
       w.policy[i] |= STAGGERED
     }
-    if (!b.ebike || !b.isMotor(w.mode[i]) || !b.taipei(h) || !b.taipei(k)) continue
+    if (!b.ebike || !b.isMotor(w.choice[i]) || !b.taipei(h) || !b.taipei(k)) continue
     const minutes = b.ebikeMinutes(h, k)
     if (minutes > 30 || !(inFree(mod(w.hours[2 * i] - minutes)) || inFree(w.hours[2 * i + 1]))) continue
     if (r3 < SWITCH * (b.hub ? 1 + HUB_MORE : 1)) reach.push(i)
@@ -85,7 +85,7 @@ export const applyBundle = (b: Bundle) => (w: World, rng: () => number) => {
   const room = FLEET * TURNS / b.perAgent, keep = Math.min(1, room / Math.max(1, reach.length))
   for (const i of reach) {
     if (rng() >= keep) continue
-    w.mode[i] = b.EBIKE_MODE
+    w.choice[i] = b.EBIKE_MODE
     w.policy[i] |= EBIKE_FREE | (b.onNewBridge(w.home[i], w.work[i]) ? ON_BRIDGE : 0) | (b.hub ? WASHED : 0)
   }
 }

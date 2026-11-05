@@ -21,7 +21,7 @@ The author did not register for the event, so this is not an entry.
   - People who walk or ride a bicycle move in a straight line.
 - **The clock.** It shows the 民國 date and the time, then the lunar date, the solar term, a holiday (orange) and the days that are commemorated but not off (blue).
 - **The event panel.** It shows the newest 100 events: a few of the characters' plans, and the public events of each day. On a phone it is below or beside the map.
-- **The policy panel.** It holds the policy settings of the candidates, each with the name of its candidate as a tag. A change starts a new run. On a phone it opens from the third icon.
+- **The policy panel.** It holds the policy settings of the candidates, each with the name of its candidate as a tag. A change reaches the run that goes on. On a phone it opens from the third icon.
 - **The info and settings panels.** The ⓘ icon opens the project text, the credits and the version. The gear opens the display settings and the figures of the run: the people of each city, on the road and away, and the frame time and frame rate.
 
 ## Run it
@@ -72,7 +72,7 @@ Display settings:
 | `labels` | `1` shows the district names and their counts (區名與人數). `0` hides them | `1` |
 | `traffic` | `1` shows the road network with the slow roads in colour, and colours the bus, scooter and car dots on slow roads. `0` hides it. The simulation takes the traffic in both cases, so the jams, their events and the slower trips go on while it is hidden | `1` |
 
-Policy settings. Each one starts a new run. The tag after the name in the panel is the candidate whose platform has the policy (`docs/platforms/`). DATA.md ("Figures in the code") gives the figures and the guesses of each one.
+Policy settings. A change reaches the run that goes on, as in a simulation game: each agent takes it at its next plan to work, and a trip under way ends as planned. A link opens with its settings from the start of the run, so a change during a run is not in the link's run. The tag after the name in the panel is the candidate whose platform has the policy (`docs/platforms/`). DATA.md ("Figures in the code") gives the figures and the guesses of each one.
 
 | Key | Policy | Values | Default |
 |---|---|---|---|
@@ -172,7 +172,7 @@ The tests with real data:
 ## Known gaps
 
 - `web/public/` holds the data that the app uses. These build steps are scripts: `scripts/graphs.py` builds the road and MRT graphs and the shapes of the roads (`road-lines.json`), `scripts/names.py` builds `road-names.json`, `scripts/night.py` builds `night.json`, `scripts/od.py` builds `od2.json`, `scripts/days.py` builds `calendar.json`, `scripts/people.py` builds `people.json`, `scripts/atlas.py` builds `towns.json` and `villages2-topo.json`, `scripts/villages.py` builds `villages2.json`, `scripts/telecom.py` builds `signal.json`, `scripts/transit.py` builds `transit.json` (their docstrings give the inputs), and `scripts/routes.ts` builds `road-routes.bin`. `pnpm data` runs all of them except `routes.ts`, in the order of their dependencies (DATA.md, "Dependencies"). `pnpm dev` and `pnpm build` run `pnpm routes` first. Without the file, the page routes the road trips of the dots itself, and there is no traffic. The file holds contraction hierarchies of about 1 MB (DATA.md). A run starts when the page has found the road paths of every road trip; the page shows 路網 N% meanwhile. In headless Chromium on the dev server (2026-10-27), the clock started 12.3 s after the page opened. It was not measured on a phone.
-- The events narrate the plans of the model and the calendar. A jam changes a plan: the trip takes longer, and the character can leave work later. A policy setting changes the agents that it reaches before the run starts.
+- The events narrate the plans of the model and the calendar. A jam changes a plan: the trip takes longer, and the character can leave work later. A policy setting changes the agents that it reaches, from their next plan to work.
 
 ## License
 

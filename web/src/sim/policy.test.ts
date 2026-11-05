@@ -1,6 +1,6 @@
 import { expect, test } from 'vitest'
 import { readFileSync } from 'node:fs'
-import { init, hoursOf } from './core.ts'
+import { init, hoursOf, repolicy, advance, now } from './core.ts'
 import { cityFrom, km, EBIKE, BUS, SCOOTER, CAR } from './city.ts'
 import { bikeWay, KEY, NEW_BRIDGE, STAGGERED, EBIKE_FREE, ON_BRIDGE, type River } from './policy.ts'
 
@@ -66,3 +66,25 @@ test('the bridge marks the e-bike riders whose way it carries', () => {
   const { w } = run({ [KEY.ebike]: 1, [KEY.bridge]: 1 })
   expect(w.policy.some(p => (p & ON_BRIDGE) !== 0)).toBe(true)
 }, 60_000)
+
+test('a change of the settings in a run: off gives the baseline back, on again gives the same agents, and a plan under way keeps its mode', () => {
+  const { c, w } = run()
+  const same = (a: ArrayLike<number>, b: ArrayLike<number>) => a.length === b.length && Array.prototype.every.call(a, (x: number, k: number) => x === b[k])
+  advance(w, 8 * 60) // 08:00, many commuters on the way
+  const mode = w.mode.slice()
+  c.setPolicies({ [KEY.stagger]: 50, [KEY.ebike]: 1 }); repolicy(w)
+  const on = { choice: w.choice.slice(), hours: w.hours.slice(), policy: w.policy.slice() }
+  expect(same(w.mode, mode)).toBe(true) // nothing changes the plans under way
+  expect(same(on.choice, base.w.choice)).toBe(false)
+  c.setPolicies({}); repolicy(w)
+  expect(same(w.choice, base.w.choice) && same(w.hours, base.w.hours) && w.policy.every(p => p === 0)).toBe(true)
+  c.setPolicies({ [KEY.stagger]: 50, [KEY.ebike]: 1 }); repolicy(w)
+  expect(same(w.choice, on.choice) && same(w.hours, on.hours) && same(w.policy, on.policy)).toBe(true)
+  // The next plan to work takes the new mode: by the next morning every reached e-bike rider that left home rides it.
+  advance(w, 24 * 60)
+  const t = now(w)
+  let rode = 0, wrong = 0
+  for (let i = 0; i < w.home.length; i++) if (w.policy[i] & EBIKE_FREE && w.dep[i] >= t - 24 * 60 && w.dep[i] <= t) (w.mode[i] === EBIKE ? rode++ : wrong++)
+  expect(wrong).toBe(0)
+  expect(rode).toBeGreaterThan(0)
+}, 120_000)

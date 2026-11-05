@@ -126,7 +126,8 @@ const STRAIGHT_KM = 0.5
 const DETOUR = 1.3 // a trip on the ground over the straight distance
 
 export const cityFrom = ({ od: mrt, saturday, holiday, districts, villages, signal, night, river }: Data, perAgent: number,
-  kindOf?: (day: number) => number, policies: Policies = {}) => {
+  kindOf?: (day: number) => number, initial: Policies = {}) => {
+  let policies = initial
   const g = villages.map(v => districts.indexOf(v.town))
   const popD = new Array(districts.length).fill(0), lon = [...popD], lat = [...popD]
   villages.forEach((v, i) => { popD[g[i]] += v.pop; lon[g[i]] += v.lon * v.pop; lat[g[i]] += v.lat * v.pop })
@@ -158,10 +159,10 @@ export const cityFrom = ({ od: mrt, saturday, holiday, districts, villages, sign
     return known[d] * (jobsD[d] ? (v.jobs ?? 0) / jobsD[d] : 0) + (1 - known[d]) * spread[i]
   })
   const jobs = (v: number) => (villages[v].jobs ?? 0) > 0
-  const way = river ? bikeWay(river, policies[KEY.bridge] ? [NEW_BRIDGE] : [], km) : undefined
+  const ways = river ? [bikeWay(river, [], km), bikeWay(river, [NEW_BRIDGE], km)] : undefined
   /** The way of a bicycle from node a to node b: its km on the ground and the crossing of the river, if any. */
   const bike = (a: number, b: number) => {
-    const w = way?.(coords[a], coords[b]) ?? { km: km(coords[a], coords[b]) }
+    const w = ways?.[policies[KEY.bridge] ? 1 : 0](coords[a], coords[b]) ?? { km: km(coords[a], coords[b]) }
     const straight = policies[KEY.straight] && w.via && (jobs(a) || jobs(b)) ? STRAIGHT_KM : 0
     return { km: Math.max(0, DETOUR * w.km - straight), via: w.via }
   }
@@ -176,15 +177,20 @@ export const cityFrom = ({ od: mrt, saturday, holiday, districts, villages, sign
   const kinds = [local, ...nightKinds]
   const off = kindOf && saturday && holiday ? daysOff(mrt, [saturday, holiday], od, kindOf) : undefined
   const city: City = { od, group: g, homes, to, toPlay: spread, perAgent, modeOf, minutes, kinds, off }
-  if (policies[KEY.stagger] || policies[KEY.ebike]) city.adjust = applyBundle({
-    // The stagger setting is a percent in the query string.
-    stagger: (policies[KEY.stagger] ?? 0) / 100, ebike: !!policies[KEY.ebike], hub: !!policies[KEY.hub], jobs, perAgent, EBIKE_MODE: EBIKE,
-    taipei: v => villages[v].town.startsWith('台北市'),
-    ebikeMinutes: (h, w) => minutes(h, w, EBIKE, 8),
-    onNewBridge: (h, w) => bike(h, w).via?.[0] === NEW_BRIDGE.lon,
-    isMotor: m => m === BUS || m === SCOOTER || m === CAR,
-  })
-  return { city, nodes: villages.map(v => v.code), coords, target, bike }
+  /** Changes the settings of the city: the ways of the bicycles at once, the agents through core.ts repolicy. */
+  const setPolicies = (p: Policies) => {
+    policies = p
+    city.adjust = p[KEY.stagger] || p[KEY.ebike] ? applyBundle({
+      // The stagger setting is a percent in the query string.
+      stagger: (p[KEY.stagger] ?? 0) / 100, ebike: !!p[KEY.ebike], hub: !!p[KEY.hub], jobs, perAgent, EBIKE_MODE: EBIKE,
+      taipei: v => villages[v].town.startsWith('台北市'),
+      ebikeMinutes: (h, w) => minutes(h, w, EBIKE, 8),
+      onNewBridge: (h, w) => bike(h, w).via?.[0] === NEW_BRIDGE.lon,
+      isMotor: m => m === BUS || m === SCOOTER || m === CAR,
+    }) : undefined
+  }
+  setPolicies(initial)
+  return { city, nodes: villages.map(v => v.code), coords, target, bike, setPolicies }
 }
 
 /**

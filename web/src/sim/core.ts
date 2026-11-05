@@ -23,7 +23,7 @@ export type City = {
   kinds?: Kind[] // people who do not commute on the OD, tried in this order
   minutes: (from: number, to: number, mode: number, hour: number) => number // door-to-door trip time
   off?: DaysOff // absent: every day is a workday
-  adjust?: (w: World, rng: () => number) => void // policies: changes the agents after init drew them, before their first plan
+  adjust?: (w: World, rng: () => number) => void // policies: changes w.choice, w.hours and w.policy of the agents they reach
 }
 
 /**
@@ -58,13 +58,16 @@ export type World = {
   home: Uint16Array // node index
   work: Uint16Array
   kind: Uint8Array // 0: commuter on the OD, k: city.kinds[k - 1]
-  mode: Uint8Array
+  mode: Uint8Array // the mode of the current plan to work
+  choice: Uint8Array // the mode of the next plan to work; a policy changes it (City.adjust), and plan() takes it
   play: Uint16Array // day-off place of a commuter, drawn once from the day-off OD (its home if none)
   playMode: Uint8Array
   // Work hours: a list of [from, to] ranges per agent, in minutes of the day (to < from: the range crosses midnight).
   // ponytail: one range per agent, at [2i, 2i + 1]; add an offsets array for more ranges when a plan holds legs (#29).
   hours: Uint16Array
   policy: Uint8Array // bits of the policies that changed the agent (City.adjust sets them; policy.ts)
+  base: { choice: Uint8Array; hours: Uint16Array } // as init drew them, before any policy
+  seed: number
   dest: Uint8Array // where the current plan goes: WORK, PLAY, GONE (where() gives AWAY), or STAY (no trip: dep = ret, no legs)
   dep: Int32Array // minute (since 00:00 of day 0) the agent leaves home; before 0 for a night shift that started on day -1
   dur1: Uint16Array // minutes on the way to work
@@ -128,7 +131,7 @@ export const hoursOf = (w: World, i: number): [number, number][] => [[w.hours[2 
 const mod = (t: number) => ((t % MINUTES_PER_DAY) + MINUTES_PER_DAY) % MINUTES_PER_DAY
 /** Leaves home in time to start work at `from`, by the trip time of that hour. */
 const leaveFor = (w: World, i: number, from: number) =>
-  mod(from - leg(w.city.minutes(w.home[i], w.work[i], w.mode[i], hourOf(from))))
+  mod(from - leg(w.city.minutes(w.home[i], w.work[i], w.choice[i], hourOf(from))))
 
 /** Gives agent i its next plan, leaving home at or after minute `after`; returns the minute it is home again. */
 const plan = (w: World, i: number, after: number): number => {
@@ -136,7 +139,7 @@ const plan = (w: World, i: number, after: number): number => {
   const h = w.home[i], k = w.work[i]
   const kind = w.kind[i] ? w.city.kinds![w.kind[i] - 1] : undefined
   const [[from, until]] = hoursOf(w, i)
-  if (kind) return trip(w, i, WORK, firstAtOrAfter(after, leaveFor(w, i, from)), k, w.mode[i], until)
+  if (kind) { w.mode[i] = w.choice[i]; return trip(w, i, WORK, firstAtOrAfter(after, leaveFor(w, i, from)), k, w.mode[i], until) }
   // A plan belongs to the day it leaves on. A time of day already past moves the departure to the next day;
   // when that day is of another kind, the plan is drawn again for it, from its 00:00.
   for (let day = dayOf(after); ; day++, after = day * MINUTES_PER_DAY) {
@@ -145,6 +148,7 @@ const plan = (w: World, i: number, after: number): number => {
     if (!today) {
       const dep = firstAtOrAfter(after, leaveFor(w, i, from))
       if (today !== (off?.kindOf(dayOf(dep)) ?? 0)) continue
+      w.mode[i] = w.choice[i]
       return trip(w, i, WORK, dep, k, w.mode[i], until)
     }
     if (w.dest[i] !== STAY && dayOf(w.start[i]) === day) continue
@@ -193,8 +197,8 @@ export const init = (city: City, seed: number): World => {
   const commuter = new Uint8Array(n)
   const w: World = {
     city, minute: 0, day: 0, rng: mulberry32(seed), movers: new Uint32Array(0), stayers: new Uint32Array(homes.length),
-    home: new Uint16Array(n), work: new Uint16Array(n), kind: new Uint8Array(n), mode: new Uint8Array(n),
-    play: new Uint16Array(n), playMode: new Uint8Array(n), hours: new Uint16Array(2 * n), policy: new Uint8Array(n), dest: new Uint8Array(n),
+    home: new Uint16Array(n), work: new Uint16Array(n), kind: new Uint8Array(n), mode: new Uint8Array(n), choice: new Uint8Array(n),
+    play: new Uint16Array(n), playMode: new Uint8Array(n), hours: new Uint16Array(2 * n), policy: new Uint8Array(n), base: { choice: new Uint8Array(0), hours: new Uint16Array(0) }, seed, dest: new Uint8Array(n),
     dep: new Int32Array(n), start: new Int32Array(n), dur1: new Uint16Array(n), ret: new Int32Array(n), leave: new Int32Array(n), dur2: new Uint16Array(n),
     due: Array.from({ length: RING }, () => []), done: -1,
   }
@@ -240,9 +244,10 @@ export const init = (city: City, seed: number): World => {
   // With days off, every commuter on the OD moves: one whose work and day-off place are its home node can still be away.
   w.home.forEach((h, i) => (h === w.work[i] && h === w.play[i] && !(city.off && commuter[i]) ? w.stayers[h]++ : movers.push(i)))
   w.movers = Uint32Array.from(movers)
-  // Its own stream, so that the plans of a run with a policy draw the same numbers from w.rng as the baseline. A reached
-  // agent can still change the order of those draws on a day off (KNOWN-ISSUES.md).
-  city.adjust?.(w, mulberry32(seed ^ 0x5bd1e995))
+  w.choice.set(w.mode)
+  w.base = { choice: w.choice.slice(), hours: w.hours.slice() }
+  repolicy(w)
+  w.mode.set(w.choice)
   // Plan from 00:00 of day -1 and step forward to the plan that is under way at 00:00 of day 0,
   // so a night shift starts the run at work.
   for (const i of w.movers) {
@@ -251,6 +256,18 @@ export const init = (city: City, seed: number): World => {
     w.due[end % RING].push(i)
   }
   return w
+}
+
+/**
+ * Puts the policies of w.city.adjust on the world: back to the hours and modes that init drew, then the policies. A
+ * change takes effect at the next plan of each agent; a plan under way goes on as planned. The same seed and settings
+ * reach the same agents, so turning a policy off and on again gives the same world.
+ */
+export const repolicy = (w: World) => {
+  w.choice.set(w.base.choice); w.hours.set(w.base.hours); w.policy.fill(0)
+  // Its own stream, so that the plans of a run with a policy draw the same numbers from w.rng as the baseline. A reached
+  // agent can still change the order of those draws on a day off (KNOWN-ISSUES.md).
+  w.city.adjust?.(w, mulberry32(w.seed ^ 0x5bd1e995))
 }
 
 export const now = (w: World) => w.day * MINUTES_PER_DAY + w.minute

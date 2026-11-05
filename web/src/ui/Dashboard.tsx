@@ -73,7 +73,7 @@ export const Events = memo(function Events({ events, now, dayLabel, placeOf }: E
 export function Policies({ values, set }: PolicyValues) {
   return <>
     <h2 style={H2}>政策</h2>
-    <p style={NOTE}>調整後從頭重跑模擬。標籤是提出政策的候選人；數字多半是推估，見 DATA.md。</p>
+    <p style={NOTE}>調整後從每個人的下一趟通勤開始生效。標籤是提出政策的候選人；數字多半是推估，見 DATA.md。</p>
     {POLICIES.map(([group, ps]) => <fieldset key={group} style={{ border: 0, borderTop: '1px solid #3a3333', margin: 0, padding: '6px 0' }}>
       <legend style={{ fontSize: 13, color: '#db6a41', padding: 0 }}>{group}</legend>
       {ps.map(p => p.type === 'toggle'
