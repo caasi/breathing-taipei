@@ -60,12 +60,14 @@ export const policyOf = (e: Extract<SimEvent, { kind: 'personal' }>) => (e.dest 
 const SHEN = '沈伯洋', TRANSPORT = 'https://puma.taipei/policies/%E4%BA%A4%E9%80%9A%E6%94%BF%E7%AD%96'
 // The words of the platform, quoted from the page of each policy (CC BY 4.0, docs/platforms/shen.md), for the note of an
 // event that a policy changed. 內科錯峰分流 is not on the pages: its words are from a news report of 沈伯洋's post, a
-// short quote (docs/platforms/shen.md).
+// short quote. 河濱進內科取直 is not on the pages either: its words are from an interview of 沈伯洋 in a news report, a short
+// quote (docs/platforms/shen.md).
 const NOTES: [number, { who: string; quote: string; page: string; url: string }][] = [
   [STAGGERED, { who: SHEN, quote: '鼓勵企業錯開上下班時間', page: 'ETtoday 2026-06-17', url: 'https://www.ettoday.net/news/20260617/3185438.htm' }],
   [ON_BRIDGE, { who: SHEN, quote: '興建迎風—港墘跨基隆河自行車專用橋，直接銜接民生社區與內湖科技園區。', page: '交通政策', url: TRANSPORT }],
   [EBIKE_FREE, { who: SHEN, quote: '提供 YouBike 2.0E 尖峰時段（08:00-10:00 / 17:00-19:00）前 30 分鐘免費', page: '交通政策', url: TRANSPORT }],
   [WASHED, { who: SHEN, quote: '設置「運動驛站」提供盥洗、置物與租借服務', page: '交通政策', url: TRANSPORT }],
+  [STRAIGHT, { who: SHEN, quote: '如果要從河濱進到內科其實需要繞路，「乾脆把它取直」', page: '三立新聞網 2026-09-02', url: 'https://www.setn.com/news/1898889' }],
 ]
 /** The notes of an event: one for each policy that changed the character, in the order of NOTES. */
 export const notesOf = (e: SimEvent) => {

@@ -52,6 +52,7 @@ test('a personal event says where the character goes and how', () => {
   expect(notesOf({ ...e(WORK, 2, 6), policy: 2 | 4 }).map(n => n.page)).toEqual(['交通政策', '交通政策'])
   expect(notesOf({ ...e(WORK, 2, 6), policy: 1 })[0].url).toBe('https://www.ettoday.net/news/20260617/3185438.htm')
   expect(notesOf({ ...e(PLAY, 2, 6), policy: 2 })).toEqual([])
+  expect(notesOf({ ...e(WORK, 2, 5), policy: 32 }).map(n => n.page)).toEqual(['三立新聞網 2026-09-02'])
   expect(notesOf({ ...e(STAY, 2, 6), policy: 1 })).toEqual([])
   expect(notesOf({ ...e(GONE, 2, 6), policy: 1 })).toEqual([])
 })

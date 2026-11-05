@@ -34,11 +34,12 @@ The timeline of the page: 「第一階段（短期）：1–2 年 啟動記名TP
 
 ### News reports
 
-The pages do not have this policy. Its words come from two news reports. Their license is not known, so this list gives short quotes only.
+The pages do not have these two policies. Their words come from news reports. Their license is not known, so this list gives short quotes only.
 
 | id | Source | Quote | In the simulation |
 |----|--------|-------|-------------------|
 | `neihu-stagger` | ETtoday, 2026-06-17, https://www.ettoday.net/news/20260617/3185438.htm (a report of a post of 沈伯洋) | 「一、鼓勵企業錯開上下班時間；二、推動友善彈性工時」 | Yes: 內科錯峰分流. The share of the firms is the setting; the 30 minutes are a guess. |
+| `riverside-straight` | 三立新聞網, 2026-09-02, https://www.setn.com/news/1898889 (an interview of 沈伯洋) | 「如果要從河濱進到內科其實需要繞路，「乾脆把它取直，……」」: the first part is the words of the report, the part in the inner quotes is the words of 沈伯洋 | Yes: 河濱進內科取直. The 0.5 km that it takes off is a guess. In the interview, 沈伯洋 links it to the work on the 東環段 of the 環狀線: build it while that line is built. The model has no 東環段, so the setting is on its own. |
 | `neihu-stagger` | 今周刊, an interview, https://www.businesstoday.com.tw/article/category/183027/post/202608240037/ (the page gives `article:published_time` 2026-11-03; the number in the URL starts with 20260824) | 「內科交通分流應先從獎勵做起，將通勤時段錯開分流」 | The same setting: the reward is why a firm staggers its hours. |
 
 ### Other pages that touch the traffic
@@ -61,7 +62,7 @@ The PDF has figures that can change the simulation or start events later. They a
 - Page 6: 「6,539 上午7-9點死傷人數，全日最高峰(2024年)」, from the 臺北市交通局 statistics office (《臺北市道路交通事故分析》), and 「全市150多所國小，市府做了4個通學區」.
 - Page 9: the bus accidents for which the driver is at fault, 「公車有責肇事率(件/百萬公里)」, 2.15 and 4.02, for 2024 and 2025.
 - Page 12: YouBike rides grew 55%, and the bicycle network grew less than 5%. The targets are 2,000 stations and 27,500 bicycles.
-- Page 14: the map gives two reasons for the bridge: 「基隆河濱銜接內科園區困難」 and 「自行車道缺乏快速通過空間」. The setting 河濱進內科取直 (`riverside-straight`) comes from the first one and from a news report (三立, 2026-09-02, in DATA.md): the way from the riverside into 內科 makes a detour. The 0.5 km that it takes off is a guess.
+- Page 14: the map gives two reasons for the bridge: 「基隆河濱銜接內科園區困難」 and 「自行車道缺乏快速通過空間」. The first one is the problem that 河濱進內科取直 (`riverside-straight`, "News reports") is for.
 
 ## Candidates
 
