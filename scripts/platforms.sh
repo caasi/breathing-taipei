@@ -1,7 +1,8 @@
 #!/bin/sh
 # Download the policy platforms of the candidates for mayor into data/platforms/, which git ignores.
 # The pages of puma.taipei/policies are CC BY 4.0 (the footer of each page), so docs/platforms/ quotes them.
-# policies.json behind puma.taipei/heart-island states no license, so it stays out of git.
+# policies.json behind puma.taipei/heart-island states no license, so it stays out of git. So does transport.pdf, the
+# slides that the page 交通政策 links to: it states no license, and its photos are Google Earth images.
 # docs/platforms/SHA256SUMS records the version that docs/platforms/ was written from: compare with it.
 # Usage: sh scripts/platforms.sh   (DATA=<dir> to write into another checkout, for example from a worktree)
 set -eu
@@ -21,4 +22,5 @@ for s in json.load(open(sys.argv[1]))["sources"]:
 while read -r id url; do
   curl --fail --silent --show-error --location --output "$D/pages/$id.html" "$url"
 done < "$D/pages.txt"
-cd "$D" && sha256sum policies.json pages/*.html
+curl --fail --silent --show-error --location --output "$D/transport.pdf" https://media.puma.taipei/files/141/01M2KZHJ2GFQPFYZ5XXPGNS7XG.pdf
+cd "$D" && sha256sum policies.json pages/*.html transport.pdf
