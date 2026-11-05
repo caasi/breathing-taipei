@@ -1,4 +1,4 @@
-import type { World } from './core.ts'
+import { leg, type World } from './core.ts'
 
 /** Policy settings by key (the keys of the query string), as numbers: 0 or 1 for a toggle, the value of a range. */
 export type Policies = Record<string, number>
@@ -96,7 +96,8 @@ export const applyBundle = (b: Bundle) => (w: World, rng: () => number) => {
     else if (riders?.[i] && r4 < b.bikeShift && b.bikeMinutes(h, k) <= MAX_BIKE) { w.choice[i] = b.BIKE_MODE; w.policy[i] |= ON_BRIDGE | TO_BIKE; continue }
     if (!b.ebike || !b.isMotor(w.choice[i]) || !b.taipei(h) || !b.taipei(k)) continue
     const minutes = b.ebikeMinutes(h, k)
-    if (minutes > 30 || !(inFree(mod(w.hours[2 * i] - minutes)) || inFree(w.hours[2 * i + 1]))) continue
+    // The departure as the plan works it out (core.ts leaveFor): the start of work less the leg in whole minutes.
+    if (minutes > 30 || !(inFree(mod(w.hours[2 * i] - leg(minutes))) || inFree(w.hours[2 * i + 1]))) continue
     if (r3 < SWITCH * (b.hub ? 1 + HUB_MORE : 1)) reach.push([i, r5])
   }
   // The fleet caps the riders: when more are reached than the e-bikes can carry, each reached one rides with the same

@@ -1,8 +1,8 @@
 import { expect, test } from 'vitest'
 import { readFileSync } from 'node:fs'
-import { init, hoursOf, repolicy, advance, now } from './core.ts'
+import { init, hoursOf, repolicy, advance, now, WORK } from './core.ts'
 import { cityFrom, km, EBIKE, BIKE, BUS, SCOOTER, CAR } from './city.ts'
-import { bikeWay, KEY, NEW_BRIDGE, STAGGERED, EBIKE_FREE, ON_BRIDGE, TO_BIKE, STRAIGHT, type River } from './policy.ts'
+import { applyBundle, bikeWay, inFree, KEY, NEW_BRIDGE, STAGGERED, EBIKE_FREE, ON_BRIDGE, TO_BIKE, STRAIGHT, type River } from './policy.ts'
 
 const pub = (f: string) => JSON.parse(readFileSync(new URL(`../../public/${f}`, import.meta.url), 'utf8'))
 const river: River = pub('river.json')
@@ -133,3 +133,32 @@ test('a run that starts with the settings equals a run that turns them on later:
   expect(same(atStart.base.hours, later.base.hours)).toBe(true)
   expect(same(atStart.hours, later.hours) && same(atStart.choice, later.choice) && same(atStart.policy, later.policy)).toBe(true)
 }, 120_000)
+
+test('a free e-bike rider leaves home or work in a free hour, as the plans work it out', () => {
+  const { w } = run({ [KEY.ebike]: 1, [KEY.hub]: 1, [KEY.stagger]: 50 })
+  advance(w, 2 * 24 * 60) // two days of plans, so each rider has planned a trip to work with its e-bike
+  const bad: number[] = []
+  let seen = 0
+  for (let i = 0; i < w.home.length; i++) {
+    if (!(w.policy[i] & EBIKE_FREE) || w.dest[i] !== WORK || w.mode[i] !== EBIKE) continue
+    seen++
+    if (!inFree(((w.dep[i] % 1440) + 1440) % 1440) && !inFree(((w.leave[i] % 1440) + 1440) % 1440)) bad.push(i)
+  }
+  expect(bad).toEqual([])
+  expect(seen).toBeGreaterThan(0)
+}, 120_000)
+
+test('the free hours use the departure that the plan works out, the leg in whole minutes', () => {
+  // One commuter by car, 20.4 minutes by e-bike: the plan rounds the leg to 20 minutes (core.ts leaveFor).
+  const one = (start: number) => {
+    const w = { home: [0], work: [1], kind: [0], hours: Uint16Array.of(start, 16 * 60), choice: Uint8Array.of(CAR), policy: new Uint8Array(1) }
+    applyBundle({
+      stagger: 0, ebike: true, hub: false, bridge: false, bikeShift: 0, straight: false, perAgent: 10, EBIKE_MODE: EBIKE, BIKE_MODE: BIKE,
+      jobs: () => false, taipei: () => true, ebikeMinutes: () => 20.4, onNewBridge: () => false, bridgeRiders: () => new Uint8Array(1),
+      bikeMinutes: () => 30, straightens: () => false, isMotor: m => m === CAR, isBike: m => m === BIKE || m === EBIKE,
+    })(w as never, () => 0)
+    return w.choice[0]
+  }
+  expect(one(10 * 60 + 20)).toBe(CAR) // leaves at 10:00, after the free hours; 09:59.6 if the leg were not rounded
+  expect(one(8 * 60 + 20)).toBe(EBIKE) // leaves at 08:00, in the free hours; 07:59.6 if the leg were not rounded
+})

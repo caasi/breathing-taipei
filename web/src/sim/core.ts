@@ -107,7 +107,8 @@ const minuteFrom = (perHour: ArrayLike<number>, hours: number[], r: number, q: n
 
 const firstAtOrAfter = (t: number, minuteOfDay: number) => t + (((minuteOfDay - t) % MINUTES_PER_DAY) + MINUTES_PER_DAY) % MINUTES_PER_DAY
 const hourOf = (t: number) => Math.floor((((t % MINUTES_PER_DAY) + MINUTES_PER_DAY) % MINUTES_PER_DAY) / 60)
-const leg = (m: number) => Math.min(MAX_LEG, Math.max(1, Math.round(m)))
+/** A leg of a trip in whole minutes, as plans use it. */
+export const leg = (m: number) => Math.min(MAX_LEG, Math.max(1, Math.round(m)))
 
 const dayOf = (t: number) => Math.floor(t / MINUTES_PER_DAY)
 
