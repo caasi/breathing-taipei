@@ -83,7 +83,14 @@ export function App() {
   const [towns, setTowns] = useState<any>()
   const [villages, setVillages] = useState<any>()
   const [transit, setTransit] = useState<Transit>()
-  const [roads, setRoads] = useState<RoadLines>()
+  const [roads, setRoads] = useState<RoadLines>(), [closed, setClosed] = useState<Uint32Array>()
+  // The traffic layer leaves out the roads that the scenario of the shown run closes: the new roads before the move.
+  // It has no roads until the first frame of a run says which are closed. The old run's closed roads stay until the new run shows.
+  const openRoads = useMemo(() => {
+    if (!roads || !closed?.length) return closed && roads
+    const shut = new Set(closed)
+    return roads.map((l, e) => (shut.has(e) ? [] : l))
+  }, [roads, closed])
   const [traffic, setTraffic] = useState<Uint8Array>()
   // The dots read the slowness of each cell every frame, so it is a ref and not state.
   const cellTraffic = useRef<CellTraffic>(), cellIndex = useRef(new Map<number, number>())
@@ -207,6 +214,7 @@ export function App() {
       // these values, not the message.
       const fresh = m.coords !== undefined, events = m.events, entry = { t: m.day * 1440 + m.minute, counts: m.counts }
       if (m.homes) setHomes(m.homes)
+      if (fresh) setClosed(m.closed)
       if (fresh || m.traffic) setTraffic(m.traffic)
       if (m.cellKeys) cellIndex.current = new Map(Array.from(m.cellKeys, (key, c) => [key, c] as const))
       if (fresh || m.cells) cellTraffic.current = m.cells && trafficOnRef.current ? { index: cellIndex.current, level: m.cells } : undefined
@@ -425,7 +433,7 @@ export function App() {
       {towns && projection && <Land towns={towns} proj={projection} />}
       {/* Only while the map loads, and not with reduced motion: they run and flicker. */}
       {!revealed && roads && projection && !matchMedia('(prefers-reduced-motion: reduce)').matches && <Sparks sparks={sparks} lines={roads} proj={projection} />}
-      {towns && villages && projection && <HeatMap towns={towns} villages={villages} level={byDistrict ? 'district' : ready ? 'village' : level} nodes={byDistrict?.names ?? nodes} counts={ready ? shownCounts : undefined} pop={pop} perAgent={PER_AGENT} proj={projection} transit={mapTransit} show={layers} signs={signs} districtLabels={districtLabels} rate={rate} roads={roads} traffic={traffic} speed={paused || waiting !== undefined ? 0 : speed * HOURS_AT_1X} view={view} />}
+      {towns && villages && projection && <HeatMap towns={towns} villages={villages} level={byDistrict ? 'district' : ready ? 'village' : level} nodes={byDistrict?.names ?? nodes} counts={ready ? shownCounts : undefined} pop={pop} perAgent={PER_AGENT} proj={projection} transit={mapTransit} show={layers} signs={signs} districtLabels={districtLabels} rate={rate} roads={openRoads} traffic={traffic} speed={paused || waiting !== undefined ? 0 : speed * HOURS_AT_1X} view={view} />}
       {ready && dots && dotTrips && <Travellers tracks={dotRun!.tracks} trips={dotTrips} clock={clock} byMode={byMode} traffic={cellTraffic} />}
       </GLMap>
       {/* Always there, so a screen reader reads the change. */}

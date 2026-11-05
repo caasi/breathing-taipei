@@ -43,6 +43,7 @@ export type FromWorker = {
   traffic?: Uint8Array // per road edge: 0 no traveller, 1 (free) to 255 (slowest) (traffic.ts levels); sent when it changes
   cells?: Uint8Array // per cell of the traffic, the level of its slowest bucket, in the order of cellKeys, sent with traffic
   cellKeys?: Int32Array // the key of each cell of the traffic (traffic.ts gridOf keys), sent once a run
+  closed?: Uint32Array // the road edges that the scenario of the run closes (route.ts PROFILES), sent with coords
   clock: number; at: number // the clock (pace.ts) shows minute `clock` at `at` (performance.timeOrigin + performance.now())
   since: number // the `at` of the change of speed that the clock uses; the page takes the clock only from its latest change
   routing: boolean // the road paths of the run are not all found yet, so the run must not start (traffic.ts roadUse)
@@ -69,7 +70,7 @@ let every = 20
 let hoursPerSec = 0, lastHours = 0 // lastHours: the last speed that was not a pause
 const clock: Clock = { minute: 0, at: performance.now(), perMs: 0 }
 let since = 0, owed = false // owed: the page has no frame yet with the clock of the latest change of speed
-let extra: Pick<FromWorker, 'start' | 'nodes' | 'districts' | 'homes' | 'coords' | 'trips' | 'replans' | 'traffic' | 'cells' | 'cellKeys' | 'redraw'> = {}
+let extra: Pick<FromWorker, 'start' | 'nodes' | 'districts' | 'homes' | 'coords' | 'trips' | 'replans' | 'traffic' | 'cells' | 'cellKeys' | 'redraw' | 'closed'> = {}
 let pending: Generator<Batch | void> | undefined
 // Finds the paths of the road load (traffic.ts roadUse) in the time that the paths of the dots leave.
 let warming: Generator<number> | undefined, roads = 0 // roads: the share of the road paths found
@@ -429,7 +430,8 @@ onmessage = async (e: MessageEvent<ToWorker>) => {
     for (const i of w.movers) w.onPlan(i)
     coords = c.coords
     traffic(w, run, roadJson, roadNames as RoadNames)
-    extra = { start: m.start, nodes: c.nodes, districts: (villages as Village[]).map(v => v.town), homes: Uint32Array.from(c.city.homes), coords: c.coords, trips: draw(w, run), redraw }
+    extra = { start: m.start, nodes: c.nodes, districts: (villages as Village[]).map(v => v.town), homes: Uint32Array.from(c.city.homes), coords: c.coords, trips: draw(w, run), redraw,
+      closed: Uint32Array.from((roadJson as GraphJson).edges.flatMap((e, k) => ((e[6] ?? 0) & ~PROFILES[run.scenario].open ? [k] : []))) }
   } catch (err) {
     if (me !== inits) return
     w = undefined
