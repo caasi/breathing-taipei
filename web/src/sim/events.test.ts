@@ -37,7 +37,12 @@ test('a personal event says where the character goes and how', () => {
   expect(actionOf({ ...e(PLAY, 2, 3), back: true, late: 5, mood: 'blank' }, at)).toBe('路上塞車晚到，晚了5分鐘才開車從中山區回家，算了，明天早點出門')
   // A policy that changed the character (policy.ts bits): staggered hours, the free e-bike over the new bridge, the showers.
   expect(actionOf({ ...e(WORK, 2, 3), policy: 1 }, at)).toBe('公司錯峰，開車到中山區上班')
-  expect(actionOf({ ...e(WORK, 2, 6), policy: 2 | 4 | 8 }, at)).toBe('騎 YouBike 2.0E 經迎風—港墘橋到中山區上班，尖峰前 30 分鐘免費，在運動驛站沖完澡才進公司')
+  // The e-bike is free when the trip starts in a free hour (08:00 to 10:00, 17:00 to 19:00), on the way there or home.
+  expect(actionOf({ ...e(WORK, 2, 6), t: 8 * 60, policy: 2 | 4 | 8 }, at)).toBe('騎 YouBike 2.0E 經迎風—港墘橋到中山區上班，尖峰前 30 分鐘免費，在運動驛站沖完澡才進公司')
+  expect(actionOf({ ...e(WORK, 2, 6), t: 7 * 60, policy: 2 }, at)).toBe('騎 YouBike 2.0E 到中山區上班')
+  expect(actionOf({ ...e(WORK, 2, 6), t: 1440 + 18 * 60, policy: 2, back: true }, at)).toBe('騎 YouBike 2.0E 下班回家，尖峰前 30 分鐘免費')
+  expect(actionOf({ ...e(WORK, 2, 5), policy: 32 }, at)).toBe('騎自行車到中山區上班，河濱和內科之間不用再繞路')
+  expect(actionOf({ ...e(WORK, 2, 5), policy: 4 | 32, back: true }, at)).toBe('騎自行車經迎風—港墘橋下班回家，河濱和內科之間不用再繞路')
   expect(actionOf({ ...e(WORK, 2, 3), policy: 1, back: true }, at)).toBe('公司錯峰，開車提早或延後半小時下班回家，避開尖峰')
   expect(actionOf({ ...e(WORK, 2, 5), policy: 4, back: true }, at)).toBe('騎自行車經迎風—港墘橋下班回家')
   expect(actionOf({ ...e(WORK, 2, 5), policy: 4 | 16 }, at)).toBe('改騎自行車經迎風—港墘橋到中山區上班')

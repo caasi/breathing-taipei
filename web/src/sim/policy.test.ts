@@ -2,7 +2,7 @@ import { expect, test } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { init, hoursOf, repolicy, advance, now } from './core.ts'
 import { cityFrom, km, EBIKE, BIKE, BUS, SCOOTER, CAR } from './city.ts'
-import { bikeWay, KEY, NEW_BRIDGE, STAGGERED, EBIKE_FREE, ON_BRIDGE, TO_BIKE, type River } from './policy.ts'
+import { bikeWay, KEY, NEW_BRIDGE, STAGGERED, EBIKE_FREE, ON_BRIDGE, TO_BIKE, STRAIGHT, type River } from './policy.ts'
 
 const pub = (f: string) => JSON.parse(readFileSync(new URL(`../../public/${f}`, import.meta.url), 'utf8'))
 const river: River = pub('river.json')
@@ -107,4 +107,19 @@ test('the what-if moves commuters whose bicycle way crosses the new bridge to th
   expect(moved).toBeGreaterThan(100)
   const { w: off } = run({ [KEY.bikeShift]: 100 })
   expect(off.policy.some(p => (p & TO_BIKE) !== 0)).toBe(false)
+}, 120_000)
+
+test('取直 marks exactly the cyclists whose way it shortens: across the river, with an end in 內科', () => {
+  const { c, w } = run({ [KEY.straight]: 1, [KEY.bridge]: 1, [KEY.bikeShift]: 100 })
+  const jobs = (v: number) => (data.villages[v].jobs ?? 0) > 0
+  let marked = 0
+  const bad: number[] = []
+  for (let i = 0; i < w.home.length; i++) {
+    const cyclist = !w.kind[i] && (w.choice[i] === BIKE || w.choice[i] === EBIKE)
+    const shortened = cyclist && (jobs(w.home[i]) || jobs(w.work[i])) && c.bike(w.home[i], w.work[i]).via !== undefined
+    if (((w.policy[i] & STRAIGHT) !== 0) !== shortened) bad.push(i)
+    if (shortened) marked++
+  }
+  expect(bad).toEqual([])
+  expect(marked).toBeGreaterThan(0)
 }, 120_000)

@@ -7,7 +7,7 @@ export type Policies = Record<string, number>
 export type River = { river: [number, number][][]; crossings: { name: string; lon: number; lat: number }[] }
 
 // Bits of World.policy: the policies that changed an agent, for its events.
-export const STAGGERED = 1, EBIKE_FREE = 2, ON_BRIDGE = 4, WASHED = 8, TO_BIKE = 16
+export const STAGGERED = 1, EBIKE_FREE = 2, ON_BRIDGE = 4, WASHED = 8, TO_BIKE = 16, STRAIGHT = 32
 
 // The policies of the 內湖 bundle of 沈伯洋 (docs/platforms/shen.md).
 // bikeShift is not a policy of the platform: it is a what-if of the user, the share of the commuters that the bridge
@@ -46,6 +46,7 @@ export const bikeWay = (river: River, extra: River['crossings'], km: (a: Point, 
  * - stagger (0 to 1): the share of the workers of 內科 whose firm takes the reward to stagger its hours. ponytail: such
  *   a worker starts and ends work 30 minutes earlier or later, half each way; a guess, there is no figure.
  * - bridge: marks the cyclists whose way crosses the new bridge, for their events. The way itself is in city.ts.
+ * - straight: marks the cyclists whose way 取直 shortens, for their events. The shorter way itself is in city.ts.
  * - bikeShift (0 to 1, with the bridge): the share of the other commuters whose way by bicycle crosses the new bridge,
  *   in at most MAX_BIKE minutes, who move to the bicycle. A what-if of the user, with no source.
  * - ebike: in the free hours (08:00 to 10:00, 17:00 to 19:00), a commuter by bus, scooter or car whose trip by e-bike
@@ -53,13 +54,14 @@ export const bikeWay = (river: River, extra: River['crossings'], km: (a: Point, 
  *   adds HUB_MORE), up to the e-bikes that the fleet has.
  */
 export type Bundle = {
-  stagger: number; ebike: boolean; hub: boolean; bridge: boolean; bikeShift: number
+  stagger: number; ebike: boolean; hub: boolean; bridge: boolean; bikeShift: number; straight: boolean
   jobs: (node: number) => boolean // a village of 內科
   taipei: (node: number) => boolean
   ebikeMinutes: (home: number, work: number) => number
   onNewBridge: (home: number, work: number) => boolean
   bridgeRiders: (w: World) => Uint8Array // 1 for each agent whose way by bicycle crosses the new bridge
   bikeMinutes: (home: number, work: number) => number
+  straightens: (home: number, work: number) => boolean // 取直 shortens this way by bicycle
   isMotor: (mode: number) => boolean
   isBike: (mode: number) => boolean // a bicycle or an e-bike
   EBIKE_MODE: number
@@ -75,7 +77,8 @@ const SWITCH = 0.1, HUB_MORE = 0.5, FLEET = 4500, TURNS = 2, SHIFT = 30
 // ponytail: the longest ride to work that a what-if rider takes, a guess (DATA.md, "Figures in the code").
 const MAX_BIKE = 60
 const FREE: [number, number][] = [[8 * 60, 10 * 60], [17 * 60, 19 * 60]]
-const inFree = (m: number) => FREE.some(([a, b]) => m >= a && m < b)
+/** Whether a trip that starts at minute m of the day starts in a free hour of the e-bike. */
+export const inFree = (m: number) => FREE.some(([a, b]) => m >= a && m < b)
 const mod = (t: number) => ((t % 1440) + 1440) % 1440
 
 export const applyBundle = (b: Bundle) => (w: World, rng: () => number) => {
@@ -102,5 +105,8 @@ export const applyBundle = (b: Bundle) => (w: World, rng: () => number) => {
     if (rng() >= keep) continue
     w.choice[i] = b.EBIKE_MODE
     w.policy[i] |= EBIKE_FREE | (b.onNewBridge(w.home[i], w.work[i]) ? ON_BRIDGE : 0) | (b.hub ? WASHED : 0)
+  }
+  if (b.straight) for (let i = 0; i < w.home.length; i++) {
+    if (!w.kind[i] && b.isBike(w.choice[i]) && b.straightens(w.home[i], w.work[i])) w.policy[i] |= STRAIGHT
   }
 }

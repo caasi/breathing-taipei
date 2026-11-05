@@ -1,7 +1,7 @@
 import { GONE, PLAY, STAY } from './core.ts'
 import { isoAt, kindAt, type Calendar } from './calendar.ts'
 import { BUS, SCOOTER } from './city.ts'
-import { STAGGERED, EBIKE_FREE, ON_BRIDGE, WASHED, TO_BIKE } from './policy.ts'
+import { STAGGERED, EBIKE_FREE, ON_BRIDGE, WASHED, TO_BIKE, STRAIGHT, inFree } from './policy.ts'
 
 /**
  * One event: t in minutes since 00:00 of day 0. A personal event follows one agent (a character: 10 people at the
@@ -40,19 +40,17 @@ export const actionOf = (e: Extract<SimEvent, { kind: 'personal' }>, placeOf: Pl
     return e.mood === 'angry' ? `路上塞車晚到，晚了${e.late}分鐘才${by}${home}，一肚子火` : `路上塞車晚到，晚了${e.late}分鐘才${by}${home}，算了，明天早點出門`
   }
   const p = policyOf(e)
-  if (e.back && p & (STAGGERED | ON_BRIDGE)) {
-    const bridge = p & ON_BRIDGE ? '經迎風—港墘橋' : ''
-    return p & STAGGERED ? `公司錯峰，${by}${bridge}提早或延後半小時下班回家，避開尖峰` : `${by}${bridge}下班回家`
-  }
+  // A trip of a policy: the ride (and the bridge) first, then what the policies add. The e-bike is free only when the
+  // trip starts in a free hour, which can be the way there, the way home or both.
+  const ride = `${by}${p & ON_BRIDGE ? '經迎風—港墘橋' : ''}`
+  const after = `${p & EBIKE_FREE && inFree(e.t % 1440) ? '，尖峰前 30 分鐘免費' : ''}${p & STRAIGHT ? '，河濱和內科之間不用再繞路' : ''}`
+  if (e.back && p) return `${p & STAGGERED ? `公司錯峰，${ride}提早或延後半小時下班回家，避開尖峰` : `${ride}下班回家`}${after}`
   if (e.back) return e.dest === PLAY ? `${by}從${place}回家` : e.group ? `${by}回家` : `${by}下班回家`
   if (e.dest === STAY) return '今天在家休息'
   if (e.dest === GONE) return '今天出遠門，離開雙北'
   if (e.dest === PLAY) return `${by}去${place}走走`
   if (e.group) return `${by}${PURPOSE[e.group] ?? '出門'}`
-  if (p) {
-    const free = p & EBIKE_FREE ? '，尖峰前 30 分鐘免費' : '', wash = p & WASHED ? '，在運動驛站沖完澡才進公司' : ''
-    return `${p & STAGGERED ? '公司錯峰，' : ''}${p & TO_BIKE ? '改' : ''}${by}${p & ON_BRIDGE ? '經迎風—港墘橋' : ''}到${place}上班${free}${wash}`
-  }
+  if (p) return `${p & STAGGERED ? '公司錯峰，' : ''}${p & TO_BIKE ? '改' : ''}${ride}到${place}上班${after}${p & WASHED ? '，在運動驛站沖完澡才進公司' : ''}`
   return `${by}到${place}上班`
 }
 

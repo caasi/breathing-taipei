@@ -10,6 +10,7 @@ This file lists the changes that a user of the site can see, for each version. T
 - While the setting 迎風—港墘自行車橋 is on, the map draws the bridge as a thin green line with a bridge badge and its name. The events show the riders who cross it.
 - An event of a person that a policy changed has a note under it: the words of the platform, the candidate and a link to the page of the policy. The info panel credits the words (CC BY 4.0).
 - The what-if 過橋改騎自行車: with the bridge on, a share (up to 100%) of the commuters whose way by bicycle crosses it ride a bicycle. Their events say 改騎自行車.
+- Events tell of 河濱進內科取直 (「河濱和內科之間不用再繞路」) and of the way home by e-bike. An e-bike trip says it is free only when it starts in a free hour.
 - A spinner shows while the page draws new dots after a change of a policy or of the dot density.
 
 ### Changed
