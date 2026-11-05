@@ -1,7 +1,7 @@
 """Build the routing graphs: roads from the bus route shapes of both cities, MRT from OSM lines and station exits.
 
 Usage:
-  python3 scripts/graphs.py TPE_SHAPES NTPC_SHAPES OSM_RAIL EXITS_CSV HIGHWAYS STREETS OUT_DIR
+  python3 scripts/graphs.py TPE_SHAPES NTPC_SHAPES OSM_RAIL EXITS_CSV HIGHWAYS STREETS OUT_DIR SCENARIO
 
   TPE_SHAPES   https://tcgbusfs.blob.core.windows.net/blobbus/GetBusShape.gz
   NTPC_SHAPES  https://tcgbusfs.blob.core.windows.net/ntpcbus/GetBusShape.gz
@@ -11,16 +11,19 @@ Usage:
                curl -A <name> --data-urlencode data@scripts/queries/highways.overpassql https://overpass-api.de/api/interpreter
   STREETS      Overpass JSON of scripts/queries/streets.overpassql (named roads; scripts/names.py reads it too)
   OUT_DIR      writes road-graph.json, road-lines.json and mrt-graph.json
+  SCENARIO     scripts/jiang.json: the guessed new roads of a scenario, and the roads of its works
 
 Output per graph: kept nodes (degree != 2) and edges whose geometry holds the merged degree-2 points.
 road-lines.json has, for each edge of road-graph.json in the same order, the bus shape points that the edge stands
 for (lon, lat, ...), not snapped to the grid: the map draws these, and routing uses the snapped graph.
 A road edge has a fifth value, its class, when it is not a street: 1 國道, 2 快速道路, 3 a ramp or a link to the streets.
 A one-way edge (OSM `oneway`; a 國道 and its ramps are one-way unless tagged otherwise) has a sixth value, 1, and runs
-from its first node to its second; its fifth value is then given also for a street (0)."""
+from its first node to its second; its fifth value is then given also for a street (0).
+An edge with tags has a seventh value, the sum of its tags (FUTURE, WORKS), and then also its fifth and sixth (0 when
+two-way). web/src/sim/route.ts reads the tags."""
 import gzip, json, math, re, csv, collections, sys
 
-if __name__ == "__main__" and len(sys.argv) != 8:
+if __name__ == "__main__" and len(sys.argv) != 9:
     sys.exit(__doc__)
 
 def km(a, b):
@@ -29,7 +32,7 @@ def km(a, b):
     return 6371 * math.hypot(x, y)
 
 class Graph:
-    def __init__(s, grid): s.grid, s.idx, s.xy, s.adj, s.raw, s.cls, s.one = grid, {}, [], collections.defaultdict(dict), {}, {}, set()
+    def __init__(s, grid): s.grid, s.idx, s.xy, s.adj, s.raw, s.cls, s.one, s.tag = grid, {}, [], collections.defaultdict(dict), {}, {}, set(), {}
     def add(s, p):
         s.xy.append(p); return len(s.xy) - 1
     def node(s, p):
@@ -52,10 +55,11 @@ class Graph:
         return ns
 
 def contract(g, keep_extra=()):
-    """Keep nodes of degree != 2, nodes where the class of the road or its one-way rule changes, and keep_extra; every
-    other node becomes geometry inside an edge, so each edge has one class and is one-way or two-way all along."""
+    """Keep nodes of degree != 2, nodes where the class of the road, its one-way rule or its tags change, and keep_extra;
+    every other node becomes geometry inside an edge, so each edge has one class, one set of tags and is one-way or
+    two-way all along."""
     one = lambda v, w: (v, w) in g.one or (w, v) in g.one
-    changes = lambda v: len({(g.cls.get((v, w), 0), one(v, w)) for w in g.adj[v]}) > 1
+    changes = lambda v: len({(g.cls.get((v, w), 0), one(v, w), g.tag.get((v, w), 0)) for w in g.adj[v]}) > 1
     keep = {v for v in range(len(g.xy)) if len(g.adj[v]) != 2 or changes(v)} | set(keep_extra)
     # A component made only of degree-2 nodes (a loop) has no kept node; keep one node of it,
     # or the walk below never starts there and the whole loop is lost.
@@ -93,7 +97,7 @@ def contract(g, keep_extra=()):
                 ways = {1 if (p, q) in g.one else -1 for p, q in zip(chain, chain[1:]) if (p, q) in g.one or (q, p) in g.one}
                 if ways == {-1, 1}: contract.mixed += 1
                 if ways == {-1}: chain.reverse()
-                edges.append((remap[chain[0]], remap[chain[-1]], d, [g.xy[p] for p in chain[1:-1]], chain, g.cls.get((a, b0), 0), len(ways) == 1))
+                edges.append((remap[chain[0]], remap[chain[-1]], d, [g.xy[p] for p in chain[1:-1]], chain, g.cls.get((a, b0), 0), len(ways) == 1, g.tag.get((a, b0), 0)))
     nodes = [g.xy[v] for v in sorted(keep)]
     return nodes, edges, remap
 contract.mixed = 0
@@ -116,9 +120,9 @@ def simplify(pts, a, b, tol=2e-4):
     return [p for p, k in zip(full, keep) if k][1:-1]
 
 def dump(path, nodes, edges, extra=None):
-    edges = [(a, b, d, simplify(geom, nodes[a], nodes[b]), cls, one) for a, b, d, geom, _, cls, one in edges]
+    edges = [(a, b, d, simplify(geom, nodes[a], nodes[b]), cls, one, tag) for a, b, d, geom, _, cls, one, tag in edges]
     out = {"lon": [round(p[0], 5) for p in nodes], "lat": [round(p[1], 5) for p in nodes],
-           "edges": [[a, b, round(d * 1000), [round(c, 5) for p in geom for c in p]] + ([cls, 1] if one else [cls] if cls else []) for a, b, d, geom, cls, one in edges]}
+           "edges": [[a, b, round(d * 1000), [round(c, 5) for p in geom for c in p]] + ([cls, int(one), tag] if tag else [cls, 1] if one else [cls] if cls else []) for a, b, d, geom, cls, one, tag in edges]}
     if extra: out.update(extra)
     json.dump(out, open(path, "w"), ensure_ascii=False, separators=(",", ":"))
 
@@ -228,10 +232,42 @@ for a, b in [s for s in road.one if not road.cls.get(s)]:
     if not reaches(b, a, {a, b}): road.one.discard((a, b)); undone += 1; streets_one -= 1
 print("one-way streets:", len(alone), "of", len(oneways), "OSM one-way segments alone;", streets_one, "street steps made one-way;", undone, "two-way again, for a way back")
 
+# --- the roads of a scenario (SCENARIO) ---
+FUTURE, WORKS = 1, 2  # the tags of an edge; web/src/sim/route.ts has the same values
+scenario = json.load(open(sys.argv[8]))
+def dense(pts, step):
+    """pts with points added, at most `step` degrees apart, so that a line visits each cell that it crosses."""
+    out = [pts[0]]
+    for a, b in zip(pts, pts[1:]):
+        n = max(1, math.ceil(max(abs(b[0] - a[0]), abs(b[1] - a[1])) / step))
+        out += [(a[0] + (b[0] - a[0]) * k / n, a[1] + (b[1] - a[1]) * k / n) for k in range(1, n + 1)]
+    return out
+# A new road is a street that joins each street in the cells it crosses. A step that a road of today already has stays
+# a road of today.
+for f in scenario["future"]:
+    pts = dense([tuple(p) for p in f["line"]], road.grid / 2)
+    ns = [road.node(p) for p in pts]
+    new = [(a, b) for a, b in zip(ns, ns[1:]) if a != b and b not in road.adj[a]]
+    road.line(pts)
+    for a, b in new: road.tag[(a, b)] = road.tag[(b, a)] = FUTURE
+# A works step is a street step in the box with both ends in the cells of an OSM road of the list.
+works, x0, y0, x1, y1 = scenario["works"], *scenario["works"]["box"]
+near = set()
+for x in json.load(open(sys.argv[6]))["elements"]:
+    if x["type"] != "way" or "geometry" not in x or not x.get("tags", {}).get("name", "").startswith(tuple(works["names"])): continue
+    for p in dense([(g["lon"], g["lat"]) for g in x["geometry"]], road.grid / 2):
+        k = (round(p[0] / road.grid), round(p[1] / road.grid))
+        if x0 <= p[0] <= x1 and y0 <= p[1] <= y1 and k in road.idx: near.add(road.idx[k])
+for a in near:
+    for b in road.adj[a]:
+        if b in near and not road.cls.get((a, b)) and not road.tag.get((a, b)): road.tag[(a, b)] = WORKS
+tags = collections.Counter(road.tag.values())
+print("scenario:", tags[FUTURE] // 2, "new street steps,", tags[WORKS] // 2, "works steps")
+
 nodes, edges, _ = contract(road)
 dump(sys.argv[7] + "/road-graph.json", nodes, edges)
 lines = []
-for *_, chain, _cls, _one in edges:
+for *_, chain, _cls, _one, _tag in edges:
     pts = [p for a, b in zip(chain, chain[1:]) for p in road.raw[(a, b)]]
     pts = [pts[0]] + simplify(pts[1:-1], pts[0], pts[-1], 2e-5) + [pts[-1]]  # ~2 m
     lines.append([round(c, 5) for p in pts for c in p])
