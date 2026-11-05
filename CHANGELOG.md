@@ -12,6 +12,10 @@ This file lists the changes that a user of the site can see, for each version. T
 - The what-if 過橋改騎自行車: with the bridge on, a share (up to 100%) of the commuters whose way by bicycle crosses it ride a bicycle. Their events say 改騎自行車.
 - Events tell of 河濱進內科取直 (「河濱和內科之間不用再繞路」) and of the way home by e-bike. An e-bike trip says it is free only when it starts in a free hour.
 - A spinner shows while the page draws new dots after a change of a policy or of the dot density.
+- The two scenarios of the move of 松山機場 of 蔣萬安 (#12), with the tag 蔣萬安: 現況, 施工期（示意） and 遷移後（示意）. A change of the scenario starts a new run from 00:00. The roads of both scenarios are guesses from the news.
+- In 施工期, the roads around the airport are slower, and some trips take another way or take longer.
+- In 遷移後, the map draws four new roads as dashed lines, and the trips can use them.
+- Events tell of the trips to work that a scenario makes longer or shorter. A trip on a new road has a note with a short quote of 自由時報.
 
 ### Changed
 

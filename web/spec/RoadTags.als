@@ -1,4 +1,4 @@
-// Tags on the edges of the road graph (route.ts), and the profiles of the scenarios that allow tags (paths.ts). An edge is usable in a profile when the
+// Tags on the edges of the road graph (route.ts), and the profiles of the scenarios that allow tags (route.ts PROFILES). An edge is usable in a profile when the
 // profile allows each of its tags. A street node (route.ts graphFrom) is a node of an edge of class 0; a future road
 // is class 0. A village starts its trips at its nearest street node (paths.ts roadNode).
 abstract sig Tag {}

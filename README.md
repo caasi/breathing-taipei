@@ -85,6 +85,12 @@ Policy settings. A change reaches the run that goes on, as in a simulation game:
 
 The three bicycle settings change the bicycle and e-bike trips; without `ebike-free`, `bike-hub` changes nothing. Example: `?neihu-stagger=30&ebike-free=1&bike-bridge=1`
 
+The scenario of the roads is different from the other settings: a change starts a new run from 00:00.
+
+| Key | Scenario | Values | Default |
+|---|---|---|---|
+| `scenario` | 松山機場遷移 (蔣萬安): the roads of today (現況), the roads while the airport moves (施工期（示意）), or the roads after the move (遷移後（示意）). The roads of both scenarios are guesses from the news (DATA.md) | `now`, `works`, `future` | `now` |
+
 ## How the model works
 
 - One agent is 10 people. The model has 645,406 agents.
