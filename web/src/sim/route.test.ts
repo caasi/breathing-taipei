@@ -1,6 +1,6 @@
 import { expect, test } from 'vitest'
 import fc from 'fast-check'
-import { freeTime, graphFrom, graphHash, tree, pathTo, SIGNAL, type GraphJson } from './route.ts'
+import { freeTime, FUTURE, graphFrom, graphHash, PROFILES, tree, pathTo, SIGNAL, WORKS, type GraphJson } from './route.ts'
 
 // Random connected-or-not graphs of 2-12 nodes; some edges carry in-between points.
 const graphArb = fc.integer({ min: 2, max: 12 }).chain(n => fc.record({
@@ -72,4 +72,19 @@ test('traffic lights add half a wait at each end where 3 or more streets meet, a
   const j: GraphJson = { lon: [0, 0, 0, 0, 0], lat: [0, 0, 0, 0, 0], edges: [[0, 1, 100, []], [0, 2, 100, []], [0, 3, 100, []], [3, 4, 320, [], 1]] }
   expect(Array.from(freeTime(j))).toEqual([100, 100, 100, 100])
   expect(Array.from(freeTime(j, true))).toEqual([100 + SIGNAL / 2, 100 + SIGNAL / 2, 100 + SIGNAL / 2, 100])
+})
+
+test('a profile closes each edge with a tag that it does not open and slows a works edge; lights and streets count only open edges', () => {
+  // Node 0 meets 1 and 2 today, and 3 on a new road (FUTURE); 1-4 is a street of the works.
+  const j: GraphJson = { lon: [0, 0, 0, 0, 0], lat: [0, 0, 0, 0, 0],
+    edges: [[0, 1, 100, []], [0, 2, 100, []], [0, 3, 100, [], 0, 0, FUTURE], [1, 4, 100, [], 0, 0, WORKS]] }
+  expect(Array.from(freeTime(j, true))).toEqual([100, 100, Infinity, 100])
+  expect(Array.from(freeTime(j, true, PROFILES.works))).toEqual([100, 100, Infinity, 100 * PROFILES.works.works])
+  expect(Array.from(freeTime(j, true, PROFILES.future))).toEqual([100 + SIGNAL / 2, 100 + SIGNAL / 2, 100 + SIGNAL / 2, 100])
+  const now = graphFrom(j, true), later = graphFrom(j, true, PROFILES.future)
+  expect(Array.from(now.street)).toEqual([1, 1, 1, 0, 1])
+  expect(Array.from(later.street)).toEqual([1, 1, 1, 1, 1])
+  expect(Number.isFinite(tree(now, 0).dist[3])).toBe(false)
+  expect(tree(later, 0).dist[3]).toBe(100 + SIGNAL / 2)
+  expect(graphHash(now)).not.toBe(graphHash(later))
 })

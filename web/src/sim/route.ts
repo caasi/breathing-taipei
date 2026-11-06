@@ -1,13 +1,28 @@
 /** Shortest paths on a contracted graph whose edges carry their in-between points. */
 /**
- * An edge: from, to, metres, in-between points, for a road that is not a street its class, and 1 for a one-way edge,
- * which runs from `from` to `to` (scripts/graphs.py).
+ * An edge: from, to, metres, in-between points, for a road that is not a street its class, 1 for a one-way edge,
+ * which runs from `from` to `to`, and its tags (scripts/graphs.py).
  */
-export type GraphJson = { lon: number[]; lat: number[]; edges: [number, number, number, number[], number?, number?][]; stations?: Record<string, number> }
+export type GraphJson = { lon: number[]; lat: number[]; edges: [number, number, number, number[], number?, number?, number?][]; stations?: Record<string, number> }
+
+/** The tags of a road edge (scripts/graphs.py): a new road of the 松山機場 plan, a road of its works. */
+export const FUTURE = 1, WORKS = 2
+/**
+ * What a scenario does to the roads: `open` holds the tags of the edges that it can use (an edge with any other tag is
+ * closed), and the time of a WORKS edge is multiplied by `works`.
+ */
+export type Profile = { open: number; works: number }
+export const PROFILES = {
+  now: { open: WORKS, works: 1 },
+  // ponytail: the works make the roads around the airport 1.7 times slower; a guess, the news gives no figure (DATA.md).
+  works: { open: WORKS, works: 1.7 },
+  future: { open: WORKS | FUTURE, works: 1 },
+} satisfies Record<string, Profile>
+export type Scenario = keyof typeof PROFILES
 export type Graph = {
   lon: Float64Array; lat: Float64Array
-  street: Uint8Array // 1 for a node on a street (class 0); trips start and end only there
-  cls: Uint8Array; metres: Float64Array // per edge: its class (0 street) and length
+  street: Uint8Array // 1 for a node on an open street (class 0); trips start and end only there
+  cls: Uint8Array; metres: Float64Array; tags: Uint8Array // per edge: its class (0 street), length and tags
   start: Int32Array; to: Int32Array; w: Float64Array; edge: Int32Array; owner: Int32Array // adjacency (CSR); owner = node a slot belongs to
   geom: number[][]; from: Int32Array; end: Int32Array // per edge: in-between points (lon, lat, ...) listed from `from` to `end`
 }
@@ -21,31 +36,32 @@ export const FASTER = [1, 80 / 25, 60 / 25, 40 / 25]
 export const SIGNAL = 25 / 3.6 * 30
 
 /**
- * The free time of each edge, in metres of street: its length over its speed, and with `lights` (the road graph; the
- * MRT has none) half a traffic light at each end of a street edge where three or more edges meet (SIGNAL).
+ * The free time of each edge in a profile, in metres of street: its length over its speed, and with `lights` (the road
+ * graph; the MRT has none) half a traffic light at each end of a street edge where three or more open edges meet
+ * (SIGNAL). A closed edge has the time Infinity.
  */
-export const freeTime = (j: GraphJson, lights = false) => {
-  const deg = new Int32Array(j.lon.length)
-  for (const [a, b] of j.edges) { deg[a]++; deg[b]++ }
-  return Float64Array.from(j.edges, ([a, b, metres, , cls = 0]) =>
-    metres / FASTER[cls] + (cls || !lights ? 0 : ((deg[a] >= 3 ? 1 : 0) + (deg[b] >= 3 ? 1 : 0)) * SIGNAL / 2))
+export const freeTime = (j: GraphJson, lights = false, p: Profile = PROFILES.now) => {
+  const deg = new Int32Array(j.lon.length), open = j.edges.map(e => !((e[6] ?? 0) & ~p.open))
+  j.edges.forEach(([a, b], e) => { if (open[e]) { deg[a]++; deg[b]++ } })
+  return Float64Array.from(j.edges, ([a, b, metres, , cls = 0, , tags = 0], e) => !open[e] ? Infinity
+    : (metres / FASTER[cls] + (cls || !lights ? 0 : ((deg[a] >= 3 ? 1 : 0) + (deg[b] >= 3 ? 1 : 0)) * SIGNAL / 2)) * (tags & WORKS ? p.works : 1))
 }
 
-export const graphFrom = (j: GraphJson, lights = false): Graph => {
-  const n = j.lon.length, deg = new Int32Array(n + 1), street = new Uint8Array(n), time = freeTime(j, lights)
+export const graphFrom = (j: GraphJson, lights = false, p: Profile = PROFILES.now): Graph => {
+  const n = j.lon.length, deg = new Int32Array(n + 1), street = new Uint8Array(n), time = freeTime(j, lights, p)
   for (const [a, b] of j.edges) { deg[a + 1]++; deg[b + 1]++ }
   for (let i = 0; i < n; i++) deg[i + 1] += deg[i]
   const fill = deg.slice(0, n), m = deg[n]
   const to = new Int32Array(m), w = new Float64Array(m), edge = new Int32Array(m), owner = new Int32Array(m)
   j.edges.forEach(([a, b, , , cls = 0, one], e) => {
     const d = time[e]
-    if (!cls) street[a] = street[b] = 1
+    if (!cls && d < Infinity) street[a] = street[b] = 1
     owner[fill[a]] = a; to[fill[a]] = b; w[fill[a]] = d; edge[fill[a]++] = e
     // The slot against a one-way edge stays, so the degree of a node and the hash keep it, but tree() never takes it.
     owner[fill[b]] = b; to[fill[b]] = a; w[fill[b]] = one ? Infinity : d; edge[fill[b]++] = e
   })
   return { lon: Float64Array.from(j.lon), lat: Float64Array.from(j.lat), street, start: deg, to, w, edge, owner,
-    cls: Uint8Array.from(j.edges, e => e[4] ?? 0), metres: Float64Array.from(j.edges, e => e[2]),
+    cls: Uint8Array.from(j.edges, e => e[4] ?? 0), tags: Uint8Array.from(j.edges, e => e[6] ?? 0), metres: Float64Array.from(j.edges, e => e[2]),
     geom: j.edges.map(e => e[3]), from: Int32Array.from(j.edges.map(e => e[0])), end: Int32Array.from(j.edges.map(e => e[1])) }
 }
 

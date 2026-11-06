@@ -1,11 +1,12 @@
 """Name each road edge after the nearest named OSM road, for the jam events.
 
 Usage:
-  python3 scripts/names.py STREETS PUBLIC_DIR
+  python3 scripts/names.py STREETS PUBLIC_DIR SCENARIO
 
   STREETS     Overpass JSON of scripts/queries/streets.overpassql (named roads from 國道 down to tertiary):
               curl -A <name> --data-urlencode data@scripts/queries/streets.overpassql https://overpass-api.de/api/interpreter
   PUBLIC_DIR  reads road-graph.json and road-lines.json, writes road-names.json
+  SCENARIO    web/src/sim/jiang.json: a new road (tag FUTURE, scripts/graphs.py) takes the name of the nearest line in it
 
 road-names.json: {"names": [...], "edge": [...]}, where edge[e] is the index of the name of edge e of road-graph.json,
 or -1 when no named road of its class lies within MAX_M of the middle of the edge (a lane, or a road with no name).
@@ -15,7 +16,7 @@ A street edge takes only a street name or the name of a 快速道路 at street l
 """
 import json, math, sys, collections
 
-if __name__ == "__main__" and len(sys.argv) != 3:
+if __name__ == "__main__" and len(sys.argv) != 4:
     sys.exit(__doc__)
 
 # ponytail: the farthest that a named road can be from the middle of an edge and still name it; a guess. A larger value
@@ -79,14 +80,20 @@ for x in ways:
 graph = json.load(open(sys.argv[2] + "/road-graph.json"))
 lines = json.load(open(sys.argv[2] + "/road-lines.json"))
 names, index, edge = [], {}, []
+future = json.load(open(sys.argv[3]))["future"]
+def named(name):
+    if name not in index: index[name] = len(names); names.append(name)
+    return index[name]
 for e, flat in zip(graph["edges"], lines):
     p, kinds = middle(flat), KINDS[e[4] if len(e) > 4 else 0]
+    if len(e) > 6 and e[6] & 1:  # FUTURE
+        edge.append(named(min(future, key=lambda f: min(gap(p, a, b) for a, b in zip(f["line"], f["line"][1:])))["name"]))
+        continue
     cx, cy = math.floor(p[0] / CELL), math.floor(p[1] / CELL)
     near = [(gap(p, a, b), name) for i in (-1, 0, 1) for j in (-1, 0, 1) for a, b, kind, name in grid[(cx + i, cy + j)] if kind in kinds]
     d, name = min(near, default=(math.inf, None))
     if d > MAX_M: edge.append(-1); continue
-    if name not in index: index[name] = len(names); names.append(name)
-    edge.append(index[name])
+    edge.append(named(name))
 json.dump({"names": names, "edge": edge}, open(sys.argv[2] + "/road-names.json", "w"), ensure_ascii=False, separators=(",", ":"))
 named = sum(1 for i in edge if i >= 0)
 print(f"road names: {named} of {len(edge)} edges named, {len(names)} names")

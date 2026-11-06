@@ -7,11 +7,13 @@ import type { Transit } from './HeatMap.tsx'
 
 // The look the SVG had, in map units, so a line grows with the zoom as an SVG stroke did: an MRT line is wider, a 台鐵
 // line is dashed. Lines are for orientation, so they are faint and the eye follows the area colours. A bridge of a
-// policy (kind bike) is the change that the viewer made, so it is not faint; it is as thin as a road (Traffic.tsx).
-const KINDS = ['mrt', 'lrt', 'tra', 'hsr', 'bike'] as const
+// policy (kind bike) is the change that the viewer made, so it is not faint; it is as thin as a road (Traffic.tsx). A
+// new road of a scenario (kind road) is dashed too, as its line is a guess.
+const KINDS = ['mrt', 'lrt', 'tra', 'hsr', 'bike', 'road'] as const
 const STYLES = {
   mrt: { width: 1.8, dash: [0, 0], opacity: 0.35 }, lrt: { width: 1.5, dash: [0, 0], opacity: 0.35 }, tra: { width: 1.5, dash: [6, 3], opacity: 0.35 },
   hsr: { width: 1.5, dash: [0, 0], opacity: 0.35 }, bike: { width: 0.8, dash: [0, 0], opacity: 1 },
+  road: { width: 0.8, dash: [3, 2], opacity: 1 },
 }
 // Segment values sit in a texture of this width, as one row of a texel per segment can be wider than a GPU allows.
 const ROW = 1024

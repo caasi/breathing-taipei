@@ -1,5 +1,5 @@
-import { graphFrom, graphHash, nearest, tree, pathTo, pathAlong, type GraphJson, type Graph } from './route.ts'
-import { dense, hierarchyOf, join, searcher, type Hierarchy, type Space } from './ch.ts'
+import { graphFrom, graphHash, nearest, PROFILES, tree, pathTo, pathAlong, type GraphJson, type Graph, type Profile } from './route.ts'
+import { contract, dense, hierarchyOf, join, searcher, type Hierarchy, type Space } from './ch.ts'
 import { MRT, SCOOTER } from './city.ts'
 
 /** Paths for trips ks: trip ks[i]'s points (lon, lat, ...) are pts[off[i] .. off[i + 1]), from home to work. */
@@ -10,8 +10,9 @@ export const ROAD_MODES = new Set([1, 2, 3]) // bus, scooter, car follow bus rou
 // Known road paths are built and sent in batches of this many trips, small enough to fit in one frame of the worker.
 export const KNOWN_BATCH = 2000
 
-export const networks = (road: GraphJson, mrt: GraphJson) => {
-  const r = graphFrom(road, true), m = graphFrom(mrt)
+/** The road graph in a profile (route.ts PROFILES) and the MRT graph. */
+export const networks = (road: GraphJson, mrt: GraphJson, p: Profile = PROFILES.now) => {
+  const r = graphFrom(road, true, p), m = graphFrom(mrt)
   // Stations a passenger can actually reach (one station is not joined to any OSM line).
   const any = Object.values(mrt.stations!)[0], reach = tree(m, any).dist
   const stations = new Set(Object.values(mrt.stations!).filter(s => Number.isFinite(reach[s])))
@@ -30,7 +31,8 @@ export const variantWeights = (g: Graph): ArrayLike<number>[] => [g.w,
 export const routeKey = (from: number, to: number, variant = 0) => (variant * 65536 + from) * 65536 + to
 
 /**
- * Road paths from the routes file: one contraction hierarchy (ch.ts) for each variant, made by scripts/routes.ts.
+ * Road paths from the routes file: one contraction hierarchy (ch.ts) for each variant, made by scripts/routes.ts for the
+ * road graph of today.
  * path(a, b, v) is the edges of variant v from road node a to road node b, undefined when a = b or the road graph does
  * not connect them; one query takes about 0.25 ms (Node, 2026-10-27). fill(pairs, variants) finds many in a batch
  * (all variants by default), yielding between parts so a caller can spread it over frames. A path is found once and
@@ -47,8 +49,9 @@ export type Routes = {
 /**
  * File layout, all Uint16: graph hash (low, high), layout (3), then per variant: the rank of each node, the number of
  * shortcuts (low, high), and per shortcut its left and right arc (each low, high).
- * The hash ties the file to its road graph; a file for another graph, of another length, or with a shortcut that does
- * not fit its hierarchy is ignored.
+ * The hash ties the file to its road graph of today (`now`); a file for another graph, of another length, or with a
+ * shortcut that does not fit its hierarchy is ignored. For the graph `g` of another profile, the file gives only the
+ * order: each variant is contracted again in it (ch.ts contract), about 3 s in all (Node, 2026-11-05).
  * Limits: fewer than 65,536 road nodes and road edges, as a path is a Uint16Array of edge ids (writeRoutes throws
  * beyond them). The hash does not cover the routing costs: after a change to them, run `pnpm routes` again (dev and
  * build do).
@@ -63,9 +66,9 @@ export const writeRoutes = (g: Graph, parts: { rank: Uint16Array; shortcuts: Uin
   }
   return Uint16Array.from(out)
 }
-export const readRoutes = (data: Uint16Array, g: Graph): Routes | undefined => {
-  const n = g.lon.length, ws = variantWeights(g), hs: Hierarchy[] = []
-  if (data.length < 3 || (data[0] | (data[1] << 16)) >>> 0 !== graphHash(g) || data[2] !== LAYOUT) return undefined
+export const readRoutes = (data: Uint16Array, now: Graph, g = now): Routes | undefined => {
+  const n = now.lon.length, ws = variantWeights(now), hs: Hierarchy[] = []
+  if (data.length < 3 || (data[0] | (data[1] << 16)) >>> 0 !== graphHash(now) || data[2] !== LAYOUT) return undefined
   let i = 3
   for (const w of ws) {
     if (i + n + 2 > data.length) return undefined
@@ -74,9 +77,10 @@ export const readRoutes = (data: Uint16Array, g: Graph): Routes | undefined => {
     if (i + 4 * count > data.length) return undefined
     const shortcuts = new Uint32Array(2 * count)
     for (let k = 0; k < 2 * count; k++, i += 2) shortcuts[k] = data[i] + data[i + 1] * 65536
-    try { hs.push(hierarchyOf(g, w, rank, shortcuts)) } catch { return undefined }
+    try { hs.push(hierarchyOf(now, w, rank, shortcuts)) } catch { return undefined }
   }
-  return i === data.length ? routesOf(hs) : undefined
+  if (i !== data.length) return undefined
+  return routesOf(g === now ? hs : variantWeights(g).map((w, v) => hierarchyOf(g, w, hs[v].rank, contract(g, w, hs[v].rank).shortcuts)))
 }
 
 const same = (a: Uint16Array, b: Uint16Array) => a.length === b.length && a.every((e, k) => e === b[k])

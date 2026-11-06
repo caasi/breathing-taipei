@@ -7,6 +7,7 @@ import { Travellers, MODE_COLOURS, addBatches, type CellTraffic, type Track } fr
 import type { RoadLines } from './ui/Traffic.tsx'
 import { BIKE, MODES } from './sim/city.ts'
 import { KEY, NEW_BRIDGE } from './sim/policy.ts'
+import JIANG from './sim/jiang.json'
 import type { FromWorker, WorkerError, ToWorker, Trips } from './sim/worker.ts'
 import { getJson } from './load.ts'
 import type { Batch } from './sim/paths.ts'
@@ -16,6 +17,7 @@ import { record, since, KEEP, type Entry } from './history.ts'
 import { layoutFor, PANEL } from './ui/view.ts'
 import { dateText, indexOf, todayInTaipei, type Calendar } from './sim/calendar.ts'
 import { Events, Policies, usePolicies, MAX_EVENTS } from './ui/Dashboard.tsx'
+import type { Scenario } from './sim/route.ts'
 import { withPublic, type SimEvent } from './sim/events.ts'
 import { clockAt, respeed, READY_MS, type Clock } from './sim/pace.ts'
 import { hhmm, H2 } from './ui/format.ts'
@@ -82,7 +84,14 @@ export function App() {
   const [towns, setTowns] = useState<any>()
   const [villages, setVillages] = useState<any>()
   const [transit, setTransit] = useState<Transit>()
-  const [roads, setRoads] = useState<RoadLines>()
+  const [roads, setRoads] = useState<RoadLines>(), [closed, setClosed] = useState<Uint32Array>()
+  // The traffic layer leaves out the roads that the scenario of the shown run closes: the new roads before the move.
+  // It has no roads until the first frame of a run says which are closed. The old run's closed roads stay until the new run shows.
+  const openRoads = useMemo(() => {
+    if (!roads || !closed?.length) return closed && roads
+    const shut = new Set(closed)
+    return roads.map((l, e) => (shut.has(e) ? [] : l))
+  }, [roads, closed])
   const [traffic, setTraffic] = useState<Uint8Array>()
   // The dots read the slowness of each cell every frame, so it is a ref and not state.
   const cellTraffic = useRef<CellTraffic>(), cellIndex = useRef(new Map<number, number>())
@@ -93,6 +102,8 @@ export function App() {
   // The start of the run whose frames are on the screen. When a new run starts, the old picture stays (frozen) until
   // the first frame of the new run comes, so the map does not go black while the new run loads.
   const [onScreen, setOnScreen] = useState<number>()
+  // The scenario of the run on the screen: its new roads change with the map, not when the viewer selects a scenario.
+  const [shownScenario, setShownScenario] = useState<Scenario>(), nextScenario = useRef<Scenario>()
   const [pop, setPop] = useState<Map<string, number>>()
   // The run that loads; the frozen dots (the dots of one run, at one minute).
   const next = useRef<number>(), frozen = useRef<{ run: number; minute: number }>()
@@ -104,16 +115,21 @@ export function App() {
   // run: the start of the run that made the trips.
   const dotRuns = useRef(new Map<number, { trips: Trips; tracks: { current: (Track | undefined)[] }; run: number }>()), lastDots = useRef(0)
   const [tripsId, setTripsId] = useState(0)
-  const [s, setS] = useState<FromWorker>()
+  // run: the start of the frame, so that `ready` never takes the map of an earlier run (web/spec/PageFrames.tla).
+  const [s, setS] = useState<FromWorker & { run: number }>()
   // Display settings belong to this viewer, so they stay in this browser; the policies (usePolicies) are in the URL.
   const policies = usePolicies()
   // A change of a policy reaches the run that goes on (worker.ts 'policies'); the key keeps the effect from a new Map each render.
   const policyKey = JSON.stringify([...policies.values])
   const bridgeOn = policies.values.get(KEY.bridge) === 1
-  const mapTransit = useMemo(() => transit && bridgeOn
-    ? { lines: [...transit.lines, { kind: 'bike', name: NEW_BRIDGE.name, colour: MODE_COLOURS[BIKE], coords: NEW_BRIDGE.ends }],
-      points: [...transit.points, { kind: 'bridge', name: NEW_BRIDGE.name, lon: NEW_BRIDGE.ends[1][0], lat: NEW_BRIDGE.ends[1][1] }] }
-    : transit, [transit, bridgeOn])
+  const future = shownScenario === 'future'
+  // The changes that the viewer made: the bridge of a policy, and the guessed new roads of the 松山機場 plan.
+  const mapTransit = useMemo(() => transit && (bridgeOn || future) ? {
+    lines: [...transit.lines,
+      ...(bridgeOn ? [{ kind: 'bike', name: NEW_BRIDGE.name, colour: MODE_COLOURS[BIKE], coords: NEW_BRIDGE.ends }] : []),
+      ...(future ? JIANG.future.map(f => ({ kind: 'road', name: f.name, colour: '#e8c9b8', coords: f.line as [number, number][] })) : [])],
+    points: bridgeOn ? [...transit.points, { kind: 'bridge', name: NEW_BRIDGE.name, lon: NEW_BRIDGE.ends[1][0], lat: NEW_BRIDGE.ends[1][1] }] : transit.points,
+  } : transit, [transit, bridgeOn, future])
   const [speed, setSpeed] = useStored('speed', 1, oneOf(SPEEDS))
   // Apart from the speed, and not stored: a viewer who comes back to a stopped page at 00:00 would see nothing move.
   const [paused, setPaused] = useState(false)
@@ -144,8 +160,8 @@ export function App() {
   // The worker can post a frame with levels after the layer is turned off; the handler of its messages reads this.
   const trafficOnRef = useRef(trafficOn)
   trafficOnRef.current = trafficOn
-  // The bridge of a policy is a line of its own kind, always shown while its setting is on.
-  const layers = useMemo(() => new Set([...show, 'bike', ...(trafficOn ? ['traffic'] : [])]), [show, trafficOn])
+  // The bridge of a policy and the new roads of a scenario are lines of their own kinds, always shown while they are on.
+  const layers = useMemo(() => new Set([...show, 'bike', 'road', ...(trafficOn ? ['traffic'] : [])]), [show, trafficOn])
   const signs = useMemo(() => new Set(stations ? [...show, 'airport', 'bridge'] : []), [show, stations])
   const worker = useRef<Worker>()
   const started = useRef(0), shown = useRef(0) // the latest start posted, and the start of the frames on the page
@@ -186,7 +202,7 @@ export function App() {
       // Frames of an earlier run can still be on their way after a new run starts (also the first frame of a run that
       // a second new run replaced); their day and nodes would be read with the new start. Today a run starts once per
       // page; a setting that starts the run again (for example a policy, #8) needs this.
-      if (m.start !== undefined) { if (m.start !== started.current) return; shown.current = m.start; setOnScreen(next.current) }
+      if (m.start !== undefined) { if (m.start !== started.current) return; shown.current = m.start; setOnScreen(next.current); setShownScenario(nextScenario.current) }
       else if (shown.current !== started.current) return
       // New dots (a change of a policy or of the density) block the page while it places their paths; the spinner
       // shows from the change until the worker has sent the last path of the new dots.
@@ -201,6 +217,7 @@ export function App() {
       // these values, not the message.
       const fresh = m.coords !== undefined, events = m.events, entry = { t: m.day * 1440 + m.minute, counts: m.counts }
       if (m.homes) setHomes(m.homes)
+      if (fresh) setClosed(m.closed)
       if (fresh || m.traffic) setTraffic(m.traffic)
       if (m.cellKeys) cellIndex.current = new Map(Array.from(m.cellKeys, (key, c) => [key, c] as const))
       if (fresh || m.cells) cellTraffic.current = m.cells && trafficOnRef.current ? { index: cellIndex.current, level: m.cells } : undefined
@@ -225,7 +242,7 @@ export function App() {
       const l = last.current, model = m.day * 1440 + m.minute
       if (m.since === l.since) { l.minute = m.clock; l.at = m.at - performance.timeOrigin }
       l.model = model
-      setS(m)
+      setS(Object.assign(m, { run: shown.current }))
     }
     // A throw in the worker's frame loop (routing, counting) reaches the page through onerror.
     w.onerror = e => setRunError(e.message || 'worker error')
@@ -251,10 +268,10 @@ export function App() {
     if (on && frozen.current?.run !== on.run) frozen.current = { run: on.run, minute: l.model }
     respeed(l, 0, 0, now, 0); l.model = 0; l.since = since
     waitRef.current = ++started.current; deadline.current = now + READY_MS
-    next.current = runStart
+    next.current = runStart; nextScenario.current = policies.scenario
     setRunError(undefined); setWaiting(started.current)
-    post({ type: 'init', perAgent: PER_AGENT, seed: 42, startDay: runStart, start: started.current, at: since })
-  }, [runStart])
+    post({ type: 'init', perAgent: PER_AGENT, seed: 42, startDay: runStart, start: started.current, at: since, scenario: policies.scenario })
+  }, [runStart, policies.scenario])
   // The page clock goes on at the speed from now, and the worker clock follows it from the same time.
   const startClock = (hours: number) => {
     const l = last.current, now = performance.now(), since = performance.timeOrigin + now
@@ -300,7 +317,7 @@ export function App() {
     if (last.t === first.t) return out
     return changeRate(asShown(last.counts), asShown(first.counts), asShown(homes), last.t - first.t)
   }, [history, homes, colourBy, rateWindow, nodes, byDistrict])
-  const ready = projection && villages && s && nodes.length === s.counts.length
+  const ready = projection && villages && s && s.run === shown.current && nodes.length === s.counts.length
   // The parts of the map that need no run (the borders, the lines, the stations, the names) draw, blurred, as soon as
   // their data is here; the fills join at the first frame of the run, and the map clears when the run starts, one
   // animation frame later, so the state before it paints.
@@ -419,7 +436,7 @@ export function App() {
       {towns && projection && <Land towns={towns} proj={projection} />}
       {/* Only while the map loads, and not with reduced motion: they run and flicker. */}
       {!revealed && roads && projection && !matchMedia('(prefers-reduced-motion: reduce)').matches && <Sparks sparks={sparks} lines={roads} proj={projection} />}
-      {towns && villages && projection && <HeatMap towns={towns} villages={villages} level={byDistrict ? 'district' : ready ? 'village' : level} nodes={byDistrict?.names ?? nodes} counts={ready ? shownCounts : undefined} pop={pop} perAgent={PER_AGENT} proj={projection} transit={mapTransit} show={layers} signs={signs} districtLabels={districtLabels} rate={rate} roads={roads} traffic={traffic} speed={paused || waiting !== undefined ? 0 : speed * HOURS_AT_1X} view={view} />}
+      {towns && villages && projection && <HeatMap towns={towns} villages={villages} level={byDistrict ? 'district' : ready ? 'village' : level} nodes={byDistrict?.names ?? nodes} counts={ready ? shownCounts : undefined} pop={pop} perAgent={PER_AGENT} proj={projection} transit={mapTransit} show={layers} signs={signs} districtLabels={districtLabels} rate={rate} roads={openRoads} traffic={traffic} speed={paused || waiting !== undefined ? 0 : speed * HOURS_AT_1X} view={view} />}
       {ready && dots && dotTrips && <Travellers tracks={dotRun!.tracks} trips={dotTrips} clock={clock} byMode={byMode} traffic={cellTraffic} />}
       </GLMap>
       {/* Always there, so a screen reader reads the change. */}

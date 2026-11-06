@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { expect, test } from 'vitest'
 import fc from 'fast-check'
-import { actionOf, evenPick, jamOf, notesOf, publicEvents, withPublic, type Mood, type SimEvent } from './events.ts'
+import { actionOf, evenPick, jamOf, notesOf, publicEvents, withPublic, type Mood, type PlaceOf, type SimEvent } from './events.ts'
 import { mulberry32 } from './rng.ts'
 import { indexOf, type Calendar } from './calendar.ts'
 import { GONE, PLAY, STAY, WORK } from './core.ts'
@@ -109,4 +109,17 @@ test('a jam names the road, or the village near it, for every mood and road mode
   }
   expect(jamOf(jam('stuck', 1, '承德路四段'), placeOf)).toBe('坐的公車卡在承德路四段，車上的人都在看錶')
   expect(jamOf(jam('angry', 2, '華中橋'), placeOf)).toBe('騎機車塞在華中橋，半天沒前進，氣到想罵人')
+})
+
+test('a trip to work that the roads of a scenario change tells the minutes and the new road, and quotes the news for a new road', () => {
+  const at: PlaceOf = v => (v ? { town: '內湖區', village: '港墘里' } : { town: '中山區', village: '大直里' })
+  const e = (scene: NonNullable<Extract<SimEvent, { kind: 'personal' }>['scene']>, back = false): Extract<SimEvent, { kind: 'personal' }> =>
+    ({ id: 'a', t: 480, kind: 'personal', name: '林先生', home: 0, to: 1, dest: WORK, mode: 3, group: '', back, scene })
+  expect(actionOf(e({ scenario: 'works', minutes: 8 }), at)).toBe('開車到內湖區上班，機場周邊施工改道，多花8分鐘（推估）')
+  expect(actionOf(e({ scenario: 'future', minutes: -6, via: '民族東路（東延，示意）' }), at)).toBe('開車經民族東路（東延，示意）到內湖區上班，比現在快6分鐘（推估）')
+  expect(actionOf(e({ scenario: 'future', minutes: 0, via: '北安路（跨河，示意）' }), at)).toBe('開車經北安路（跨河，示意）到內湖區上班')
+  expect(actionOf(e({ scenario: 'future', minutes: 4 }), at)).toBe('開車到內湖區上班，新路開通後反而多花4分鐘（推估）')
+  expect(actionOf(e({ scenario: 'works', minutes: 8 }, true), at)).toBe('開車下班回家')
+  expect(notesOf(e({ scenario: 'future', minutes: -6, via: '民族東路（東延，示意）' })).map(n => n.who)).toEqual(['蔣萬安'])
+  expect(notesOf(e({ scenario: 'works', minutes: 8 }))).toEqual([])
 })
